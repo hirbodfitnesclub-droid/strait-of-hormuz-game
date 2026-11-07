@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
 import type { GameState, TowerKind, BuildingId } from '@/lib/game';
 
@@ -25,6 +25,22 @@ type Props = {
 // All HUD/panels stay DOM (Game.tsx); this component owns only the world.
 export default function WorldView3D(props: Props) {
   const syncRef = useRef<import('../three-map/gamesync').GameSync3D | null>(null);
+  const [loadPct, setLoadPct] = useState<number | null>(null);
+
+  // Preload all placeable models behind a loading veil (Phase 3): no mid-battle decode hitches.
+  useEffect(() => {
+    let dead = false;
+    setLoadPct(0);
+    const killer = setTimeout(() => { if (!dead) { dead = true; setLoadPct(null); } }, 30000);
+    (async () => {
+      try {
+        const { preloadModels } = await import('../three-map/models3d');
+        await preloadModels((done, total) => { if (!dead) setLoadPct(Math.round((done / total) * 100)); });
+      } catch { /* lazy loading remains as fallback */ }
+      if (!dead) { clearTimeout(killer); setTimeout(() => { if (!dead) setLoadPct(null); }, 400); }
+    })();
+    return () => { dead = true; clearTimeout(killer); };
+  }, []);
   const mapRef = useRef<unknown>(null);
   const fpsRef = useRef<HTMLDivElement | null>(null);
   const propsRef = useRef(props);
@@ -63,6 +79,11 @@ export default function WorldView3D(props: Props) {
   return (
     <div style={{ position: 'absolute', inset: 0 }}>
       <div ref={fpsRef} style={{ position: 'absolute', left: 8, top: '47%', zIndex: 40, padding: '3px 8px', borderRadius: 8, background: 'rgba(6,24,38,0.72)', fontFamily: 'ui-monospace, monospace', fontSize: 11, fontWeight: 700, letterSpacing: '0.04em', pointerEvents: 'none' }}>— FPS</div>
+      {loadPct !== null && <div style={{ position: 'absolute', inset: 0, zIndex: 45, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 12, background: 'linear-gradient(180deg, rgba(4,18,30,0.88), rgba(4,18,30,0.72))', color: '#dceefb', transition: 'opacity .4s' }}>
+        <div style={{ fontSize: 15, fontWeight: 800 }}>در حال آماده‌سازی تنگه</div>
+        <div style={{ width: 'min(260px, 70%)', height: 8, borderRadius: 4, background: 'rgba(147,197,253,0.18)', overflow: 'hidden' }}><div style={{ width: `${loadPct}%`, height: '100%', borderRadius: 4, background: 'linear-gradient(90deg,#53d769,#9be15d)', transition: 'width .25s' }} /></div>
+        <div style={{ fontSize: 12, color: '#9fc3dd' }}>بارگذاری ناوگان و برجک‌ها · {loadPct}٪</div>
+      </div>}
       <ThreeMap
         onMapReady={async map => {
           mapRef.current = map;

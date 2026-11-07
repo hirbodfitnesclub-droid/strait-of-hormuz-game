@@ -211,7 +211,7 @@ export default function Game() {
     let previous = performance.now();
     const timer = setInterval(() => {
       const now = performance.now(), dt = (now - previous) / 1000; previous = now;
-      if (!document.hidden) dispatch({ type: "tick", dt, battlePaused: pauseRef.current });
+      if (!document.hidden) dispatch({ type: "tick", dt: Math.min(dt, 0.25), battlePaused: pauseRef.current });
     }, 125);
     return () => clearInterval(timer);
   }, [loaded]);

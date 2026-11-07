@@ -236,6 +236,11 @@ export class GameSync3D {
   private ents = new Map<string, Ent>();
   private aim = new Map<number, number>();
   private fx = new BattleFX();
+  private lastSetStateAt = 0;
+  private targetStep = 5;
+  private emaMs = 16;
+  private dprIdx = 0;
+  private dprEvalAt = 0;
   private towerAnims = new Map<number, TowerAnim>();
   private genericAnims = new Map<string, AnimNode[]>();
   private animTmp = new THREE.Vector3();
@@ -262,6 +267,8 @@ export class GameSync3D {
     for (const n of ['enemy', 'trade', 'slots', 'ships', 'zones'] as const) { try { map.setLayer(n, false); } catch { /* layer may not exist */ } }
     this.root.name = 'gamesync-root'; this.statics.name = 'gamesync-statics'; this.dyn.name = 'gamesync-dyn';
     map.scene.add(this.root); this.root.add(this.statics); this.root.add(this.dyn); this.dyn.add(this.fx.group);
+    // cheaper shadow filtering (PCF instead of PCFSoft) — same look at game scale, less GPU
+    try { (map as unknown as { renderer?: THREE.WebGLRenderer }).renderer!.shadowMap.type = THREE.PCFShadowMap; } catch { /* noop */ }
     this.curves = Object.fromEntries((Object.keys(LANES) as LaneName[]).map(n => [n, new THREE.CatmullRomCurve3(LANES[n].map(([x, z]) => new THREE.Vector3(x, 0.35, z)), false, 'centripetal')])) as Record<LaneName, THREE.CatmullRomCurve3>;
     // lane ribbons (subtle, only enemy + trade)
     for (const n of ['enemy', 'trade'] as LaneName[]) {
@@ -292,6 +299,11 @@ export class GameSync3D {
 
   setState(game: GameState, opts: { selectedSlot: number | null; targeting: string | null; targetPreview: { x: number; y: number } }) {
     this.state = game; this.selectedSlot = opts.selectedSlot; this.targeting = opts.targeting;
+    // movement stability: cap how far a target may move per state update (~22 u/s) so a
+    // hitched tick can no longer teleport ships — they sail fast instead of streaking.
+    const nowS = performance.now();
+    this.targetStep = Math.max(0.05, Math.min(5, 22 * (nowS - this.lastSetStateAt) / 1000));
+    this.lastSetStateAt = nowS;
     this.reconcileStatics(game);
     this.updateSelectionVisuals(game, opts.targetPreview);
   }
@@ -496,7 +508,13 @@ export class GameSync3D {
     const pos = curve.getPointAt(u); const tan = curve.getTangentAt(u);
     const heading = fwd === 'X' ? Math.atan2(-tan.z, tan.x) : Math.atan2(tan.x, tan.z) + (this.kenneyRev ? Math.PI : 0);
     const t = this.targets.get(key);
-    if (t) { t.pos.set(pos.x, y, pos.z); t.heading = heading; t.y = y; }
+    if (t) {
+      const dx = pos.x - t.pos.x, dz = pos.z - t.pos.z;
+      const d = Math.hypot(dx, dz);
+      if (d > this.targetStep && d > 0) { const k = this.targetStep / d; t.pos.x += dx * k; t.pos.z += dz * k; }
+      else { t.pos.x = pos.x; t.pos.z = pos.z; }
+      t.pos.y = y; t.heading = heading; t.y = y;
+    }
     else this.targets.set(key, { pos: new THREE.Vector3(pos.x, y, pos.z), heading, y });
   }
 
@@ -675,6 +693,7 @@ export class GameSync3D {
     this.stepMotion(dt, now);
     this.updateAnims(dt, now);
     this.fx.update(dt);
+    this.tuneResolution(dt, now);
     // shots → the pack's real battle FX (projectiles/beams per weapon family)
     if (game.shots !== this.lastShots) {
       this.lastShots = game.shots;
@@ -700,6 +719,30 @@ export class GameSync3D {
         this.dispatchShotFx(bestSlot, s.kind, sx, sy, sz, x2, z2, game);
       }
     }
+  }
+
+  /** Dynamic resolution: hold frame time near 60fps by stepping the pixel ratio. */
+  private tuneResolution(dt: number, now: number) {
+    this.emaMs = this.emaMs * 0.96 + Math.min(dt, 0.1) * 1000 * 0.04;
+    if (now < this.dprEvalAt) return;
+    this.dprEvalAt = now + 3000;
+    const steps = [2, 1.6, 1.3, 1.1, 1];
+    const r = (this.map as unknown as { renderer?: THREE.WebGLRenderer }).renderer;
+    if (!r) return;
+    const fps = 1000 / Math.max(1, this.emaMs);
+    let idx = this.dprIdx;
+    if (fps < 47 && idx < steps.length - 1) idx++;
+    else if (fps > 57 && idx > 0) idx--;
+    if (idx !== this.dprIdx) {
+      this.dprIdx = idx;
+      try { r.setPixelRatio(Math.min(window.devicePixelRatio || 1, steps[idx])); } catch { /* noop */ }
+    }
+  }
+
+  perfInfo() {
+    const r = (this.map as unknown as { renderer?: THREE.WebGLRenderer }).renderer;
+    const info = r?.info?.render;
+    return { calls: info?.calls ?? -1, tris: info?.triangles ?? -1, dpr: r?.getPixelRatio?.() ?? -1, fps: Math.round(1000 / Math.max(1, this.emaMs)) };
   }
 
   /* Per-family FX dispatch — projectile kind/color/arc/duration transcribed from the

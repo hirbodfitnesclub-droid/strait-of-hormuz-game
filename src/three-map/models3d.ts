@@ -44,6 +44,28 @@ function fitWidth(obj: THREE.Object3D, target: number) {
 
 // Terrain height comes from the map's own field (same function that built the mesh) — no raycasts.
 interface FieldLike { height(x: number, z: number): number }
+
+/** Preload every model the game can place, so nothing decodes/compiles mid-battle. */
+export async function preloadModels(onProgress?: (done: number, total: number) => void): Promise<void> {
+  const urls: string[] = [];
+  for (const base of Object.values(TOWER_MODEL)) for (const st of [1, 25, 50, 75]) urls.push(`/models/towers/${base}-L${st}.glb`);
+  for (const pair of Object.values(BRANCH_MODEL)) for (const b of pair) urls.push(`/models/towers/${b}-L100.glb`);
+  for (const b of ['platform', 'tankfarm', 'dock', 'refinery', 'steel', 'ammo', 'power', 'desal', 'town', 'welfare', 'customs']) urls.push(`/models/buildings/${b}.glb`);
+  urls.push('/models/kenney/ship-cargo-a.glb', '/models/kenney/boat-tug-a.glb', '/models/kenney/boat-speed-a.glb');
+  const total = urls.length;
+  let done = 0;
+  const queue = [...urls];
+  const worker = async () => {
+    while (queue.length) {
+      const u = queue.shift()!;
+      try { await loadModel(u); } catch { /* a failed preload just falls back to lazy load */ }
+      done++;
+      onProgress?.(done, total);
+    }
+  };
+  await Promise.all(Array.from({ length: 6 }, worker));
+}
+
 export function groundY(map: { field?: FieldLike }, x: number, z: number): number {
   return map.field ? Math.max(0, map.field.height(x, z)) : 0;
 }
