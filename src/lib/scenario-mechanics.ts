@@ -36,12 +36,12 @@ export function objectiveTypeOf(objectiveText: string): ObjectiveType {
  *  Guarantees enforced again in buildSpawnQueue: air-defense ≥ 60% air,
  *  drone-wave ≥ 40% air, operation 3 introduces air with NO submarine. */
 export const CAMPAIGN_COMPOSITION: Record<number, Partial<Record<EnemyClass, number>>> = {
-  1: { speed: 0.75, corvette: 0.25 },                                        // سپر ساحل — دزدان دریایی، ترکیب سبک
-  2: { speed: 0.50, corvette: 0.30, sub: 0.20 },                             // گذرگاه امن — اسکورت در مه
+  1: { speed: 0.70, corvette: 0.30 },                                        // سپر ساحل — دزدان دریایی، ترکیب سبک (بازنویسی دزدان در buildSpawnQueue همین سهم واقعی را می‌سازد؛ QA دور ۲: جدول قبلی ۰٫۷۵/۰٫۲۵ با صف واقعی نمی‌خواند)
+  2: { speed: 0.625, corvette: 0.375 },                                      // گذرگاه امن — اسکورت در مه (زیردریایی از موج ۳ وارد می‌شود؛ در موج ۲ گیت کلاس سهم‌ها را دقیقاً به همین نسبت واقعی بازتوزیع می‌کند — QA دور ۲)
   3: { air: 0.62, speed: 0.38 },                                             // چشم بیدار — دفاع هوایی، اولین تهدید هوایی
   4: { speed: 0.40, corvette: 0.35, destroyer: 0.25 },                       // تور صیاد — رهگیری ناوگان سنگین
   5: { air: 0.45, speed: 0.30, corvette: 0.15, destroyer: 0.10 },            // دیوار آتش — موج پهپاد + باس ۱
-  6: { speed: 0.50, corvette: 0.25, sub: 0.25 },                             // بارگیری زیر آتش — شب
+  6: { speed: 0.70, corvette: 0.30 },                                        // بارگیری زیر آتش — شب (طعم «دزدان دریایی» عملیات ۶ هم مثل عملیات ۱ زیر بازنویسی دزدان است؛ سهم واقعی صف همین است — هم‌ترازی هم‌کلاس با ردیف ۱)
   7: { speed: 0.35, corvette: 0.30, air: 0.20, sub: 0.15 },                  // حلقه‌شکن — محاصره + طوفان
   8: { air: 0.65, speed: 0.20, corvette: 0.15 },                             // چتر فولادی — دفاع هوایی
   9: { speed: 0.45, corvette: 0.30, sub: 0.15, air: 0.10 },                  // کاروان طلایی — اسکورت

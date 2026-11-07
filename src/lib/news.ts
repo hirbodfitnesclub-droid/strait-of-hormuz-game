@@ -8,8 +8,14 @@
 // names never repeat inside the window, the previous run's objective is never
 // re-rolled, every 5th run is a forced escort/rescue event), zones are gated
 // to the islands the player has actually unlocked, condition picks use the
-// spec's weights instead of a uniform draw, and the news library carries 8
-// headline templates + 8 bodies per type with no back-to-back repeats.
+// spec's weights instead of a uniform draw, and the news library carries 10
+// headline templates + 10 bodies per type with no back-to-back repeats.
+//
+// Round 2 (QA): generation is SIDE-EFFECT-FREE and its result is persisted
+// per (wave, mode) — a reload or a war-room preview returns the identical
+// scenario and never registers a phantom run. History + the run counter
+// advance exactly once per wave, at actual battle start, via
+// commitScenarioForWave (called from startWave in game.ts).
 import { CAMPAIGN_SCENARIOS, type CampaignScenario, type NewsItem } from "@/data/scenarios";
 
 export interface Scenario {
@@ -52,10 +58,11 @@ function mulberry32(seed: number) {
 function fill(template: string, s: { zone: string; operationName: string; enemyFlavor: string; wave: number; count: number }) {
   return template.replaceAll("{zone}", s.zone).replaceAll("{operation}", s.operationName).replaceAll("{enemy}", s.enemyFlavor).replaceAll("{wave}", String(s.wave)).replaceAll("{count}", String(s.count));
 }
-/** News library (generator spec §۵): 8 headline templates and 8 bodies per
- *  type. Bodies are full sentences in the authored pack's wire-service tone;
- *  consecutive runs never reuse the same template or body for a type (the
- *  pick is nudged off the previous run's index). */
+/** News library (checklist §۴٫۰): at least 10 headline templates and 10
+ *  bodies per type. Bodies are full sentences in the authored pack's
+ *  wire-service tone; consecutive runs never reuse the same template or
+ *  body for a type (the pick is nudged off the previous run's index, and
+ *  the pick state is persisted so the chain survives reloads). */
 const NEWS_BEFORE = [
   "تحرکات تازه در {zone}؛ عملیات «{operation}» آغاز می‌شود",
   "گزارش‌های میدانی از نزدیک‌شدن {enemy} به {zone} حکایت دارد",
@@ -65,6 +72,8 @@ const NEWS_BEFORE = [
   "شناسایی {count} شناور و پرندهٔ متخاصم نزدیک {zone}؛ رهگیری آغاز شد",
   "آژیر آماده‌باش در {zone}؛ عملیات «{operation}» وارد فاز اجرا شد",
   "منابع میدانی: {enemy} آرایش تهاجمی به سوی {zone} گرفته است",
+  "گشت‌های شناسایی، ستون {enemy} را در مسیر {zone} ردیابی کردند",
+  "فرماندهی مشترک آبراه: عملیات «{operation}» در {zone} کلید خورد",
 ];
 const NEWS_BEFORE_BODY = [
   "عملیات «{operation}» در {zone} آغاز شده و پدافند در آماده‌باش کامل است.",
@@ -75,6 +84,8 @@ const NEWS_BEFORE_BODY = [
   "ساکنان نوار ساحلی {zone} از استقرار نیروها خبر می‌دهند؛ فرماندهی خواست اخبار فقط از منابع رسمی دنبال شود.",
   "اتاق عملیات منطقه، «{operation}» را نبردی تعیین‌کننده برای امنیت آبراه در این مقطع خواند.",
   "یگان‌های پدافندی {zone} در بالاترین سطح آماده‌باش قرار گرفتند و ذخایر مهمات تکمیل شد.",
+  "به گفتهٔ منابع آگاه، آرایش {enemy} نشان می‌دهد نبرد {zone} کوتاه نخواهد بود؛ پدافند برای درگیری طولانی آماده است.",
+  "گزارش گشت‌های دریایی و هوایی هم‌زمان روی یک نقطه می‌رسد: {zone} هدف بعدی {enemy} است.",
 ];
 const NEWS_VICTORY = [
   "عملیات «{operation}» در {zone} با موفقیت کامل پایان یافت",
@@ -85,6 +96,8 @@ const NEWS_VICTORY = [
   "پدافند {zone} همهٔ {count} هدف مهاجم را دفع کرد",
   "آسمان و آب‌های {zone} پاک است؛ عملیات «{operation}» به اهدافش رسید",
   "پرچم بر فراز {zone} ماند؛ {enemy} با خسارت سنگین عقب نشست",
+  "زنگ پایان نبرد در {zone}؛ عملیات «{operation}» در دفتر پیروزی‌ها ثبت شد",
+  "دفاع {zone} نشکست؛ {enemy} ناکام از آبراه بیرون رانده شد",
 ];
 const NEWS_VICTORY_BODY = [
   "با پایان عملیات «{operation}»، تردد در {zone} به حالت عادی بازگشت.",
@@ -95,6 +108,8 @@ const NEWS_VICTORY_BODY = [
   "سازمان بنادر از سرگیری کامل عملیات بارگیری و تخلیه در {zone} خبر داد.",
   "به گفتهٔ سخنگوی عملیات، هر {count} هدف مهاجم یا منهدم شد یا وادار به عقب‌نشینی شد.",
   "مردم {zone} صبح امروز با آرامش به ساحل بازگشتند؛ فرماندهی آماده‌باش را یک سطح پایین آورد.",
+  "فرماندهی آبراه اعلام کرد مسیر تجاری {zone} بدون هیچ حادثه‌ای بازگشایی شده و کاروان‌ها در حرکت‌اند.",
+  "در ارزیابی اولیه، عملکرد یگان‌های {zone} «الگویی برای دفاع ساحلی» خوانده شد.",
 ];
 const NEWS_DEFEAT = [
   "درگیری سنگین در {zone}؛ خط دفاع موقتاً عقب نشست",
@@ -105,6 +120,8 @@ const NEWS_DEFEAT = [
   "خسارت در {zone}؛ تیم‌های ترمیم اعزام شدند",
   "شکست تلخ در {zone}؛ خط پدافند برای بازسازی عقب کشیده شد",
   "{enemy} از شکاف پدافند {zone} گذشت؛ آماده‌باش به بالاترین سطح رسید",
+  "آبراه در {zone} ناامن اعلام شد؛ کشتیرانی بین‌المللی هشدار گرفت",
+  "عملیات «{operation}» به اهدافش نرسید؛ {zone} در انتظار ضدحمله",
 ];
 const NEWS_DEFEAT_BODY = [
   "فرماندهی منطقه از اعزام نیروی کمکی و بازطراحی خط دفاع {zone} خبر داد.",
@@ -115,6 +132,8 @@ const NEWS_DEFEAT_BODY = [
   "مهندسان نظامی بازسازی مواضع آسیب‌دیدهٔ {zone} را آغاز کرده‌اند و یگان‌های تازه‌نفس جایگزین شده‌اند.",
   "فرماندهی از مردم {zone} خواست آرامش خود را حفظ کنند و وعده داد آبراه «به هر قیمت» بازپس گرفته شود.",
   "گزارش تکمیلی: بخشی از تأسیسات {zone} از مدار خارج شده و تعمیرات اضطراری در جریان است.",
+  "کمیتهٔ امنیت آبراه جلسهٔ اضطراری تشکیل داد و تقویت فوری پدافند {zone} را تصویب کرد.",
+  "به‌رغم عقب‌نشینی، فرماندهی تأکید کرد هیچ شناور تجاری در {zone} رها نشده و اسکورت‌ها تا ساحل امن ادامه یافته است.",
 ];
 
 // ---- Generator memory: the last 30 generated runs (names + objectives),
@@ -125,6 +144,34 @@ const MEMORY_WINDOW = 30;
 let memoryFallback: ScenarioHistoryEntry[] = [];
 let lastTemplatePick: Record<"before" | "victory" | "defeat", number> = { before: -1, victory: -1, defeat: -1 };
 let lastBodyPick: Record<"before" | "victory" | "defeat", number> = { before: -1, victory: -1, defeat: -1 };
+/** The no-back-to-back-repeat pick state is persisted too (QA round 2):
+ *  as module state it reset on every reload, so the first generation of a
+ *  fresh session could repeat the previous session's last template. */
+const PICKS_KEY = "hormuz-news-picks-v1";
+let picksLoaded = false;
+function loadPicks() {
+  if (picksLoaded) return;
+  picksLoaded = true;
+  try {
+    const raw = typeof window !== "undefined" ? window.localStorage.getItem(PICKS_KEY) : null;
+    const parsed = raw ? JSON.parse(raw) : null;
+    if (parsed && typeof parsed === "object") {
+      for (const t of ["before", "victory", "defeat"] as const) {
+        if (Number.isInteger(parsed.t?.[t])) lastTemplatePick[t] = parsed.t[t];
+        if (Number.isInteger(parsed.b?.[t])) lastBodyPick[t] = parsed.b[t];
+      }
+    }
+  } catch { /* memory only */ }
+}
+function savePicks() {
+  try { window.localStorage.setItem(PICKS_KEY, JSON.stringify({ t: lastTemplatePick, b: lastBodyPick })); } catch { /* memory only */ }
+}
+/** Library sizes, exported for acceptance probes (checklist §۴٫۰: ≥10). */
+export const NEWS_TEMPLATE_COUNTS = {
+  before: NEWS_BEFORE.length, beforeBody: NEWS_BEFORE_BODY.length,
+  victory: NEWS_VICTORY.length, victoryBody: NEWS_VICTORY_BODY.length,
+  defeat: NEWS_DEFEAT.length, defeatBody: NEWS_DEFEAT_BODY.length,
+};
 /** Total generated runs ever (monotonic — the 30-entry history window is
  *  capped, so it cannot drive the every-5th-run rule by itself). */
 const RUNS_KEY = "hormuz-scenario-runs-v1";
@@ -200,17 +247,22 @@ function pickCondition(rnd: () => number, tier: number): string | null {
 
 function pickNews(rnd: () => number, type: "before" | "victory" | "defeat", headlines: string[], bodies: string[], ctx: { zone: string; operationName: string; enemyFlavor: string; wave: number; count: number }): NewsItem {
   // No back-to-back repeat of the previous run's template or body.
+  loadPicks();
   let hi = Math.floor(rnd() * headlines.length);
   if (hi === lastTemplatePick[type]) hi = (hi + 1) % headlines.length;
   let bi = Math.floor(rnd() * bodies.length);
   if (bi === lastBodyPick[type]) bi = (bi + 3) % bodies.length;
   lastTemplatePick[type] = hi; lastBodyPick[type] = bi;
+  savePicks();
   return { headline: fill(headlines[hi], ctx), body: fill(bodies[bi], ctx) };
 }
 
 export function generatedScenario(wave: number, modeSalt = 0, ctx?: ScenarioContext): Scenario {
   const history = loadScenarioHistory();
-  const recentNames = new Set(history.map(h => h.name));
+  // Name exclusion covers the recorded 30-run window AND every scenario
+  // already generated into the persistent cache, so two waves previewed
+  // before either starts still cannot collide.
+  const recentNames = new Set([...history.map(h => h.name), ...cachedScenarioNames()]);
   const rnd = mulberry32(wave * 2654435761 + modeSalt * 97 + 13);
   const tier = wave <= 5 ? 1 : wave <= 12 ? 2 : wave <= 20 ? 3 : 4;
   const zonePool = ctx?.zones?.length ? ctx.zones : WAR_ZONES;
@@ -236,27 +288,87 @@ export function generatedScenario(wave: number, modeSalt = 0, ctx?: ScenarioCont
     newsVictory: pickNews(rnd, "victory", NEWS_VICTORY, NEWS_VICTORY_BODY, newsCtx),
     newsDefeat: pickNews(rnd, "defeat", NEWS_DEFEAT, NEWS_DEFEAT_BODY, newsCtx),
   };
-  recordScenarioHistory(operationName, objective);
-  bumpRunCount();
+  // Deliberately NO history/counter writes here: generation is a pure read
+  // of (wave, mode, committed history, cache). Recording happens once, at
+  // battle start, in commitScenarioForWave — otherwise every preview and
+  // every reload registered a phantom run and shifted the next roll (QA).
   return scenario;
 }
 
-// Generated scenarios are memoized per (wave, mode) for the session: the
-// briefing, the battle report and the war-room preview must all describe
-// the SAME operation, and the 30-run memory must record each run once.
+// ---- Persistent generated-scenario cache: one scenario per (wave, mode),
+// kept across reloads. The briefing bulletin, the battle report and the
+// war-room preview must all describe the SAME operation the battle context
+// was rolled from — even after a mid-battle reload — so the first roll is
+// frozen here and never re-rolled. `committed` marks that the run has been
+// recorded in the 30-run memory (battle actually started).
+const CACHE_KEY = "hormuz-scenario-cache-v1";
+const CACHE_LIMIT = 48;
+interface ScenarioCacheEntry { scenario: Scenario; committed: boolean }
+let cacheFallback: Record<string, ScenarioCacheEntry> = {};
+let cacheLoaded = false;
+function saltForMode(mode: "campaign" | "endless" | "challenge") {
+  return mode === "endless" ? 1 : mode === "challenge" ? 2 : 3;
+}
+function loadScenarioCache(): Record<string, ScenarioCacheEntry> {
+  if (cacheLoaded) return cacheFallback;
+  cacheLoaded = true;
+  try {
+    const raw = typeof window !== "undefined" ? window.localStorage.getItem(CACHE_KEY) : null;
+    const parsed = raw ? JSON.parse(raw) : null;
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+      for (const [k, e] of Object.entries(parsed as Record<string, unknown>)) {
+        const entry = e as Partial<ScenarioCacheEntry> | null;
+        const sc = entry?.scenario;
+        if (sc && typeof sc.operationName === "string" && typeof sc.objective === "string" && typeof sc.newsBefore?.headline === "string") {
+          cacheFallback[k] = { scenario: sc as Scenario, committed: entry?.committed === true };
+        }
+      }
+    }
+  } catch { /* storage unavailable: session memory still applies */ }
+  return cacheFallback;
+}
+function saveScenarioCache() {
+  const keys = Object.keys(cacheFallback);
+  if (keys.length > CACHE_LIMIT) for (const k of keys.slice(0, keys.length - CACHE_LIMIT)) delete cacheFallback[k];
+  try { window.localStorage.setItem(CACHE_KEY, JSON.stringify(cacheFallback)); } catch { /* memory only */ }
+}
+function cachedScenarioNames(): string[] {
+  return Object.values(loadScenarioCache()).map(e => e.scenario.operationName);
+}
+
 const generatedMemo = new Map<string, Scenario>();
 export function scenarioForWave(wave: number, mode: "campaign" | "endless" | "challenge", ctx?: ScenarioContext): Scenario {
   if (mode === "campaign" && wave >= 1 && wave <= CAMPAIGN_SCENARIOS.length) {
     const s: CampaignScenario = CAMPAIGN_SCENARIOS[wave - 1];
     return { ...s, authored: true };
   }
-  const salt = mode === "endless" ? 1 : mode === "challenge" ? 2 : 3;
-  const key = `${wave}|${salt}`;
+  const key = `${wave}|${saltForMode(mode)}`;
   const memo = generatedMemo.get(key);
   if (memo) return memo;
-  const scenario = generatedScenario(wave, salt, ctx);
+  const cache = loadScenarioCache();
+  const hit = cache[key];
+  if (hit) { generatedMemo.set(key, hit.scenario); return hit.scenario; }
+  const scenario = generatedScenario(wave, saltForMode(mode), ctx);
+  cache[key] = { scenario, committed: false };
+  saveScenarioCache();
   generatedMemo.set(key, scenario);
   return scenario;
+}
+
+/** Record a generated run in the 30-run memory + counter — called exactly
+ *  once per (wave, mode), from startWave, when the battle actually begins.
+ *  A retry of the same wave finds the entry already committed and records
+ *  nothing: a re-attempt is the same operation, not a new run. Authored
+ *  campaign waves are not generator runs and never recorded. */
+export function commitScenarioForWave(wave: number, mode: "campaign" | "endless" | "challenge") {
+  if (mode === "campaign" && wave >= 1 && wave <= CAMPAIGN_SCENARIOS.length) return;
+  const key = `${wave}|${saltForMode(mode)}`;
+  const entry = loadScenarioCache()[key];
+  if (!entry || entry.committed) return;
+  recordScenarioHistory(entry.scenario.operationName, entry.scenario.objective);
+  bumpRunCount();
+  entry.committed = true;
+  saveScenarioCache();
 }
 
 // ---- War diary (دفترچه جنگ) — persisted separately from the core game save.

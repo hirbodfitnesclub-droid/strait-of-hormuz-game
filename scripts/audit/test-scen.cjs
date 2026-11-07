@@ -23,6 +23,14 @@
  * 7) Save integrity: mid-battle saves keep their context; a battle save
  *    WITHOUT a context downgrades to peace instead of crashing; a frozen
  *    battle state (mines + escort live) ticks without mutation.
+ * 8) QA round-2 regressions: the generator is stable across processes /
+ *    reloads (wave 30 identical, peeks register no phantom run, a battle
+ *    start records exactly one run and a retry none); startWave records
+ *    generated runs through the reducer; fog keeps its ×0.7 under a storm
+ *    event and coinciding storms stay a single ×0.8; a merchant crossing
+ *    a mine during the bulletin freeze still detonates it; hydrate
+ *    re-applies the mine cap and objective-ship HP clamps; the news
+ *    library carries ≥10 headline + body templates per type.
  */
 const assert = require('node:assert/strict');
 
@@ -75,8 +83,11 @@ const counts = queue => { const c = {}; for (const u of queue) c[u.kind] = (c[u.
 
 /* ---- 2) generator memory & rotation (sequential endless runs 1..30) ---- */
 {
+  // Generation itself is side-effect-free (group 8 proves it); a run enters
+  // the memory when its battle starts — commitScenarioForWave is exactly
+  // what startWave calls, so this loop models 30 real battle starts.
   const runs = [];
-  for (let w = 1; w <= 30; w++) runs.push(N.scenarioForWave(w, 'endless'));
+  for (let w = 1; w <= 30; w++) { runs.push(N.scenarioForWave(w, 'endless')); N.commitScenarioForWave(w, 'endless'); }
   const names = runs.map(r => r.operationName);
   assert.equal(new Set(names).size, 30, 'no operation name repeats inside the 30-run window');
   const campaignNames = new Set(load('src/data/scenarios.ts').CAMPAIGN_SCENARIOS.map(s => s.operationName));
@@ -285,6 +296,84 @@ const counts = queue => { const c = {}; for (const u of queue) c[u.kind] = (c[u.
   deepFreeze(fz2);
   tick(fz2, 30);
   console.log('7) save integrity: PASS (context round-trip, safe downgrade, frozen tick with mines/escort)');
+}
+
+/* ---- 8) QA round-2 regressions ---- */
+{
+  // (a) Cross-process: fresh processes sharing one storage file = reloads.
+  const { execFileSync } = require('node:child_process');
+  const fs = require('node:fs'), os = require('node:os'), path = require('node:path');
+  const storeFile = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'scen-reload-')), 'store.json');
+  const probe = args => JSON.parse(execFileSync(process.execPath, [path.join(__dirname, 'probe-scen-reload.cjs'), storeFile, ...args], { cwd: path.resolve(__dirname, '../..'), encoding: 'utf8' }).trim());
+  const p1 = probe(['30']), p2 = probe(['30']), p3 = probe(['30']);
+  assert.deepEqual([p2.name, p2.objective, p2.zone, p2.headline], [p1.name, p1.objective, p1.zone, p1.headline], 'wave 30 identical after a reload');
+  assert.deepEqual([p3.name, p3.objective, p3.zone, p3.headline], [p1.name, p1.objective, p1.zone, p1.headline], 'wave 30 identical after a second reload');
+  assert.equal(p3.runs, 0, 'previews/reloads never bump the run counter');
+  assert.equal(p3.histLen, 0, 'previews/reloads never record history');
+  const c1 = probe(['30', 'commit']);
+  assert.equal(c1.runs, 1, 'battle start records exactly one run');
+  assert.equal(c1.histLen, 1, 'battle start records one history entry');
+  assert.equal(c1.name, p1.name, 'the committed scenario IS the previewed one');
+  const c2 = probe(['30', 'commit']);
+  assert.equal(c2.runs, 1, 'a retry of the same wave records no second run');
+  assert.equal(probe(['30']).name, p1.name, 'post-commit peek still returns the same scenario');
+
+  // (b) Through the real reducer: peeking records nothing, startWave does.
+  // (The history window is capped at 30 entries, so this asserts on the
+  // window's CONTENT — its newest record — not its length.)
+  const lastBefore = N.loadScenarioHistory().at(-1);
+  N.scenarioForWave(46, 'endless');
+  assert.deepEqual(N.loadScenarioHistory().at(-1), lastBefore, 'in-process peek records nothing');
+  const started = startAt(46, 'endless');
+  assert.equal(started.phase, 'battle', 'endless wave 46 started');
+  const lastAfter = N.loadScenarioHistory().at(-1);
+  assert.notDeepEqual(lastAfter, lastBefore, 'startWave recorded a new run');
+  assert.equal(lastAfter.name, N.scenarioForWave(46, 'endless').operationName, 'recorded run == the scenario the battle uses');
+
+  // (c) Range factors: fog survives a storm event; storms never stack.
+  const tower = { slot: 0, kind: 'cannon', tier: 1, branch: null, priority: 'first' };
+  const r0 = getRange(initialGame(), tower);
+  const fogStorm = startAt(2);
+  assert.equal(fogStorm.battle.condition, 'مه');
+  fogStorm.event = 'storm';
+  assert.ok(Math.abs(getRange(fogStorm, tower) - r0 * 0.7) < 1e-6, `fog keeps ×0.7 under a storm event (got ×${(getRange(fogStorm, tower) / r0).toFixed(3)})`);
+  const stormStorm = startAt(2);
+  stormStorm.battle.condition = 'طوفان'; stormStorm.event = 'storm';
+  assert.ok(Math.abs(getRange(stormStorm, tower) - r0 * 0.8) < 1e-6, 'scenario storm + storm event = a single ×0.8');
+  const nightStorm = startAt(2);
+  nightStorm.battle.condition = 'شب'; nightStorm.event = 'storm';
+  assert.ok(Math.abs(getRange(nightStorm, tower) - r0 * 0.8) < 1e-6, 'night + storm event = ×0.8');
+
+  // (d) Mine vs the bulletin freeze: merchants keep sailing while the
+  // battle layer is frozen — the mine must still go off (QA exploit).
+  let mz = startAt(19);
+  for (let i = 0; i < 220 && !(mz.battle?.mines.length >= 1); i++) mz = tick(mz, 1);
+  assert.ok(mz.battle.mines.length >= 1, 'mine laid for the freeze probe');
+  const mineId = mz.battle.mines[0].id, mineAt = mz.battle.mines[0].progress;
+  const victim = mz.merchants[0];
+  victim.progress = mineAt - 0.03; // outside the ±0.02 window — for now
+  mz.merchants = [victim]; // isolate: no other ship may reach the mine first
+  const sec0 = mz.security, elapsed0 = mz.battle.elapsed;
+  for (let i = 0; i < 30; i++) mz = gameReducer(mz, { type: 'tick', dt: 0.125, battlePaused: true });
+  assert.equal(mz.battle.elapsed, elapsed0, 'battle layer really was frozen during the probe');
+  assert.ok(!mz.battle.mines.some(m => m.id === mineId), 'mine detonated during the freeze');
+  assert.ok(!mz.merchants.some(x => x.id === victim.id), 'merchant sunk by the mine during the freeze');
+  assert.equal(mz.security, sec0 - 2, 'security penalty applied exactly once');
+
+  // (e) Hydrate re-applies the caps a tampered save tries to break.
+  const raw = JSON.parse(JSON.stringify(startAt(2)));
+  raw.battle.escort.hp = 99999;
+  raw.battle.structureHp = 5000; // op 2 has no structure: maxHp 0 clamps it away
+  raw.battle.mines = Array.from({ length: 50 }, (_, i) => ({ id: 9000 + i, progress: i / 50 }));
+  const clamped = hydrateGame(raw);
+  assert.ok(clamped, 'tampered save still hydrates');
+  assert.equal(clamped.game.battle.mines.length, 6, 'minefield re-capped at 6 on load');
+  assert.equal(clamped.game.battle.escort.hp, clamped.game.battle.escort.maxHp, 'escort HP clamped to maxHp on load');
+  assert.equal(clamped.game.battle.structureHp, 0, 'structure HP clamped to its maxHp on load');
+
+  // (f) News library size (checklist §۴٫۰: ≥10 templates per type).
+  for (const [k, v] of Object.entries(N.NEWS_TEMPLATE_COUNTS)) assert.ok(v >= 10, `news library ${k} has ≥10 templates (got ${v})`);
+  console.log('8) QA round-2 regressions: PASS (cross-process generator stability, commit-at-start, fog×storm, mine freeze, hydrate clamps, library ≥10)');
 }
 
 console.log('\nALL SCEN PROBES PASSED');

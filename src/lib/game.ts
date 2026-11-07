@@ -1,7 +1,7 @@
 import { initialIdle, MISSIONS, MANAGERS, CONTRACTS, currentMission, missionProgress, managerCost, operationInfo, previewChest, advanceLootSeed, type IdleState, type ManagerId, type ContractId, type UpgradeQuantity, type Reward } from "./progression";
 import { findWaterRoute, getLane, nearestWater, sampleLane, type MapLayout, type Point } from "./navigation";
 import { weaponSpec, modelKindFor, specInterval, flightTime, type ModelKind } from "./weapons-spec";
-import { scenarioForWave, type Scenario } from "./news";
+import { scenarioForWave, commitScenarioForWave, type Scenario } from "./news";
 import { buildSpawnQueue, objectiveTypeOf, conditionRangeFactor, scenarioContextFor, type ObjectiveType, type SpawnUnit } from "./scenario-mechanics";
 
 export type BuildingId = "oil" | "tank" | "dock" | "refinery" | "steel" | "arms" | "power" | "water" | "city" | "welfare" | "optical";
@@ -336,13 +336,17 @@ export function towerDps(s: GameState, tower: Tower) {
 }
 export function getRange(s: GameState, tower: Tower) {
   const base = tower.kind === "air" && tower.tier === 4 && tower.branch === 0 ? 65 : TOWERS[tower.kind].range;
-  // Scenario conditions (checklist ۴٫۰): fog cuts effective range 30% (the
-  // enemy is likewise engaged later — detection IS range here), scenario
-  // night cuts optical range 20%, scenario storm 20%. A storm EVENT already
-  // applies its own ×0.8 below, so the scenario factor yields to it (no
-  // double-stacking when both storms coincide).
-  const scenarioFactor = s.phase === "battle" && s.event !== "storm" ? conditionRangeFactor(s.battle?.condition) : 1;
-  return base * (1 + (tower.tier - 1) * 0.06) * (1 + 0.03 * (s.buildings.optical ?? 0)) * (s.research.includes("radar") ? 1.2 : 1) * (s.research.includes("sonar") && (tower.kind === "ew" || tower.kind === "boat") ? 1.1 : 1) * (s.mode === "challenge" && s.challengeRule === 0 && s.phase === "battle" ? 0.5 : 1) * (s.event === "storm" ? 0.8 : 1) * scenarioFactor;
+  // Environmental visibility factors combine by taking the MOST restrictive
+  // one — never by stacking, and never by one cancelling another (QA
+  // round 2): scenario fog cuts effective range 30% (detection IS range
+  // here) and keeps doing so while a storm event rages (min(0.7, 0.8) =
+  // 0.7, not the storm's 0.8 alone); scenario night cuts optical range 20%;
+  // a scenario storm coinciding with a storm event is still a single ×0.8.
+  const envFactor = Math.min(
+    s.event === "storm" ? 0.8 : 1,
+    s.phase === "battle" ? conditionRangeFactor(s.battle?.condition) : 1,
+  );
+  return base * (1 + (tower.tier - 1) * 0.06) * (1 + 0.03 * (s.buildings.optical ?? 0)) * (s.research.includes("radar") ? 1.2 : 1) * (s.research.includes("sonar") && (tower.kind === "ew" || tower.kind === "boat") ? 1.1 : 1) * (s.mode === "challenge" && s.challengeRule === 0 && s.phase === "battle" ? 0.5 : 1) * envFactor;
 }
 export function getOfflineReward(s: GameState, now: number) {
   const seconds = Math.max(0, Math.min(12 * 3600, (now - (s.lastSavedAt || now)) / 1000));
@@ -391,7 +395,14 @@ export function hydrateGame(raw: unknown): { game: GameState; offline: number } 
   // instead of crashing or running mechanics-free.
   const rawBattle = (saved as GameState).battle;
   if (rawBattle && typeof rawBattle === "object" && Array.isArray(rawBattle.queue)) {
-    const ship = (v: unknown): ObjectiveShip | null => v && typeof v === "object" ? { progress: Math.max(0, Math.min(1, num((v as ObjectiveShip).progress, 0))), hp: num((v as ObjectiveShip).hp, 0), maxHp: Math.max(0, num((v as ObjectiveShip).maxHp, 0)), slow: Math.max(0, num((v as ObjectiveShip).slow, 0)) } : null;
+    // Objective ships re-clamp on load (QA round 2): a tampered save must
+    // not resurrect a ship above its max HP (or below zero).
+    const ship = (v: unknown): ObjectiveShip | null => {
+      if (!v || typeof v !== "object") return null;
+      const maxHp = Math.max(0, num((v as ObjectiveShip).maxHp, 0));
+      return { progress: Math.max(0, Math.min(1, num((v as ObjectiveShip).progress, 0))), hp: Math.max(0, Math.min(maxHp, num((v as ObjectiveShip).hp, 0))), maxHp, slow: Math.max(0, num((v as ObjectiveShip).slow, 0)) };
+    };
+    const structureMaxHp = Math.max(0, num(rawBattle.structureMaxHp, 0));
     const classOk = (k: unknown) => k === "speed" || k === "corvette" || k === "air" || k === "sub" || k === "destroyer" || k === "boss";
     const objOk = (o: unknown) => o === "repel" || o === "escort" || o === "airdef" || o === "intercept" || o === "structure" || o === "siege" || o === "rescue";
     game.battle = {
@@ -401,9 +412,11 @@ export function hydrateGame(raw: unknown): { game: GameState; offline: number } 
       queue: rawBattle.queue.filter(u => u && typeof u === "object" && classOk((u as SpawnUnit).kind)).map(u => ({ kind: (u as SpawnUnit).kind, rev: !!(u as SpawnUnit).rev })),
       elapsed: Math.max(0, num(rawBattle.elapsed, 0)),
       escort: ship(rawBattle.escort), stranded: ship(rawBattle.stranded),
-      structureHp: num(rawBattle.structureHp, 0), structureMaxHp: Math.max(0, num(rawBattle.structureMaxHp, 0)),
+      structureHp: Math.max(0, Math.min(structureMaxHp, num(rawBattle.structureHp, 0))), structureMaxHp,
       airTotal: Math.max(0, Math.floor(num(rawBattle.airTotal, 0))), airLeaked: Math.max(0, Math.floor(num(rawBattle.airLeaked, 0))),
-      mines: Array.isArray(rawBattle.mines) ? rawBattle.mines.filter(m => m && typeof m === "object" && Number.isFinite((m as EnemyMine).progress)).map(m => ({ id: Math.floor(num((m as EnemyMine).id, 0)), progress: Math.max(0, Math.min(1, (m as EnemyMine).progress)) })) : [],
+      // The minefield cap (6) is re-applied on load, not just at laying
+      // time — a tampered save cannot smuggle in a bigger field (QA).
+      mines: Array.isArray(rawBattle.mines) ? rawBattle.mines.filter(m => m && typeof m === "object" && Number.isFinite((m as EnemyMine).progress)).map(m => ({ id: Math.floor(num((m as EnemyMine).id, 0)), progress: Math.max(0, Math.min(1, (m as EnemyMine).progress)) })).slice(0, 6) : [],
       mineClock: Math.max(0, num(rawBattle.mineClock, 4)), sweep: {}, failed: false,
     };
   } else game.battle = null;
@@ -521,6 +534,9 @@ function startWave(s: GameState, early: boolean) {
   // never diverge. Total count still follows the checklist §۳ formula
   // (buildSpawnQueue builds exactly waveTotal units).
   const scenario = scenarioForWave(s.wave, s.mode, scenarioContextFor(s));
+  // The run is recorded in the generator's memory NOW — at actual battle
+  // start — never at generation/preview time (QA round 2: phantom runs).
+  commitScenarioForWave(s.wave, s.mode);
   const queue = buildSpawnQueue(s.wave, scenario);
   const objective = objectiveTypeOf(scenario.objective);
   const structureMaxHp = objective === "structure" ? 500 + 60 * s.wave : 0;
@@ -772,6 +788,22 @@ function tick(s: GameState, delta: number, battlePaused = false) {
       const position = merchantPosition(ship, s.layout);
       s.popups.push({ id: s.nextId++, ...position, text: `+${Math.round(toll)}`, life: 1.4 });
     }
+    // Enemy mines threaten the shipping lane in real time: merchants keep
+    // sailing while the battle layer is frozen (briefing/diary pause), so
+    // the detonation check lives HERE, on the segment the ship actually
+    // crossed this tick. A point check in the frozen battle section let a
+    // ship slip through the ±0.02 window during a pause and disarmed the
+    // mine by opening the diary (QA round 2 exploit).
+    if (s.phase === "battle" && s.battle && s.battle.mines.length) {
+      const mine = s.battle.mines.find(m => m.progress > oldProgress - 0.02 && m.progress < ship.progress + 0.02);
+      if (mine) {
+        s.battle.mines = s.battle.mines.filter(m => m.id !== mine.id);
+        const position = merchantPosition(ship, s.layout);
+        ship.progress = 2; // sunk — the traffic filter below drops progress ≥ 1
+        s.security = Math.max(0, s.security - 2);
+        s.popups.push({ id: s.nextId++, ...position, text: "کشتی تجاری به مین برخورد کرد!", life: 1.8 });
+      }
+    }
   }
   s.merchants = s.merchants.filter(ship => ship.progress < 1);
   for (const ship of s.contraband) ship.progress += dt / 24;
@@ -944,17 +976,9 @@ function tick(s: GameState, delta: number, battlePaused = false) {
           s.popups.push({ id: s.nextId++, x: pos.x, y: pos.y, text: "مین خنثی شد", life: 1.2 });
         }
       }
+      // Merchant-vs-mine detonation is handled in the traffic layer above
+      // (merchants move even while this section is frozen — see there).
       const detonated = new Set<number>();
-      for (const ship of s.merchants) {
-        const mine = ctx.mines.find(m => !detonated.has(m.id) && Math.abs(ship.progress - m.progress) < 0.02);
-        if (mine) {
-          detonated.add(mine.id);
-          const pos = merchantPosition(ship, s.layout);
-          ship.progress = 2; // sunk — the traffic filter drops progress ≥ 1
-          s.security = Math.max(0, s.security - 2);
-          s.popups.push({ id: s.nextId++, x: pos.x, y: pos.y, text: "کشتی تجاری به مین برخورد کرد!", life: 1.8 });
-        }
-      }
       if (ctx.escort) {
         const mine = ctx.mines.find(m => !detonated.has(m.id) && Math.abs(ctx.escort!.progress - m.progress) < 0.02);
         if (mine) {
