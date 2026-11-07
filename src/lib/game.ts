@@ -25,12 +25,16 @@ export interface Tower {
    *  salvo, including the next one to fire. Absent = a full salvo is
    *  loaded. The renderer reads this + cooldown to show the reload. */
   salvoLeft?: number;
-  /** CIWS point-defense budget (MECH-B; checklist ۱٫۱): intercepts left in
-   *  the current 5-second window. Absent = the full budget of 3. */
-  interceptLeft?: number;
-  /** CIWS budget window countdown (battle-seconds); absent = no window
-   *  is running, the next interception opens a fresh 5s window. */
-  interceptWindow?: number;
+  /** CIWS point-defense budget (MECH-B; checklist ۱٫۱): recharge timers
+   *  of the SPENT interception slots — one entry per interception used,
+   *  each counting down from 5s in battle time. Per-slot recharge (QA
+   *  round 2): a slot returns only once its own timer runs out, and the
+   *  timer must cross below zero, so two uses of the same slot are
+   *  always MORE than 5s apart — at most 3 interceptions land in ANY
+   *  5-second span, under closed and half-open readings alike (the old
+   *  shared window let a refill burst put 5–6 into one sliding span).
+   *  Absent = all 3 slots ready. */
+  interceptCharges?: number[];
 }
 export interface Enemy {
   id: number;
@@ -395,7 +399,14 @@ export function hydrateGame(raw: unknown): { game: GameState; offline: number } 
   game.battleTime = Math.max(0, num(game.battleTime, 0));
   game.idle.bank = num(game.idle.bank, 0);
   (Object.keys(game.buildings) as BuildingId[]).forEach(k => { game.buildings[k] = Math.max(0, Math.floor(num(game.buildings[k], base.buildings[k]))); });
-  game.towers = (Array.isArray(game.towers) ? game.towers : []).filter(t => t && typeof t === "object" && (TOWER_KINDS as string[]).includes(t.kind) && Number.isInteger(t.slot) && t.slot >= 0 && t.slot < SLOTS.length).map(t => ({ ...t, tier: Math.max(1, Math.min(4, Math.floor(num(t.tier, 1)))), cooldown: Math.max(0, num((t as Tower).cooldown, 0)) }));
+  game.towers = (Array.isArray(game.towers) ? game.towers : []).filter(t => t && typeof t === "object" && (TOWER_KINDS as string[]).includes(t.kind) && Number.isInteger(t.slot) && t.slot >= 0 && t.slot < SLOTS.length).map(t => {
+    // CIWS recharge timers survive a mid-battle save; anything malformed
+    // degrades to "slot ready". The legacy shared-window fields
+    // (interceptLeft/interceptWindow) are dropped — nothing reads them.
+    const rawCharges = (t as Tower).interceptCharges;
+    const charges = Array.isArray(rawCharges) ? rawCharges.filter(c => typeof c === "number" && Number.isFinite(c) && c >= 0).map(c => Math.min(CIWS_INTERCEPT_WINDOW, c)).slice(0, CIWS_INTERCEPT_BUDGET) : [];
+    return { ...t, tier: Math.max(1, Math.min(4, Math.floor(num(t.tier, 1)))), cooldown: Math.max(0, num((t as Tower).cooldown, 0)), interceptLeft: undefined, interceptWindow: undefined, interceptCharges: charges.length ? charges : undefined };
+  });
   game.islands = (Array.isArray(game.islands) ? game.islands : base.islands).filter(id => ISLANDS.some(i => i.id === id));
   if (!game.islands.includes("main")) game.islands.push("main");
   game.research = (Array.isArray(game.research) ? game.research : []).filter(r => typeof r === "string");
@@ -666,8 +677,8 @@ const MAX_SHOTS_PER_TICK = 32;
 const DESTROYER_MISSILE_INTERVAL = 5;
 const ENEMY_MISSILE_RANGE = 26;      // percent units: a destroyer engages towers this close
 const ENEMY_MISSILE_STUN = 4;        // seconds a tower hit by an enemy missile stays down (§۲٫۲)
-const CIWS_INTERCEPT_BUDGET = 3;     // intercepts per CIWS per window (checklist ۱٫۱, pack data)
-const CIWS_INTERCEPT_WINDOW = 5;     // seconds
+const CIWS_INTERCEPT_BUDGET = 3;     // interception slots per CIWS (checklist ۱٫۱, pack data)
+const CIWS_INTERCEPT_WINDOW = 5;     // seconds for one spent slot to recharge
 const BOSS_ADD_CAP = 40;             // max reinforcements one boss may spawn (studio ruling)
 const BOSS_ADD_BOUNTY_MULT = 0.25;   // boss adds pay 25% of class bounty, no combo (studio ruling)
 const BOSS_ADD_SPREAD = 0.012;       // progress spacing between adds of one spawn group
@@ -694,13 +705,14 @@ function launchEnemyMissile(s: GameState, shooter: Enemy, source: EnemyMissile["
 
 /** The CIWS that would intercept a missile at pos: nearest standing
  *  Phalanx (cannon tier 4, branch 0) whose range covers the point and
- *  whose 3-per-5s budget is not spent. A disabled CIWS defends nothing. */
+ *  which still has a charged interception slot (3 slots, each recharging
+ *  5s after its own use). A disabled CIWS defends nothing. */
 function pickInterceptor(s: GameState, pos: { x: number; y: number }): Tower | null {
   let best: Tower | null = null; let bd = Infinity;
   for (const t of s.towers) {
     if (t.kind !== "cannon" || t.tier !== 4 || t.branch !== 0) continue;
     if ((s.towerStuns?.[t.slot] ?? 0) > 0) continue;
-    if ((t.interceptLeft ?? CIWS_INTERCEPT_BUDGET) <= 0) continue;
+    if ((t.interceptCharges?.length ?? 0) >= CIWS_INTERCEPT_BUDGET) continue;
     const sp = getSlots(s.layout)[t.slot];
     if (!sp) continue;
     const d = distance(sp, pos);
@@ -936,11 +948,19 @@ function tick(s: GameState, delta: number, battlePaused = false) {
   }
   s.enemies.push(...reinforcements);
   // — Enemy missiles in flight (MECH-B; checklist ۲٫۶ + CIWS §۱٫۱) —
-  // CIWS budget windows tick down in battle time; a spent budget refills
-  // when its 5-second window closes.
-  for (const t of s.towers) if (t.interceptWindow !== undefined) {
-    t.interceptWindow -= battleDt;
-    if (t.interceptWindow <= 0) { t.interceptWindow = undefined; t.interceptLeft = undefined; }
+  // CIWS slots recharge individually in battle time: each spent slot's
+  // timer ticks down and the slot returns only once the timer crosses
+  // below zero — two uses of one slot are always >5s apart, so no
+  // sliding 5s span (closed or half-open) ever holds more than 3
+  // interceptions per CIWS (QA round 2: the old shared window refilled
+  // all 3 slots at once and a queued burst slipped 5–6 into one span).
+  for (const t of s.towers) {
+    const charges = t.interceptCharges;
+    if (!charges?.length) continue;
+    let w = 0;
+    for (let i = 0; i < charges.length; i++) { const c = charges[i] - battleDt; if (c >= 0) charges[w++] = c; }
+    charges.length = w;
+    if (!w) t.interceptCharges = undefined;
   }
   if (s.enemyMissiles.length) {
     const stillFlying: EnemyMissile[] = [];
@@ -948,8 +968,7 @@ function tick(s: GameState, delta: number, battlePaused = false) {
       const mpos = enemyMissilePosition(m);
       const ciws = pickInterceptor(s, mpos);
       if (ciws) {
-        if (ciws.interceptWindow === undefined) { ciws.interceptWindow = CIWS_INTERCEPT_WINDOW; ciws.interceptLeft = CIWS_INTERCEPT_BUDGET; }
-        ciws.interceptLeft = (ciws.interceptLeft ?? CIWS_INTERCEPT_BUDGET) - 1;
+        (ciws.interceptCharges ??= []).push(CIWS_INTERCEPT_WINDOW); // this slot recharges 5s from now
         s.events.push({ type: "intercept", x: mpos.x, y: mpos.y, slot: ciws.slot, enemyId: m.sourceId });
         s.popups.push({ id: s.nextId++, x: mpos.x, y: mpos.y - 1, text: "✦ موشک رهگیری شد", life: 1 });
         continue; // destroyed mid-air: no arrival, no stun
@@ -1170,7 +1189,7 @@ export function cloneForTick(state: GameState): GameState {
       managerLevels: { ...idle.managerLevels },
     },
     buildings: { ...state.buildings },
-    towers: state.towers.map(t => ({ ...t })),
+    towers: state.towers.map(t => ({ ...t, interceptCharges: t.interceptCharges?.slice() })),
     enemies: state.enemies.map(e => ({ ...e })),
     pirates: state.pirates.map(p => ({ ...p })),
     contraband: state.contraband.map(c => ({ ...c })),

@@ -16,7 +16,9 @@
  *    at exactly 3 intercepts per 5s and the 4th disables its tower.
  *    Controls: no CIWS → the missile lands and stuns for 4s; an EMP
  *    weapon-down stamp (MECH-A contract) and plain stun both silence the
- *    destroyer.
+ *    destroyer. 4e (QA round 2) streams missiles continuously for 20s:
+ *    per-slot recharge must keep EVERY 5s span (closed and half-open)
+ *    at ≤3 intercepts while the sustained rate stays 0.60/s.
  * 5) Boss 2 (checklist ۲٫۲): the tower stun arrives BY MISSILE — no
  *    towerStuns before the missile lands, 4s stun after.
  * 6) Boss ability clock runs on effective time (audit جدید-۱۵): frozen
@@ -246,6 +248,43 @@ function findInterceptGeometry() {
     assert.equal(s.enemyMissiles.length, 0);
   }
   console.log('4d) silenced destroyer: PASS (weapon-down stamp and stun both → 0 launches in 12s)');
+  // 4e) CONTINUOUS FEED (QA round-2 probe F): missiles stream into CIWS
+  // coverage non-stop for 20s. Per-slot recharge must hold the cap in
+  // EVERY 5s span — closed [a, a+5] and half-open [a, a+5) alike; the old
+  // shared window refilled all 3 slots at once and a queued burst put
+  // 5–6 intercepts into one sliding span. Sustained rate stays 0.60/s.
+  {
+    let s = battleBase();
+    s.towers = [
+      { slot: geo.targetSlot, kind: 'missile', tier: 1, branch: null, priority: 'first' },
+      { slot: geo.ciwsSlot, kind: 'cannon', tier: 4, branch: 0, priority: 'first' },
+    ];
+    // a permanently stunned, immortal destroyer keeps the battle phase
+    // alive without ever launching (the feed below is injected by hand)
+    s.enemies = [{ id: 1, kind: 'destroyer', boss: 0, hp: 1e9, maxHp: 1e9, progress: geo.progress, stun: 1e7, specialClock: 0 }];
+    parkHeroFar(s, SLOTS[geo.targetSlot], SLOTS[geo.ciwsSlot], positionAt(geo.progress));
+    const from = positionAt(Math.min(0.98, geo.progress + 0.09));
+    const times = [];
+    let disabled = 0;
+    for (let i = 0; i < 160; i++) { // 20s of feed, one fresh missile per tick
+      s.enemyMissiles.push({ id: s.nextId++, sourceId: 1, source: 'destroyer', targetSlot: geo.targetSlot, eta: 2.2, total: 2.2, x1: from.x, y1: from.y, x2: SLOTS[geo.targetSlot].x, y2: SLOTS[geo.targetSlot].y });
+      s = gameReducer(s, { type: 'tick', dt: 0.125 });
+      const tNow = (i + 1) * 0.125;
+      for (const e of s.events) { if (e.type === 'intercept') times.push(tNow); if (e.type === 'tower-disabled') disabled++; }
+    }
+    let worstClosed = 0, worstHalf = 0;
+    for (const a of times) {
+      worstClosed = Math.max(worstClosed, times.filter(t => t >= a && t <= a + 5).length);
+      worstHalf = Math.max(worstHalf, times.filter(t => t >= a && t < a + 5).length);
+    }
+    const in15 = times.filter(t => t <= 15).length;
+    assert.ok(times.length >= 12, `the feed must sustain ~0.60 intercepts/s over 20s, got ${times.length}`);
+    assert.ok(disabled > 0, 'the feed must exceed the budget — some missiles have to get through');
+    assert.ok(worstClosed <= 3, `closed 5s span must never hold >3 intercepts, worst=${worstClosed} (times: ${times.join(',')})`);
+    assert.ok(worstHalf <= 3, `half-open 5s span must never hold >3 intercepts, worst=${worstHalf}`);
+    assert.equal(in15, 9, `sustained rate must stay 0.60/s (9 intercepts in the first 15s), got ${in15} (times: ${times.join(',')})`);
+    console.log(`4e) CIWS continuous feed: PASS (${times.length} intercepts in 20s, worst 5s span closed=${worstClosed} half-open=${worstHalf}, 9 in 15s = 0.60/s, ${disabled} missiles got through)`);
+  }
 }
 
 /* ---- 5) Boss 2: stun arrives by missile ---- */

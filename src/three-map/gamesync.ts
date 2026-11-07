@@ -229,12 +229,17 @@ const EM_FLAME_GEO = new THREE.ConeGeometry(0.22, 0.85, 8); EM_FLAME_GEO.rotateZ
 const EM_BODY_MAT = new THREE.MeshStandardMaterial({ color: 0x7e2d24, roughness: 0.45, metalness: 0.35, emissive: 0x2a0803 });
 const EM_NOSE_MAT = new THREE.MeshStandardMaterial({ color: 0xd8dde2, roughness: 0.35, metalness: 0.5 });
 const EM_FLAME_MAT = new THREE.MeshBasicMaterial({ color: 0xffa040 });
+/* The warning beacon's material is shared too (QA round 2): a fresh
+   SpriteMaterial per missile was never disposed on removal — a small
+   but unbounded leak in long battles. Sharing means all beacons blink
+   in unison; syncEnemyMissiles drives the blink on this one material. */
+const EM_BEACON_MAT = new THREE.SpriteMaterial({ color: 0xff4030, transparent: true, opacity: 0.9, depthTest: false });
 function enemyMissileMesh(): THREE.Group {
   const g = new THREE.Group();
   const body = new THREE.Mesh(EM_BODY_GEO, EM_BODY_MAT); g.add(body);
   const nose = new THREE.Mesh(EM_NOSE_GEO, EM_NOSE_MAT); nose.position.x = 1.75; g.add(nose);
   const flame = new THREE.Mesh(EM_FLAME_GEO, EM_FLAME_MAT); flame.position.x = -1.7; flame.name = 'em-flame'; g.add(flame);
-  const beacon = new THREE.Sprite(new THREE.SpriteMaterial({ color: 0xff4030, transparent: true, opacity: 0.9, depthTest: false }));
+  const beacon = new THREE.Sprite(EM_BEACON_MAT);
   beacon.scale.set(0.9, 0.9, 1); beacon.position.set(0, 0.55, 0); beacon.name = 'em-beacon'; g.add(beacon);
   return g;
 }
@@ -795,6 +800,7 @@ export class GameSync3D {
      projectiles — flight, interception, the 4s tower stun — is logic in
      game.ts; this section only reads state. */
   private syncEnemyMissiles(game: GameState, now: number) {
+    EM_BEACON_MAT.opacity = (now / 260) % 1 < 0.55 ? 0.95 : 0.25; // warning blink, shared by every beacon
     const seen = new Set<number>();
     for (const m of game.enemyMissiles ?? []) {
       seen.add(m.id);
@@ -809,13 +815,14 @@ export class GameSync3D {
       g.rotation.y = Math.atan2(-(tz - z), tx - x);
       const flame = g.getObjectByName('em-flame');
       if (flame) { const f = 0.8 + Math.sin(now / 31 + m.id) * 0.25; flame.scale.set(f, 1, 1); }
-      const beacon = g.getObjectByName('em-beacon') as THREE.Sprite | undefined;
-      if (beacon) (beacon.material as THREE.SpriteMaterial).opacity = (now / 260 + m.id) % 1 < 0.55 ? 0.95 : 0.25; // warning blink
       if (now - (this.eMissileTrailAt.get(m.id) ?? 0) > 90) {
         this.eMissileTrailAt.set(m.id, now);
         this.fx.smoke(new THREE.Vector3(x, y, z), 0.38, false);
       }
     }
+    // Removal needs no dispose: every geometry/material a missile mesh
+    // uses is a shared module-level asset (see EM_* above), so dropping
+    // the Group from the scene graph frees the whole per-missile cost.
     for (const [id, g] of [...this.eMissiles]) if (!seen.has(id)) { this.dyn.remove(g); this.eMissiles.delete(id); this.eMissileTrailAt.delete(id); }
     if (game.events !== this.lastEvents) {
       this.lastEvents = game.events;
