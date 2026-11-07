@@ -5,7 +5,15 @@ import { count, eq, sql } from "drizzle-orm";
 
 export const dynamic = "force-dynamic";
 const validId = (id: unknown): id is string => typeof id === "string" && /^[a-zA-Z0-9-]{8,80}$/.test(id);
-const serverDay = () => new Date().toISOString().slice(0, 10);
+// The daily boundary follows the player's day (Asia/Tehran), not UTC — a UTC
+// day would reset the reward at 03:30 local time. Built from formatToParts
+// so the YYYY-MM-DD shape does not depend on a locale's default ordering.
+const tehranDayFormat = new Intl.DateTimeFormat("en-US", { timeZone: "Asia/Tehran", year: "numeric", month: "2-digit", day: "2-digit" });
+const serverDay = () => {
+  const parts = tehranDayFormat.formatToParts(new Date());
+  const part = (type: string) => parts.find(p => p.type === type)?.value ?? "";
+  return `${part("year")}-${part("month")}-${part("day")}`;
+};
 
 export async function GET(request: Request) {
   const id = new URL(request.url).searchParams.get("id");

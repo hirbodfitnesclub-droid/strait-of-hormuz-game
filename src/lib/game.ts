@@ -265,34 +265,226 @@ export function hydrateGame(raw: unknown): { game: GameState; offline: number } 
   const saved = raw as GameState;
   if (saved.version !== 1 || !saved.buildings || !Array.isArray(saved.towers) || !saved.cards) return null;
   const base = initialGame();
-  const game: GameState = { ...base, ...saved, buildings: { ...base.buildings, ...saved.buildings }, cards: { ...base.cards, ...saved.cards }, cooldowns: { ...base.cooldowns, ...saved.cooldowns }, idle: { ...base.idle, ...saved.idle, managerLevels: { ...base.idle.managerLevels, ...saved.idle?.managerLevels } }, shots: [], popups: [] };
   // Tamper hardening: a corrupted or hand-edited save must never crash the game.
+  // Every nested structure is type-checked field by field below; anything
+  // invalid is dropped or replaced with the safe default from a fresh game.
+  const isRec = (v: unknown): v is Record<string, unknown> => !!v && typeof v === "object" && !Array.isArray(v);
   const num = (v: unknown, fb: number) => typeof v === "number" && Number.isFinite(v) ? v : fb;
+  const optNum = (v: unknown) => typeof v === "number" && Number.isFinite(v) ? v : undefined;
+  const clampNum = (v: unknown, fb: number, min: number, max: number) => Math.max(min, Math.min(max, num(v, fb)));
+  const intIn = (v: unknown, fb: number, min: number, max: number) => Math.max(min, Math.min(max, Math.floor(num(v, fb))));
+  const strArr = (v: unknown) => Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : [];
+
+  const REWARD_TYPES: readonly Reward["type"][] = ["mission", "milestone", "daily", "chest", "contract"];
+  const sanitizeReward = (v: unknown): Reward | null => {
+    if (!isRec(v) || typeof v.id !== "string" || !REWARD_TYPES.includes(v.type as Reward["type"])) return null;
+    const reward: Reward = {
+      id: v.id, type: v.type as Reward["type"],
+      title: typeof v.title === "string" ? v.title : "",
+      subtitle: typeof v.subtitle === "string" ? v.subtitle : "",
+      cash: num(v.cash, 0), xp: num(v.xp, 0),
+    };
+    for (const key of ["steel", "ammo", "chests", "boosts"] as const) {
+      const n = optNum(v[key]);
+      if (n !== undefined) reward[key] = n;
+    }
+    if (isRec(v.cards)) {
+      const cards: Partial<Record<TowerKind, number>> = {};
+      for (const kind of TOWER_KINDS) {
+        const n = optNum(v.cards[kind]);
+        if (n !== undefined) cards[kind] = n;
+      }
+      if (Object.keys(cards).length) reward.cards = cards;
+    }
+    return reward;
+  };
+  const sanitizeBattle = (v: unknown): IdleState["lastBattle"] => {
+    if (!isRec(v)) return null;
+    return {
+      id: typeof v.id === "string" ? v.id : "battle",
+      wave: intIn(v.wave, 1, 1, 100000),
+      title: typeof v.title === "string" ? v.title : "",
+      victory: v.victory === true, stars: intIn(v.stars, 0, 0, 3),
+      cash: num(v.cash, 0), xp: num(v.xp, 0), chests: intIn(v.chests, 0, 0, 999),
+      destroyed: intIn(v.destroyed, 0, 0, 1000000000), seconds: Math.max(0, num(v.seconds, 0)),
+      hearts: intIn(v.hearts, 0, 0, 20), claimed: v.claimed === true,
+    };
+  };
+  const sanitizeContract = (v: unknown): IdleState["contract"] => {
+    if (!isRec(v) || typeof v.id !== "string" || !(v.id in CONTRACTS)) return null;
+    const id = v.id as ContractId;
+    return { id, elapsed: clampNum(v.elapsed, 0, 0, CONTRACTS[id].duration) };
+  };
+  const PORT_STAGES: readonly string[] = ["approach", "loading", "depart"];
+  const sanitizePort = (v: unknown): IdleState["port"] => {
+    if (!isRec(v)) return base.idle.port;
+    const tanker = isRec(v.tanker) && PORT_STAGES.includes(v.tanker.stage as string)
+      ? {
+          stage: v.tanker.stage as "approach" | "loading" | "depart",
+          progress: clampNum(v.tanker.progress, 0, 0, 1),
+          load: Math.max(0, num(v.tanker.load, 0)),
+        }
+      : null;
+    return { tanker, nextIn: Math.max(0, num(v.nextIn, 0)), cycles: intIn(v.cycles, 0, 0, Number.MAX_SAFE_INTEGER) };
+  };
+  const sanitizeIdle = (v: unknown): IdleState => {
+    if (!isRec(v)) return base.idle;
+    const levels = isRec(v.managerLevels) ? v.managerLevels : {};
+    const managerLevels = {} as Record<ManagerId, number>;
+    for (const id of ["harbor", "energy", "supply"] as ManagerId[]) managerLevels[id] = intIn(levels[id], 0, 0, 5);
+    const stars: Record<string, number> = {};
+    if (isRec(v.stars)) for (const [key, val] of Object.entries(v.stars)) {
+      const n = optNum(val);
+      if (n !== undefined) stars[key] = intIn(n, 0, 0, 3);
+    }
+    const offline = isRec(v.offline) && optNum(v.offline.cash) !== undefined
+      ? { cash: Math.max(0, num(v.offline.cash, 0)), seconds: Math.max(0, num(v.offline.seconds, 0)), defense: clampNum(v.offline.defense, 0, 0, 1) }
+      : null;
+    return {
+      revision: intIn(v.revision, 0, 0, Number.MAX_SAFE_INTEGER),
+      bank: num(v.bank, 0),
+      collected: Math.max(0, num(v.collected, 0)),
+      collections: intIn(v.collections, 0, 0, Number.MAX_SAFE_INTEGER),
+      collectionStreak: intIn(v.collectionStreak, 0, 0, 5),
+      lastCollectionAt: num(v.lastCollectionAt, base.idle.lastCollectionAt),
+      lifetimeIncome: Math.max(0, num(v.lifetimeIncome, 0)),
+      xp: Math.max(0, num(v.xp, 0)),
+      upgradeCount: intIn(v.upgradeCount, 0, 0, Number.MAX_SAFE_INTEGER),
+      claimedMissions: strArr(v.claimedMissions),
+      claimedMilestones: strArr(v.claimedMilestones),
+      managerLevels,
+      managerClock: Math.max(0, num(v.managerClock, 0)),
+      boostCharges: intIn(v.boostCharges, base.idle.boostCharges, 0, 9),
+      boostRemaining: Math.max(0, num(v.boostRemaining, 0)),
+      boostRecharge: Math.max(0, num(v.boostRecharge, 0)),
+      autoBattle: v.autoBattle === true,
+      stars,
+      lastBattle: sanitizeBattle(v.lastBattle),
+      waveStartedAt: num(v.waveStartedAt, 0),
+      waveStartKills: intIn(v.waveStartKills, 0, 0, Number.MAX_SAFE_INTEGER),
+      rewards: Array.isArray(v.rewards) ? v.rewards.map(sanitizeReward).filter((r): r is Reward => r !== null) : [],
+      lootSeed: intIn(v.lootSeed, base.idle.lootSeed, 0, Number.MAX_SAFE_INTEGER),
+      openedChests: intIn(v.openedChests, 0, 0, Number.MAX_SAFE_INTEGER),
+      completedContracts: intIn(v.completedContracts, 0, 0, Number.MAX_SAFE_INTEGER),
+      contract: sanitizeContract(v.contract),
+      offline,
+      appliedDailyIds: strArr(v.appliedDailyIds).slice(-64),
+      port: sanitizePort(v.port),
+      platforms: Array.isArray(v.platforms)
+        ? [...new Set(v.platforms.filter((x): x is number => typeof x === "number" && Number.isInteger(x) && x >= 0 && x < PLATFORM_SLOTS.length))]
+        : [],
+      challengeRuns: intIn(v.challengeRuns, 0, 0, Number.MAX_SAFE_INTEGER),
+    };
+  };
+  const sanitizeCards = (v: unknown): GameState["cards"] => {
+    const out: GameState["cards"] = {
+      cannon: { ...base.cards.cannon }, heavy: { ...base.cards.heavy }, missile: { ...base.cards.missile },
+      air: { ...base.cards.air }, ew: { ...base.cards.ew }, boat: { ...base.cards.boat },
+    };
+    if (isRec(v)) for (const kind of TOWER_KINDS) {
+      const c = v[kind];
+      if (isRec(c)) out[kind] = { count: intIn(c.count, 0, 0, Number.MAX_SAFE_INTEGER), level: intIn(c.level, 1, 1, 100000) };
+    }
+    return out;
+  };
+  const ENEMY_KINDS: readonly Enemy["kind"][] = ["speed", "corvette", "air", "sub", "destroyer", "boss"];
+  const sanitizeEnemy = (v: unknown): Enemy | null => {
+    if (!isRec(v) || !ENEMY_KINDS.includes(v.kind as Enemy["kind"])) return null;
+    const enemy: Enemy = {
+      id: num(v.id, 0), kind: v.kind as Enemy["kind"], boss: intIn(v.boss, 0, 0, 5),
+      hp: num(v.hp, 1), maxHp: Math.max(1, num(v.maxHp, 1)),
+      progress: clampNum(v.progress, 0, 0, 1),
+      stun: Math.max(0, num(v.stun, 0)), specialClock: Math.max(0, num(v.specialClock, 0)),
+    };
+    for (const key of ["burn", "burnDamage", "intercept", "armorBreak", "hitFlash"] as const) {
+      const n = optNum(v[key]);
+      if (n !== undefined) enemy[key] = n;
+    }
+    return enemy;
+  };
+  const sanitizePirate = (v: unknown): Pirate | null =>
+    isRec(v) ? { id: num(v.id, 0), progress: clampNum(v.progress, 0, 0, 1), hp: num(v.hp, 1) } : null;
+  const sanitizeContraband = (v: unknown): Contraband | null =>
+    isRec(v) ? { id: num(v.id, 0), progress: clampNum(v.progress, 0, 0, 1) } : null;
+  const MERCHANT_KINDS: readonly Merchant["kind"][] = ["barge", "bulk", "container", "tanker"];
+  const sanitizeMerchant = (v: unknown): Merchant | null =>
+    isRec(v) && MERCHANT_KINDS.includes(v.kind as Merchant["kind"])
+      ? { id: num(v.id, 0), progress: clampNum(v.progress, 0, 0, 1), kind: v.kind as Merchant["kind"], reward: Math.max(0, num(v.reward, 0)), paid: v.paid === true }
+      : null;
+
+  const game: GameState = { ...base, ...saved, buildings: { ...base.buildings, ...saved.buildings }, cards: sanitizeCards(saved.cards), cooldowns: { ...base.cooldowns, ...saved.cooldowns }, idle: sanitizeIdle(saved.idle), shots: [], popups: [] };
   game.cash = num(game.cash, base.cash); game.oil = num(game.oil, base.oil); game.fuel = num(game.fuel, base.fuel); game.steel = num(game.steel, base.steel); game.ammo = num(game.ammo, base.ammo);
   game.hearts = Math.max(0, Math.min(20, num(game.hearts, 20))); game.wave = Math.max(1, Math.floor(num(game.wave, 1))); game.highestWave = Math.max(0, Math.floor(num(game.highestWave, 0)));
   game.security = Math.max(0, Math.min(100, num(game.security, 70))); game.prestige = Math.max(0, Math.floor(num(game.prestige, 0))); game.oilSplit = Math.max(0, Math.min(100, num(game.oilSplit, 40)));
-  game.idle.bank = num(game.idle.bank, 0);
   (Object.keys(game.buildings) as BuildingId[]).forEach(k => { game.buildings[k] = Math.max(0, Math.floor(num(game.buildings[k], base.buildings[k]))); });
-  game.towers = (Array.isArray(game.towers) ? game.towers : []).filter(t => t && typeof t === "object" && (TOWER_KINDS as string[]).includes(t.kind) && Number.isInteger(t.slot) && t.slot >= 0 && t.slot < SLOTS.length).map(t => ({ ...t, tier: Math.max(1, Math.min(4, Math.floor(num(t.tier, 1)))) }));
+  game.towers = (Array.isArray(game.towers) ? game.towers : []).filter(t => t && typeof t === "object" && (TOWER_KINDS as string[]).includes(t.kind) && Number.isInteger(t.slot) && t.slot >= 0 && t.slot < SLOTS.length).map(t => {
+    const tier = Math.max(1, Math.min(4, Math.floor(num(t.tier, 1))));
+    return {
+      ...t, tier,
+      branch: tier === 4 && (t.branch === 0 || t.branch === 1) ? t.branch : null,
+      priority: (["first", "strongest", "weakest", "air"] as string[]).includes(t.priority) ? t.priority : "first" as Priority,
+      focusId: optNum(t.focusId), focusTime: optNum(t.focusTime), lastPopup: optNum(t.lastPopup),
+    };
+  });
   game.islands = (Array.isArray(game.islands) ? game.islands : base.islands).filter(id => ISLANDS.some(i => i.id === id));
   if (!game.islands.includes("main")) game.islands.push("main");
   game.research = (Array.isArray(game.research) ? game.research : []).filter(r => typeof r === "string");
+  // Enums and battle arrays: a tampered phase or a non-array entity list must
+  // degrade to a safe value instead of poisoning the reducer.
+  const PHASES: readonly Phase[] = ["peace", "battle", "intermission", "defeat", "victory"];
+  game.phase = PHASES.includes(saved.phase) ? saved.phase : "peace";
+  const MODES: readonly Mode[] = ["campaign", "endless", "challenge"];
+  game.mode = MODES.includes(saved.mode) ? saved.mode : base.mode;
+  game.speed = saved.speed === 2 || saved.speed === 3 ? saved.speed : 1;
+  game.layout = saved.layout === "portrait" ? "portrait" : "landscape";
+  game.event = saved.event === "spill" || saved.event === "storm" || saved.event === "vip" ? saved.event : null;
+  game.enemies = Array.isArray(saved.enemies) ? saved.enemies.map(sanitizeEnemy).filter((e): e is Enemy => e !== null) : [];
+  game.pirates = Array.isArray(saved.pirates) ? saved.pirates.map(sanitizePirate).filter((p): p is Pirate => p !== null) : [];
+  game.contraband = Array.isArray(saved.contraband) ? saved.contraband.map(sanitizeContraband).filter((c): c is Contraband => c !== null) : [];
+  game.merchants = Array.isArray(saved.merchants) ? saved.merchants.map(sanitizeMerchant).filter((m): m is Merchant => m !== null) : [];
+  game.spawnRemaining = intIn(saved.spawnRemaining, 0, 0, Number.MAX_SAFE_INTEGER);
+  game.spawnClock = Math.max(0, num(saved.spawnClock, 0));
+  game.spawnIndex = intIn(saved.spawnIndex, 0, 0, Number.MAX_SAFE_INTEGER);
+  game.nextId = intIn(saved.nextId, base.nextId, 1, Number.MAX_SAFE_INTEGER);
+  game.countdown = Math.max(0, num(saved.countdown, base.countdown));
+  game.trafficClock = Math.max(0, num(saved.trafficClock, 0));
+  game.trafficCount = intIn(saved.trafficCount, 0, 0, Number.MAX_SAFE_INTEGER);
+  game.destroyed = intIn(saved.destroyed, 0, 0, Number.MAX_SAFE_INTEGER);
+  game.elapsed = Math.max(0, num(saved.elapsed, 0));
+  game.overdrive = Math.max(0, num(saved.overdrive, 0));
+  game.eventClock = Math.max(0, num(saved.eventClock, 0));
+  game.chests = intIn(saved.chests, 0, 0, Number.MAX_SAFE_INTEGER);
+  game.earlyBonus = saved.earlyBonus === true;
+  game.manualNight = saved.manualNight === true;
+  game.lastSavedAt = num(saved.lastSavedAt, Date.now());
+  game.cooldowns = {
+    strike: Math.max(0, num(saved.cooldowns?.strike, 0)),
+    emp: Math.max(0, num(saved.cooldowns?.emp, 0)),
+    overdrive: Math.max(0, num(saved.cooldowns?.overdrive, 0)),
+  };
+  const stuns: Record<number, number> = {};
+  if (isRec(saved.towerStuns)) for (const [key, val] of Object.entries(saved.towerStuns)) {
+    const n = optNum(val), slot = Number(key);
+    if (n !== undefined && Number.isInteger(slot) && slot >= 0) stuns[slot] = Math.max(0, n);
+  }
+  game.towerStuns = stuns;
   game.hero = { x: num(game.hero?.x, base.hero.x), y: num(game.hero?.y, base.hero.y), active: [0, 1, 2].includes(game.hero?.active) ? game.hero.active : 0 };
   game.hero2 = game.hero2 && typeof game.hero2 === "object" ? { x: num(game.hero2.x, 50), y: num(game.hero2.y, 50), active: [0, 1, 2].includes(game.hero2.active) ? game.hero2.active : 1 } : null;
-  game.towerStuns = game.towerStuns && typeof game.towerStuns === "object" ? game.towerStuns : {};
   game.challengeRule = [0, 1, 2].includes(game.challengeRule) ? game.challengeRule : 0;
-  game.combo = saved.combo ?? 0; game.comboTimer = saved.comboTimer ?? 0; game.maxCombo = saved.maxCombo ?? 0; game.waveLeaked = saved.waveLeaked ?? false; game.slowmo = 0;
+  game.combo = intIn(saved.combo, 0, 0, Number.MAX_SAFE_INTEGER);
+  game.comboTimer = Math.max(0, num(saved.comboTimer, 0));
+  game.maxCombo = intIn(saved.maxCombo, 0, 0, Number.MAX_SAFE_INTEGER);
+  game.waveLeaked = saved.waveLeaked === true; game.slowmo = 0;
   const safeHero = nearestWater(game.hero, game.layout);
   game.hero = { ...game.hero, ...safeHero, route: undefined, routeIndex: undefined };
   const reward = getOfflineReward(game, Date.now());
   if (reward.amount > 0) {
     game.idle.offline = { cash: (game.idle.offline?.cash ?? 0) + reward.amount, seconds: reward.seconds, defense: reward.ratio };
-    advanceOfflineTimers(game,reward.seconds);
+    advanceOfflineTimers(game, reward.seconds);
   }
   game.lastSavedAt = Date.now();
   return { game, offline: reward.amount };
 }
-
 export function buildingUpgradeQuote(s: GameState, id: BuildingId, quantity: UpgradeQuantity = 1) {
   const limit = quantity === "max" ? 100 - s.buildings[id] : Math.min(quantity, 100 - s.buildings[id]);
   let levels = 0, cost = 0;

@@ -24,8 +24,9 @@ import { RewardView, BattleResultView, OfflineView } from "./RewardViews";
 import { currentMission, operationInfo, type MissionTarget } from "@/lib/progression";
 import { scenarioForWave, loadDiary, appendDiary, type DiaryEntry, type Scenario } from "@/lib/news";
 import type { DailyStatus } from "@/lib/daily";
+import { serverApiEnabled } from "@/lib/runtime";
 
-const SAVE_KEY = "hormuz-game-v1", PLAYER_KEY = "hormuz-player-id", PREFERENCES_KEY = "hormuz-preferences-v2";
+const SAVE_KEY = "hormuz-game-v1", PLAYER_KEY = "hormuz-player-id", PREFERENCES_KEY = "hormuz-preferences-v2", DIARY_KEY = "hormuz-war-diary-v1";
 const spells: { id: Spell; name: string; short: string; icon: typeof Rocket; cooldown: number; key: string }[] = [
   { id: "strike", name: "باران بالستیک", short: "موشکی", icon: Rocket, cooldown: 60, key: "1" },
   { id: "emp", name: "پالس الکترومغناطیسی", short: "پالس EMP", icon: Zap, cooldown: 90, key: "2" },
@@ -37,7 +38,7 @@ const navigation: { id: "map" | "economy" | "missions" | "managers" | "more"; la
 ];
 
 export default function Game() {
-  const [game, dispatch] = useReducer(gameReducer, undefined, initialGame);
+  const [game, rawDispatch] = useReducer(gameReducer, undefined, initialGame);
   const [loaded, setLoaded] = useState(false);
   const [panel, setPanel] = useState<PanelName | null>(null);
   const [progressPanel, setProgressPanel] = useState<ProgressPanel | null>(null);
@@ -75,6 +76,7 @@ export default function Game() {
   const [preferencesLoaded, setPreferencesLoaded] = useState(false);
   const gameRef = useRef(game), soundRef = useRef(sound), vibrationRef = useRef(vibration);
   const playerRef = useRef("");
+  const serverVersionRef = useRef(0);
   const audioRef = useRef<BattleAudio | null>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const announcementTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -95,6 +97,30 @@ export default function Game() {
   const interfaceRef = useRef(interfacePaused);
   interfaceRef.current = interfacePaused;
   gameRef.current = game; soundRef.current = sound; vibrationRef.current = vibration; pauseRef.current = battlePaused;
+
+  // A full reset must also wipe everything that lives outside the game
+  // state, or the pre-reset run resurrects: the war diary, the player
+  // identity and the server-side save record all belong to the old run.
+  const dispatch = useCallback((action: Parameters<typeof rawDispatch>[0]) => {
+    if (action.type === "reset") {
+      const oldId = playerRef.current;
+      try {
+        localStorage.removeItem(SAVE_KEY);
+        localStorage.removeItem(DIARY_KEY);
+        localStorage.removeItem(PLAYER_KEY);
+      } catch { /* Storage unavailable; the in-memory reset still applies. */ }
+      const freshId = crypto.randomUUID();
+      try { localStorage.setItem(PLAYER_KEY, freshId); } catch { /* A later load mints an id instead. */ }
+      playerRef.current = freshId;
+      serverVersionRef.current = 0;
+      setDiary([]);
+      setDaily(null); setDailyError(false);
+      if (oldId && serverApiEnabled()) {
+        void fetch(`/api/save?id=${encodeURIComponent(oldId)}`, { method: "DELETE", keepalive: true }).catch(() => {});
+      }
+    }
+    rawDispatch(action);
+  }, []);
   const stats = getStats(game);
   const isNight = game.manualNight !== (Math.floor(game.elapsed / 180) % 2 === 1);
 
@@ -161,23 +187,26 @@ export default function Game() {
       const local = localStorage.getItem(SAVE_KEY);
       if (local && restore(JSON.parse(local))) { setLoaded(true); return; }
     } catch { id = crypto.randomUUID(); playerRef.current = id; }
+    if (!serverApiEnabled()) { setLoaded(true); return; }
     fetch(`/api/save?id=${encodeURIComponent(id)}`).then(r => r.ok ? r.json() : null).then(data => {
-      if (!cancelled && data?.state) restore(data.state);
+      if (cancelled || !data) return;
+      if (typeof data.version === "number") serverVersionRef.current = data.version;
+      if (data.state) restore(data.state);
     }).catch(() => {}).finally(() => { if (!cancelled) setLoaded(true); });
     return () => { cancelled = true; };
   }, [notify]);
 
   const reloadDaily = useCallback(async () => {
-    if(!playerRef.current)return;
+    if(!playerRef.current||!serverApiEnabled())return;
     setDailyBusy(true);setDailyError(false);
     try { const response=await fetch(`/api/rewards?id=${encodeURIComponent(playerRef.current)}`);if(!response.ok)throw new Error("unavailable");const status=await response.json() as DailyStatus;setDaily(status);if(status.reward&&!gameRef.current.idle.appliedDailyIds.includes(status.reward.id))dispatch({type:"apply-daily",reward:status.reward}); }
     catch { setDailyError(true); }
     finally { setDailyBusy(false); }
   }, []);
   const claimDaily = async () => {
-    if(dailyBusy||!daily?.available)return;
+    if(dailyBusy||!daily?.available||!serverApiEnabled())return;
     setDailyBusy(true);setDailyError(false);feedback();
-    try { const response=await fetch("/api/rewards",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({id:playerRef.current})});if(!response.ok)throw new Error("unavailable");const status=await response.json() as DailyStatus;setDaily(status);if(status.reward)dispatch({type:"apply-daily",reward:status.reward});setProgressPanel(null); }
+    try { const response=await fetch("/api/rewards",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({id:playerRef.current})});if(!response.ok)throw new Error("unavailable");const status=await response.json() as DailyStatus;setDaily(status);if(status.reward&&!gameRef.current.idle.appliedDailyIds.includes(status.reward.id))dispatch({type:"apply-daily",reward:status.reward});setProgressPanel(null); }
     catch { setDailyError(true); }
     finally { setDailyBusy(false); }
   };
@@ -222,8 +251,16 @@ export default function Game() {
     const saveLocal = () => { try { localStorage.setItem(SAVE_KEY, JSON.stringify(snapshot())); } catch { /* Server save remains available. */ } };
     const saveAll = () => {
       const state = snapshot();
-      try { localStorage.setItem(SAVE_KEY, JSON.stringify(state)); } catch { /* Server save remains available. */ }
-      if (playerRef.current) void fetch("/api/save", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: playerRef.current, state }), keepalive: true }).catch(() => {});
+      try { localStorage.setItem(SAVE_KEY, JSON.stringify(state)); } catch { /* Local snapshot is best-effort. */ }
+      if (playerRef.current && serverApiEnabled()) void fetch("/api/save", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: playerRef.current, baseVersion: serverVersionRef.current, state }), keepalive: true }).then(async response => {
+        const data = await response.json().catch(() => null) as { version?: number; serverVersion?: number } | null;
+        if (!data) return;
+        // Adopt the record version on success. On a version conflict the
+        // local state stays this device's source of truth: rebase onto the
+        // server version so the next autosave writes on top of it.
+        if (response.ok && typeof data.version === "number") serverVersionRef.current = data.version;
+        else if (response.status === 409 && typeof data.serverVersion === "number") serverVersionRef.current = data.serverVersion;
+      }).catch(() => {});
     };
     const timer = setInterval(() => { if (!document.hidden) saveAll(); }, 8000);
     const onVisibility = () => {
