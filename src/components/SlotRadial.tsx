@@ -75,8 +75,8 @@ export default function SlotRadial({ game, slot, dispatch, close, openSheet, onB
         <button className="radial-btn radial-left" onClick={() => { dispatch({ type: "priority", slot }); feedback(); }} aria-label="تغییر هدف‌گیری">
           <Crosshair size={17} /><span>هدف‌گیری</span><small>{PRIORITY_LABELS[tower.priority]}</small>
         </button>
-        <button className={`radial-btn radial-bottom ${confirmSell ? "confirm" : ""}`} onClick={doSell} aria-label={`فروش برجک؛ بازگشت ${refund ? compact(refund.cash) : ""} دلار`}>
-          <Trash2 size={17} /><span>{confirmSell ? "مطمئنی؟ بفروش" : "فروش"}</span>{refund && <small>بازگشت ${compact(refund.cash)}</small>}
+        <button className={`radial-btn radial-bottom ${confirmSell ? "confirm" : ""}`} onClick={doSell} aria-label={`فروش برجک؛ بازگشت ${refund ? compact(refund.cash) : ""} دلار و ${refund ? fa(refund.steel, refund.steel % 1 ? 1 : 0) : ""} فولاد`}>
+          <Trash2 size={17} /><span>{confirmSell ? "مطمئنی؟ بفروش" : "فروش"}</span>{refund && <small>بازگشت ${compact(refund.cash)} + {fa(refund.steel, refund.steel % 1 ? 1 : 0)}⚙</small>}
         </button>
         <button className="radial-btn radial-right" onClick={openSheet} aria-label="جزئیات برجک">
           <Info size={17} /><span>جزئیات</span>
