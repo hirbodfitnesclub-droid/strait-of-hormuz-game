@@ -71,6 +71,32 @@ export default function WorldView3D(props: Props) {
     try { m?.setTime?.(props.isNight ? 21.5 : 10); } catch { /* noop */ }
   }, [props.isNight]);
 
+  // PERF (§16.8): calm-render signal for the map loop — outside the battle
+  // phase (or while a slot/targeting UI is open) the map may cap at 30fps
+  // whenever the camera is still. Game.tsx sets the complementary panel flag.
+  useEffect(() => {
+    (window as unknown as { __hormuzCalmPhase?: boolean }).__hormuzCalmPhase =
+      props.game.phase !== 'battle' || props.selectedSlot !== null || props.targeting !== null;
+  }, [props.game.phase, props.selectedSlot, props.targeting]);
+
+  // Phone frame-time recorder (?fpslog=1) — dynamic import keeps it at zero
+  // cost for normal sessions. Evidence tool for DoD §16.1 / ticket T-001.
+  useEffect(() => {
+    if (!new URLSearchParams(window.location.search).has('fpslog')) return;
+    let stop: (() => void) | null = null;
+    let dead = false;
+    (async () => {
+      const { startFrameRecorder } = await import('../lib/frame-recorder');
+      if (dead) return;
+      stop = startFrameRecorder(() => {
+        const s = syncRef.current;
+        if (s) { const p = s.perfInfo(); return { calls: p.calls, tris: p.tris, dpr: p.dpr }; }
+        return { calls: -1, tris: -1, dpr: window.devicePixelRatio || 1 };
+      });
+    })().catch(() => { /* recorder is best-effort */ });
+    return () => { dead = true; stop?.(); };
+  }, []);
+
   useEffect(() => {
     const sync = syncRef.current;
     if (sync) sync.setState(props.game, { selectedSlot: props.selectedSlot, targeting: props.targeting, targetPreview: props.targetPreview });
@@ -101,6 +127,7 @@ export default function WorldView3D(props: Props) {
           });
           syncRef.current = sync;
           (window as unknown as { __gamesync3d?: unknown }).__gamesync3d = sync;
+          (window as unknown as { __map3d?: unknown }).__map3d = map;
           const p = propsRef.current;
           sync.setState(p.game, { selectedSlot: p.selectedSlot, targeting: p.targeting, targetPreview: p.targetPreview });
           const mm = map as unknown as { flyTo(x: number, z: number, d: number, dur?: number): void; setTime?: (h: number) => void };

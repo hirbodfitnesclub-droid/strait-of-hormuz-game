@@ -32,7 +32,16 @@ interface MapLike {
   field?: { height(x: number, z: number): number; sample(x: number, z: number): number };
   setLayer(name: string, on: boolean): void;
   setTime?(h: number): void;
+  dprCap?: number;
+  setBattleDensity?(n: number): void;
 }
+
+/** Dynamic-resolution steps (§16.3). The effective ceiling is the map's DPR cap
+ *  (1.5 on touch/Android, 2 on desktop) — steps above the cap are clamped. */
+const DPR_STEPS = [2, 1.6, 1.3, 1.1, 1];
+/** Lane polyline cache resolution: points/tangents are sampled once at this
+ *  resolution and every per-frame lookup reads the cache (PERF §16). */
+const LANE_SAMPLES = 256;
 
 const KIND_COLOR: Record<string, number> = { cannon: 0xffd27a, heavy: 0xff9a5c, missile: 0xff6a5c, air: 0x7ac8ff, ew: 0xc07aff, boat: 0x7affc8 };
 
@@ -227,12 +236,23 @@ export class GameSync3D {
   private dyn = new THREE.Group();
   static { /* names set in ctor for debugging */ }
   private curves: Record<LaneName, THREE.CatmullRomCurve3>;
+  private laneCache: Record<LaneName, { pts: THREE.Vector3[]; tans: THREE.Vector3[] }>;
+  private lanePosTmp = new THREE.Vector3();
+  private laneTanTmp = new THREE.Vector3();
+  private lastDensity = -1;
   private towers = new Map<number, { url: string; obj: THREE.Object3D; born: number; base: number }>();
   private buildings = new Map<string, THREE.Object3D>();
   private platforms = new Map<number, THREE.Object3D>();
   private pads = new Map<number, THREE.Object3D>();
-  private rangeRing: THREE.Mesh | null = null;
-  private targetRing: THREE.Mesh | null = null;
+  // PERF: selection/target rings are two persistent meshes whose geometries
+  // come from a small bounded cache (keyed by rounded radius). Previously every
+  // setState (8x/s) built a new RingGeometry + MeshBasicMaterial and dropped
+  // the old ones undisposed — a steady GPU-memory/GC leak.
+  private rangeRingMesh: THREE.Mesh | null = null;
+  private targetRingMesh: THREE.Mesh | null = null;
+  private ringGeoCache = new Map<string, THREE.BufferGeometry>();
+  private ringMatRange = new THREE.MeshBasicMaterial({ color: 0x7ac8ff, transparent: true, opacity: 0.35, side: THREE.DoubleSide, depthWrite: false });
+  private ringMatTarget = new THREE.MeshBasicMaterial({ color: 0xff5040, transparent: true, opacity: 0.7, side: THREE.DoubleSide, depthWrite: false });
   private ents = new Map<string, Ent>();
   private aim = new Map<number, number>();
   private fx = new BattleFX();
@@ -270,6 +290,17 @@ export class GameSync3D {
     // cheaper shadow filtering (PCF instead of PCFSoft) — same look at game scale, less GPU
     try { (map as unknown as { renderer?: THREE.WebGLRenderer }).renderer!.shadowMap.type = THREE.PCFShadowMap; } catch { /* noop */ }
     this.curves = Object.fromEntries((Object.keys(LANES) as LaneName[]).map(n => [n, new THREE.CatmullRomCurve3(LANES[n].map(([x, z]) => new THREE.Vector3(x, 0.35, z)), false, 'centripetal')])) as Record<LaneName, THREE.CatmullRomCurve3>;
+    // PERF: sample every lane's points + tangents ONCE into a fixed-resolution
+    // cache. setTarget used to call curve.getPointAt/getTangentAt (arc-length
+    // reparam each call) for every entity on every frame.
+    this.laneCache = Object.fromEntries((Object.keys(LANES) as LaneName[]).map(n => {
+      const pts: THREE.Vector3[] = []; const tans: THREE.Vector3[] = [];
+      for (let i = 0; i <= LANE_SAMPLES; i++) { pts.push(this.curves[n].getPointAt(i / LANE_SAMPLES)); tans.push(this.curves[n].getTangentAt(i / LANE_SAMPLES)); }
+      return [n, { pts, tans }];
+    })) as Record<LaneName, { pts: THREE.Vector3[]; tans: THREE.Vector3[] }>;
+    // PERF (§16.3): dynamic resolution starts at the step matching the device
+    // cap (<=1.5 on mobile), not at the top step 2.0.
+    { const cap = this.dprCap(); const idx = DPR_STEPS.findIndex(s => s <= cap + 1e-6); this.dprIdx = idx >= 0 ? idx : DPR_STEPS.length - 1; }
     // lane ribbons (subtle, only enemy + trade)
     for (const n of ['enemy', 'trade'] as LaneName[]) {
       const pts = LANES[n].map(([x, z]) => new THREE.Vector3(x, 0.3, z));
@@ -278,8 +309,7 @@ export class GameSync3D {
     }
     // per-slot tower aim: barrel (+Z native) toward nearest point of the enemy lane
     {
-      const samples: THREE.Vector3[] = [];
-      for (let i = 0; i <= 240; i++) samples.push(this.curves.enemy.getPointAt(i / 240));
+      const samples = this.laneCache.enemy.pts;
       for (const sl of SLOTS) {
         let best: THREE.Vector3 | null = null; let bd = Infinity;
         for (const p of samples) { const d = (p.x - sl.x) ** 2 + (p.z - sl.z) ** 2; if (d < bd) { bd = d; best = p; } }
@@ -304,6 +334,10 @@ export class GameSync3D {
     const nowS = performance.now();
     this.targetStep = Math.max(0.05, Math.min(5, 22 * (nowS - this.lastSetStateAt) / 1000));
     this.lastSetStateAt = nowS;
+    // PERF (§16.6): tell the map how dense the battle is so it can hide minor
+    // labels in heavy fights (>12 live enemies).
+    const dens = game.enemies.length;
+    if (dens !== this.lastDensity) { this.lastDensity = dens; try { this.map.setBattleDensity?.(dens); } catch { /* noop */ } }
     this.reconcileStatics(game);
     this.updateSelectionVisuals(game, opts.targetPreview);
   }
@@ -421,27 +455,52 @@ export class GameSync3D {
     if (pad) { this.statics.remove(pad); this.pads.delete(slotId); }
   }
 
+  private ringGeometry(rIn: number, rOut: number, seg: number): THREE.BufferGeometry {
+    const key = `${Math.round(rIn * 2)}:${Math.round(rOut * 2)}:${seg}`;
+    let g = this.ringGeoCache.get(key);
+    if (!g) {
+      if (this.ringGeoCache.size >= 12) {
+        const first = this.ringGeoCache.entries().next().value as [string, THREE.BufferGeometry];
+        first[1].dispose(); this.ringGeoCache.delete(first[0]);
+      }
+      g = new THREE.RingGeometry(rIn, rOut, seg);
+      this.ringGeoCache.set(key, g);
+    }
+    return g;
+  }
+
   private updateSelectionVisuals(game: GameState, targetPreview: { x: number; y: number }) {
-    if (this.rangeRing) { this.statics.remove(this.rangeRing); this.rangeRing = null; }
-    if (this.targetRing) { this.statics.remove(this.targetRing); this.targetRing = null; }
+    // range ring (pooled mesh + shared material + cached geometry)
+    let rangeShown = false;
     if (this.selectedSlot !== null) {
       const slot = SLOTS.find(s => s.id === this.selectedSlot);
       const tower = game.towers.find(t => t.slot === this.selectedSlot);
       if (slot) {
         const rangePct = tower ? getRange(game, tower) : 17;
         const r = rangePct * 6.58;
-        const ring = new THREE.Mesh(new THREE.RingGeometry(r - 1.2, r, 64), new THREE.MeshBasicMaterial({ color: 0x7ac8ff, transparent: true, opacity: 0.35, side: THREE.DoubleSide, depthWrite: false }));
-        ring.rotation.x = -Math.PI / 2;
-        ring.position.set(slot.x, groundY(this.map, slot.x, slot.z) + 0.4, slot.z);
-        this.statics.add(ring); this.rangeRing = ring;
+        if (!this.rangeRingMesh) {
+          this.rangeRingMesh = new THREE.Mesh(this.ringGeometry(r - 1.2, r, 64), this.ringMatRange);
+          this.rangeRingMesh.rotation.x = -Math.PI / 2;
+          this.statics.add(this.rangeRingMesh);
+        }
+        this.rangeRingMesh.geometry = this.ringGeometry(r - 1.2, r, 64);
+        this.rangeRingMesh.position.set(slot.x, groundY(this.map, slot.x, slot.z) + 0.4, slot.z);
+        this.rangeRingMesh.visible = true;
+        rangeShown = true;
       }
     }
+    if (!rangeShown && this.rangeRingMesh) this.rangeRingMesh.visible = false;
+    // strike targeting ring (same pooling)
     if (this.targeting) {
       const [x, z] = pctTo3d(targetPreview.x, targetPreview.y);
-      const ring = new THREE.Mesh(new THREE.RingGeometry(9, 11, 48), new THREE.MeshBasicMaterial({ color: 0xff5040, transparent: true, opacity: 0.7, side: THREE.DoubleSide, depthWrite: false }));
-      ring.rotation.x = -Math.PI / 2; ring.position.set(x, 0.5, z);
-      this.statics.add(ring); this.targetRing = ring;
-    }
+      if (!this.targetRingMesh) {
+        this.targetRingMesh = new THREE.Mesh(this.ringGeometry(9, 11, 48), this.ringMatTarget);
+        this.targetRingMesh.rotation.x = -Math.PI / 2;
+        this.statics.add(this.targetRingMesh);
+      }
+      this.targetRingMesh.position.set(x, 0.5, z);
+      this.targetRingMesh.visible = true;
+    } else if (this.targetRingMesh) this.targetRingMesh.visible = false;
   }
 
   /** Screen position (CSS px, viewport coords) of a slot — used by the radial menu. */
@@ -503,9 +562,16 @@ export class GameSync3D {
   }
 
   private setTarget(key: string, lane: LaneName, progress: number, y: number, fwd: 'X' | 'Z') {
-    const curve = this.curves[lane];
+    // PERF: read position/tangent from the fixed-resolution lane cache
+    // (sampled once in the constructor), linearly interpolated — no per-frame
+    // CatmullRom arc-length evaluation and no per-call Vector3 allocations.
+    const cache = this.laneCache[lane];
     const u = Math.max(0, Math.min(1, progress));
-    const pos = curve.getPointAt(u); const tan = curve.getTangentAt(u);
+    const f = u * LANE_SAMPLES;
+    const i0 = Math.min(LANE_SAMPLES - 1, Math.floor(f));
+    const fr = f - i0;
+    const pos = this.lanePosTmp.copy(cache.pts[i0]).lerp(cache.pts[i0 + 1], fr);
+    const tan = this.laneTanTmp.copy(cache.tans[i0]).lerp(cache.tans[i0 + 1], fr);
     const heading = fwd === 'X' ? Math.atan2(-tan.z, tan.x) : Math.atan2(tan.x, tan.z) + (this.kenneyRev ? Math.PI : 0);
     const t = this.targets.get(key);
     if (t) {
@@ -548,7 +614,15 @@ export class GameSync3D {
       const d = this.dying[i]; d.t += dt; const k = d.t / 0.95; const o = d.ent.obj;
       o.position.y -= dt * 2.4; o.rotation.z += dt * 0.85;
       d.ent.mats?.forEach(m => { m.opacity = Math.max(0, 1 - k); });
-      if (k >= 1) { this.dyn.remove(o); this.dying.splice(i, 1); }
+      if (k >= 1) {
+        this.dyn.remove(o);
+        // PERF: the fade-out material clones made on the death path are unique
+        // to this entity — release their GPU programs/textures now instead of
+        // leaking one material set per kill for the whole session.
+        d.ent.mats?.forEach(m => m.dispose());
+        d.ent.mats = undefined;
+        this.dying.splice(i, 1);
+      }
     }
     for (const [, rec] of this.towers) {
       const age = (now - rec.born) / 380;
@@ -580,7 +654,21 @@ export class GameSync3D {
   private dropEnt(key: string) {
     this.entPending.delete(key);
     const ent = this.ents.get(key);
-    if (ent) { this.dyn.remove(ent.obj); this.ents.delete(key); }
+    if (ent) {
+      this.dyn.remove(ent.obj);
+      // PERF: per-entity owned materials (HP-bar sprites, wake) are created
+      // fresh for every entity — dispose them on removal. Model geometries /
+      // GLB materials are shared via the model cache and are NOT touched.
+      if (ent.bar) {
+        (ent.bar.fg.material as THREE.Material).dispose();
+        (ent.bar.bg.material as THREE.Material).dispose();
+      }
+      if (ent.wake) {
+        const wm = ((ent.wake as unknown as THREE.Group).children[0] as THREE.Mesh | undefined)?.material as THREE.Material | undefined;
+        wm?.dispose();
+      }
+      this.ents.delete(key);
+    }
   }
 
   private loop(now: number) {
@@ -721,12 +809,20 @@ export class GameSync3D {
     }
   }
 
+  /** Effective DPR ceiling for this device: the map's own cap when present
+   *  (1.5 touch/Android, 2 desktop — §16.3), else the same rule recomputed. */
+  private dprCap(): number {
+    if (typeof this.map.dprCap === 'number') return this.map.dprCap;
+    const coarse = typeof window !== 'undefined' && !!window.matchMedia?.('(pointer: coarse)').matches;
+    return coarse ? 1.5 : 2;
+  }
+
   /** Dynamic resolution: hold frame time near 60fps by stepping the pixel ratio. */
   private tuneResolution(dt: number, now: number) {
     this.emaMs = this.emaMs * 0.96 + Math.min(dt, 0.1) * 1000 * 0.04;
     if (now < this.dprEvalAt) return;
     this.dprEvalAt = now + 3000;
-    const steps = [2, 1.6, 1.3, 1.1, 1];
+    const steps = DPR_STEPS;
     const r = (this.map as unknown as { renderer?: THREE.WebGLRenderer }).renderer;
     if (!r) return;
     const fps = 1000 / Math.max(1, this.emaMs);
@@ -735,7 +831,7 @@ export class GameSync3D {
     else if (fps > 57 && idx > 0) idx--;
     if (idx !== this.dprIdx) {
       this.dprIdx = idx;
-      try { r.setPixelRatio(Math.min(window.devicePixelRatio || 1, steps[idx])); } catch { /* noop */ }
+      try { r.setPixelRatio(Math.min(window.devicePixelRatio || 1, steps[idx], this.dprCap())); } catch { /* noop */ }
     }
   }
 
