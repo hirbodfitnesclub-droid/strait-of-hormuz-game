@@ -398,6 +398,20 @@ export function hydrateGame(raw: unknown): { game: GameState; offline: number } 
     const v = saved.fireStats[k] as Partial<FireStat> | null;
     if (v && typeof v === "object") game.fireStats[k] = { shots: Math.max(0, Math.floor(num(v.shots, 0))), hits: Math.max(0, Math.floor(num(v.hits, 0))), fizzled: Math.max(0, Math.floor(num(v.fizzled, 0))) };
   }
+  // MECH-A entities (QA round-2 متوسط-۵): boats and mines are live battle
+  // state the player paid for (a full field = 40 ammo) — a mid-battle
+  // save/load must restore them, not silently wipe the minefield and
+  // resurrect the boats at full HP (a free heal). Same validation pattern
+  // as the rest of this sanitizer: entries with a bad identity are
+  // dropped, numeric fields fall back to safe values, nothing crashes.
+  game.boats = (Array.isArray(saved.boats) ? saved.boats : []).filter(b => b && typeof b === "object" && (b.role === "garrison" || b.role === "torpedo" || b.role === "ghadir") && Number.isInteger(b.slot) && b.slot >= 0 && b.slot < SLOTS.length && Number.isInteger(b.index) && b.index >= 0).map(b => {
+    const maxHp = Math.max(1, num(b.maxHp, boatMaxHp(b.role, 1)));
+    return { id: Number.isInteger(b.id) ? b.id : 0, slot: b.slot, role: b.role, index: b.index, hp: Math.max(0, Math.min(maxHp, num(b.hp, maxHp))), maxHp, progress: Math.max(0, Math.min(1, num(b.progress, 0))), offset: num(b.offset, 0), state: b.state === "respawn" ? "respawn" as const : "active" as const, respawnClock: Math.max(0, num(b.respawnClock, 0)), cooldown: Math.max(0, num(b.cooldown, 0)) };
+  });
+  game.mines = (Array.isArray(saved.mines) ? saved.mines : []).filter(m => m && typeof m === "object" && Number.isInteger(m.slot) && m.slot >= 0 && m.slot < SLOTS.length && Number.isFinite(m.x) && Number.isFinite(m.y)).map(m => ({ id: Number.isInteger(m.id) ? m.id : 0, slot: m.slot, x: m.x, y: m.y }));
+  // Restored entity ids must never collide with ids minted after the load.
+  for (const b of game.boats) game.nextId = Math.max(game.nextId, b.id + 1);
+  for (const m of game.mines) game.nextId = Math.max(game.nextId, m.id + 1);
   game.challengeRule = [0, 1, 2].includes(game.challengeRule) ? game.challengeRule : 0;
   game.combo = saved.combo ?? 0; game.comboTimer = saved.comboTimer ?? 0; game.maxCombo = saved.maxCombo ?? 0; game.waveLeaked = saved.waveLeaked ?? false; game.slowmo = 0;
   const safeHero = nearestWater(game.hero, game.layout);
@@ -542,6 +556,9 @@ export const HACK_DETONATE_DIST = 2;       // dive triggers at this range (% uni
 export const HACK_BLAST_RADIUS = 3.5;
 export const HACK_ENGAGE_RADIUS = 12;
 export const BOAT_RESPAWN_SECONDS = 6;     // redeployment delay after a boat is sunk
+export const ANTI_BOAT_WAVE_GROWTH = 1.05; // return fire vs boats grows ×1.05^(wave−1) (QA round-2 متوسط-۴)
+export const ANTI_BOAT_ROTATE_SECONDS = 4; // a blocked enemy rotates its return fire between the boats holding it
+export const GHADIR_COUNTERFIRE_FACTOR = 0.5; // return fire on the Ghadir (a submarine) lands at half the anti-boat rate
 export const BLOCK_BAND = 0.03;            // lane-progress band a blocking boat holds
 export const TORPEDO_PIN_RADIUS = 8;       // engagement range of the 100% heavy-ship pin
 export const BOAT_FIRE_RANGE_PADDING = 6;  // boats engage out to tower range + this
@@ -591,9 +608,12 @@ function boatOffset(role: BoatRole, index: number): number {
   if (role === "garrison") return (index - 1) * 1.7;
   return 0;
 }
-/** Damage per second a blocked enemy deals to the boat holding it. */
-function antiBoatDps(enemy: Enemy): number {
-  return enemy.kind === "boss" ? 26 : enemy.kind === "destroyer" ? 22 : enemy.kind === "corvette" ? 12 : enemy.kind === "speed" ? 6 : 8;
+/** Damage per second a blocked/pinned enemy deals to the boat holding it.
+ *  Grows ×1.05 per wave (QA round-2 متوسط-۴): enemy HP scales ×1.22^wave,
+ *  so flat return fire made boat lines relatively stronger every wave. */
+function antiBoatDps(enemy: Enemy, wave: number): number {
+  const base = enemy.kind === "boss" ? 26 : enemy.kind === "destroyer" ? 22 : enemy.kind === "corvette" ? 12 : enemy.kind === "speed" ? 6 : 8;
+  return base * Math.pow(ANTI_BOAT_WAVE_GROWTH, Math.max(0, wave - 1));
 }
 function isHeavyShip(enemy: Enemy): boolean {
   return enemy.kind === "corvette" || enemy.kind === "destroyer" || (enemy.kind === "boss" && enemyTarget(enemy) === "sea");
@@ -721,8 +741,18 @@ function syncBoats(s: GameState, battleDt: number) {
         if (boat.maxHp !== maxHp) { boat.hp = Math.max(1, Math.round(boat.hp * maxHp / boat.maxHp)); boat.maxHp = maxHp; }
         boat.progress = station;
         if (boat.state === "respawn") {
-          boat.respawnClock -= battleDt;
-          if (boat.respawnClock <= 0) { boat.state = "active"; boat.hp = maxHp; boat.respawnClock = 0; }
+          // Torpedo squadrons do not launch replacements into an active
+          // pin engagement (QA round-2 مهم-۱): while a heavy ship sits
+          // inside the pin radius of the sunken boat's station, its
+          // respawn clock holds. With a flat 6s redeploy the pool would
+          // refill faster than return fire drains it (240 HP ≈ 10s per
+          // boat) and the pin could never be broken by sinking the
+          // squadron — the checklist's "while the boats live" condition.
+          const pinEngaged = boat.role === "torpedo" && s.enemies.some(e => e.hp > 0 && isHeavyShip(e) && distance(boatPosition(boat, s.layout), enemyPosition(e, s.layout)) <= TORPEDO_PIN_RADIUS);
+          if (!pinEngaged) {
+            boat.respawnClock -= battleDt;
+            if (boat.respawnClock <= 0) { boat.state = "active"; boat.hp = maxHp; boat.respawnClock = 0; }
+          }
         }
       }
     }
@@ -848,6 +878,11 @@ function minesPhase(s: GameState, battleDt: number, stats: ReturnType<typeof get
     const damage = spec.damage * (tower ? damageTech(s, tower) : 1) * stats.grid;
     for (const e of s.enemies) {
       if (e.hp <= 0 || e.progress >= 1 || (e.hackTimer ?? 0) > 0) continue;
+      // A sea mine is an anti-ship weapon (QA round-2 مهم-۲): the blast
+      // honours the same air exclusion as the trigger — air and sea lanes
+      // pass within 0.28 units of each other, so without this the mine
+      // branch was the game's strongest anti-air weapon by accident.
+      if (enemyTarget(e) === "air") continue;
       if (distance(mine, enemyPosition(e, s.layout)) <= MINE_BLAST_RADIUS) applyDamage(s, e, damage, { kind: "boat", modelKind: "mine", slot: mine.slot, branch: 1 });
     }
     s.shots.push({ slot: mine.slot, kind: "boat", modelKind: "mine", targetId: near[0].id, flightDur: 0, damage, crit: false, interval: 0, x1: mine.x, y1: mine.y, x2: mine.x, y2: mine.y, boatId: -1 });
@@ -905,6 +940,30 @@ function boatFirePhase(s: GameState, battleDt: number, stats: ReturnType<typeof 
       s.pendingImpacts.push({ targetId: target.id, eta: flightDur, damage, crit, slot: tower.slot, kind: "boat", modelKind: spec.modelKind, branch: tower.branch, boatId: boat.id });
       s.shots.push({ slot: tower.slot, kind: "boat", modelKind: spec.modelKind, targetId: target.id, flightDur, damage, crit, interval: interval / rateMult, x1: pos.x, y1: pos.y, x2: targetPos.x, y2: targetPos.y, boatId: boat.id });
     }
+  }
+}
+
+/** Return fire on the Ghadir hunter sub (QA round-2 مهم-۱): the sub used
+ *  to be untouchable — its 600 HP and respawn cycle were dead numbers.
+ *  Destroyers and corvettes (the ASW-capable classes) engaging it deal
+ *  HALF the anti-boat rate — a submarine is a harder target than a
+ *  surface boat. When the Ghadir sinks, the mine branch holds fire (the
+ *  discrete-fire loop already gates on an active Ghadir) until it
+ *  redeploys. */
+function ghadirCounterfirePhase(s: GameState, battleDt: number) {
+  for (const boat of s.boats) {
+    if (boat.role !== "ghadir" || boat.state !== "active") continue;
+    const tower = s.towers.find(t => t.slot === boat.slot && t.kind === "boat" && t.tier === 4 && t.branch === 1);
+    if (!tower) continue;
+    const engage = getRange(s, tower) + BOAT_FIRE_RANGE_PADDING;
+    const pos = boatPosition(boat, s.layout);
+    for (const e of s.enemies) {
+      if (e.hp <= 0 || e.progress >= 1 || (e.hackTimer ?? 0) > 0) continue;
+      if (e.kind !== "destroyer" && e.kind !== "corvette") continue;
+      if (distance(pos, enemyPosition(e, s.layout)) > engage) continue;
+      boat.hp -= GHADIR_COUNTERFIRE_FACTOR * antiBoatDps(e, s.wave) * battleDt;
+    }
+    if (boat.hp <= 0) { boat.hp = 0; boat.state = "respawn"; boat.respawnClock = BOAT_RESPAWN_SECONDS; }
   }
 }
 
@@ -1108,16 +1167,34 @@ function tick(s: GameState, delta: number, battlePaused = false) {
     }
     if ((enemy.empSlow ?? 0) > 0) slow = Math.min(slow, EMP_SLOW_FACTOR);
     // Garrison blocking / torpedo pinning (MECH-A): a surface enemy held by
-    // a boat does not advance at all. A blocked enemy shoots back at the
-    // boat holding it — the boat is a real target with its own HP.
+    // a boat does not advance at all. A held enemy shoots back at the boats
+    // holding it — the boats are real targets with their own HP, and the
+    // pin/block lasts only while they live (checklist ۱٫۶).
     if (enemyTarget(enemy) === "sea") {
-      const blocker = s.boats.find(b => b.state === "active" && b.role === "garrison" && enemy.progress >= b.progress - 0.002 && enemy.progress <= b.progress + BLOCK_BAND);
-      if (blocker) {
+      const band = s.boats.filter(b => b.state === "active" && b.role === "garrison" && enemy.progress >= b.progress - 0.002 && enemy.progress <= b.progress + BLOCK_BAND);
+      if (band.length) {
         slow = 0;
-        blocker.hp -= antiBoatDps(enemy) * battleDt;
-        if (blocker.hp <= 0) { blocker.hp = 0; blocker.state = "respawn"; blocker.respawnClock = BOAT_RESPAWN_SECONDS; }
-      } else if (isHeavyShip(enemy) && s.boats.some(b => b.state === "active" && b.role === "torpedo" && distance(boatPosition(b, s.layout), pos) <= TORPEDO_PIN_RADIUS)) {
-        slow = 0; // torpedo squadron pin: heavy ship held 100% while engaged
+        // Return fire ROTATES between the boats holding the line (QA
+        // round-2 متوسط-۴): permanent focus on boat #1 left the rest of
+        // the line at full HP until its turn came.
+        const target = band[(Math.floor(s.battleTime / ANTI_BOAT_ROTATE_SECONDS) + enemy.id) % band.length];
+        target.hp -= antiBoatDps(enemy, s.wave) * battleDt;
+        if (target.hp <= 0) { target.hp = 0; target.state = "respawn"; target.respawnClock = BOAT_RESPAWN_SECONDS; }
+      } else if (isHeavyShip(enemy)) {
+        // Torpedo pin (QA round-2 مهم-۱): the pinned ship fires back at
+        // the NEAREST pinning boat — before this, torpedo boats could
+        // never take damage and the pin could only end with the ship.
+        let nearest: BoatUnit | undefined; let nd = Infinity;
+        for (const b of s.boats) {
+          if (b.state !== "active" || b.role !== "torpedo") continue;
+          const d = distance(boatPosition(b, s.layout), pos);
+          if (d <= TORPEDO_PIN_RADIUS && d < nd) { nd = d; nearest = b; }
+        }
+        if (nearest) {
+          slow = 0; // torpedo squadron pin: heavy ship held 100% while engaged
+          nearest.hp -= antiBoatDps(enemy, s.wave) * battleDt;
+          if (nearest.hp <= 0) { nearest.hp = 0; nearest.state = "respawn"; nearest.respawnClock = BOAT_RESPAWN_SECONDS; }
+        }
       }
     }
     if (enemy.stun > 0) { enemy.stun = Math.max(0, enemy.stun - battleDt); slow = 0; }
@@ -1238,6 +1315,8 @@ function tick(s: GameState, delta: number, battlePaused = false) {
   // MECH-A: garrison/torpedo boats fire from their own positions (their
   //  impacts join the same resolution pass below).
   boatFirePhase(s, battleDt, stats);
+  // MECH-A round 2: ASW return fire on the Ghadir hunter sub.
+  ghadirCounterfirePhase(s, battleDt);
   // Projectiles land: advance every in-flight shot by this tick's battle
   // time and resolve the arrivals — damage exists only from this moment.
   if (s.pendingImpacts.length) {
@@ -1280,7 +1359,12 @@ function tick(s: GameState, delta: number, battlePaused = false) {
     s.idle.lastBattle = { id:`battle-${s.nextId++}`, wave:s.wave, title:operationInfo(s.wave).title, victory:false, stars:0, cash:0, xp:0, chests:0, destroyed:s.destroyed-s.idle.waveStartKills, seconds:s.elapsed-s.idle.waveStartedAt, hearts:0, claimed:false };
     s.idle.revision++; s.phase = "defeat"; s.enemies = []; s.spawnRemaining = 0; s.pendingImpacts = []; return;
   }
-  if (s.spawnRemaining === 0 && s.enemies.length === 0) {
+  if (s.spawnRemaining === 0 && s.enemies.every(e => (e.hackTimer ?? 0) > 0)) {
+    // Studio ruling (QA round-2 متوسط-۳): hacked units are the player's
+    // own assets at cleanup — they are silently recalled with the wave
+    // (no leak, no bounty, no waiting out the hack timer while the wave
+    // hangs open, and no post-"cleanup" leak when the hack expires).
+    s.enemies = [];
     s.pendingImpacts = []; // battle over (QA جزئی-۱): no orphan in-flight records freeze into the intermission
     const info = operationInfo(s.wave), stars = s.hearts >= 19 ? 3 : s.hearts >= 14 ? 2 : 1;
     s.idle.stars[String(s.wave)] = Math.max(s.idle.stars[String(s.wave)] ?? 0, stars);
@@ -1419,6 +1503,11 @@ export function gameReducer(state: GameState, action: Action): GameState {
     case "sell-tower": {
       const tower = s.towers.find(t => t.slot === action.slot);
       if (tower) { const refund = s.research.includes("recycle") ? 0.8 : 0.5; s.cash += TOWERS[tower.kind].cost * refund; s.steel += TOWERS[tower.kind].steel * refund; s.towers = s.towers.filter(t => t.slot !== action.slot); }
+      // MECH-A entities retire with their tower in EVERY phase (QA
+      // round-2 جزئی-۳): cleanup used to wait for the next battle tick,
+      // leaving ghost boats/mines rendered through peacetime.
+      s.boats = s.boats.filter(b => b.slot !== action.slot);
+      s.mines = s.mines.filter(m => m.slot !== action.slot);
       break;
     }
     case "priority": {
@@ -1446,10 +1535,13 @@ export function gameReducer(state: GameState, action: Action): GameState {
       if (s.cooldowns[action.spell] > 0 || s.phase !== "battle") break;
       if (action.spell === "strike") {
         if (action.x === undefined || action.y === undefined) break;
-        for (const e of s.enemies) if (distance(enemyPosition(e, s.layout), { x: action.x, y: action.y }) < 17) e.hp -= 450;
+        // A hacked drone fights for the player (QA round-2 متوسط-۲): the
+        // player's own spells must not hit it — every other damage path
+        // already exempts hackTimer > 0, and killing it paid a bounty.
+        for (const e of s.enemies) if ((e.hackTimer ?? 0) <= 0 && distance(enemyPosition(e, s.layout), { x: action.x, y: action.y }) < 17) e.hp -= 450;
         s.popups.push({ id: s.nextId++, x: action.x, y: action.y, text: "💥", life: 1.2 }); s.cooldowns.strike = 60;
       } else if (action.spell === "emp") {
-        for (const e of s.enemies) { e.stun = 6; e.hp -= 35; } s.cooldowns.emp = 90;
+        for (const e of s.enemies) { if ((e.hackTimer ?? 0) > 0) continue; e.stun = 6; e.hp -= 35; } s.cooldowns.emp = 90;
       } else { s.overdrive = 10; s.cooldowns.overdrive = 120; }
       break;
     }
