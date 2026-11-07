@@ -5,7 +5,7 @@ import buildingsData from './buildings-3d.json';
 import { loadModel, TOWER_MODEL, BRANCH_MODEL, groundY } from './models3d';
 import { hull } from './ships3d';
 import { pctTo3d, point3dToPct } from './coords';
-import { getRange, type GameState } from '@/lib/game';
+import { getRange, getStats, getSlots, enemyPosition, distance, type GameState } from '@/lib/game';
 import { BattleFX } from './battlefx';
 
 type LaneName = 'enemy' | 'trade' | 'pirate' | 'port';
@@ -32,6 +32,10 @@ interface MapLike {
   field?: { height(x: number, z: number): number; sample(x: number, z: number): number };
   setLayer(name: string, on: boolean): void;
   setTime?(h: number): void;
+  /** Night-light registry (hormuz-map): collects descendants flagged
+   *  userData.night/flicker/... and drives their night visibility. */
+  register?(o: THREE.Object3D): void;
+  unregister?(o: THREE.Object3D): void;
 }
 
 const KIND_COLOR: Record<string, number> = { cannon: 0xffd27a, heavy: 0xff9a5c, missile: 0xff6a5c, air: 0x7ac8ff, ew: 0xc07aff, boat: 0x7affc8 };
@@ -186,13 +190,14 @@ function enemyModel(kind: string, boss: number): THREE.Group {
     if (boss === 4) { const deck = new THREE.Mesh(new THREE.BoxGeometry(len * 0.8, 0.5, len * 0.26), new THREE.MeshStandardMaterial({ color: 0x39424c, roughness: 0.8 })); deck.position.y = len * 0.16; g.add(deck); }
     return g;
   }
-  if (kind === 'sub') { const g = hull(0x232a31, 11, 2.4, 'patrol'); g.position.y = -0.5; return g; }
+  if (kind === 'sub') { return hull(0x232a31, 11, 2.4, 'patrol'); }
   if (kind === 'speed') return hull(0x39424c, 6.5, 2, 'patrol');
   if (kind === 'corvette') return hull(0x46505c, 10, 2.8, 'patrol');
   return hull(0x525e6b, 13.5, 3.2, 'patrol'); // destroyer
 }
 
-interface Ent { obj: THREE.Group; bar?: ReturnType<typeof barSprites>; init?: boolean; phase: number; bobAmp: number; wake?: THREE.Mesh; mats?: THREE.Material[]; speed?: number; lastTx?: number; lastTz?: number }
+interface Ent { obj: THREE.Group; bar?: ReturnType<typeof barSprites>; init?: boolean; phase: number; bobAmp: number; wake?: THREE.Mesh; mats?: THREE.Material[]; speed?: number; lastTx?: number; lastTz?: number; ind?: { stun: THREE.Sprite; slow: THREE.Sprite; eye: THREE.Sprite; shield: THREE.Mesh | null } }
+interface BldRec { obj: THREE.Object3D; band: number; baseScale: number; groundBase: number; minY: number; local: THREE.Box3; ring: THREE.Mesh; ringBase: number }
 
 let _wakeTex: THREE.Texture | null = null;
 function wakeTexture(): THREE.Texture {
@@ -220,6 +225,57 @@ function makeWake(len: number, wid: number, fwd: 'X' | 'Z'): THREE.Mesh {
 }
 function easeOutBack(x: number): number { const c1 = 1.70158, c3 = c1 + 1; return 1 + c3 * Math.pow(x - 1, 3) + c1 * Math.pow(x - 1, 2); }
 
+/* ===== VIS: building evolution (PRD §2.2 — five visual tiers at levels
+   10/25/50/100) + night lamps registered with the map's night system ===== */
+const BLD_BAND_COLORS = [0x8a8f96, 0xc98a4b, 0xcfd6dd, 0xffd24b, 0x38e1c6];
+function buildingBand(level: number): number { return level >= 100 ? 4 : level >= 50 ? 3 : level >= 25 ? 2 : level >= 10 ? 1 : 0; }
+
+/** Procedural add-ons grown onto the same GLB per band (local model units,
+ *  placed against the model's own bounding box): annexes, tanks, masts,
+ *  rooftop plant and — at band 4 — an emissive hi-tech crown + beacon. */
+function buildEvoGroup(band: number, box: THREE.Box3): THREE.Group {
+  const g = new THREE.Group(); g.name = 'vis-evo';
+  if (band <= 0) return g;
+  const sx = box.max.x - box.min.x, sy = box.max.y - box.min.y, sz = box.max.z - box.min.z;
+  const cx = (box.min.x + box.max.x) / 2, cz = (box.min.z + box.max.z) / 2, gy = box.min.y;
+  const concrete = new THREE.MeshStandardMaterial({ color: 0xb9b1a1, roughness: 0.85 });
+  const steelM = new THREE.MeshStandardMaterial({ color: 0xd8dde2, roughness: 0.5, metalness: 0.35 });
+  const blueM = new THREE.MeshStandardMaterial({ color: 0x3a6ea5, roughness: 0.6 });
+  const tealM = new THREE.MeshStandardMaterial({ color: 0x2a9d8f, roughness: 0.6 });
+  const bx = (w: number, h: number, d: number, x: number, y: number, z: number, m: THREE.Material) => { const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), m); mesh.position.set(x, y, z); g.add(mesh); };
+  const cy = (r: number, h: number, x: number, y: number, z: number, m: THREE.Material) => { const mesh = new THREE.Mesh(new THREE.CylinderGeometry(r, r, h, 12), m); mesh.position.set(x, y, z); g.add(mesh); };
+  // band 1 — early industry: side annex + storage tank
+  bx(sx * 0.34, sy * 0.38, sz * 0.5, cx + sx * 0.68, gy + sy * 0.19, cz, concrete);
+  cy(Math.min(sx, sz) * 0.13, sy * 0.5, cx - sx * 0.68, gy + sy * 0.25, cz + sz * 0.18, steelM);
+  if (band >= 2) { // second annex + comms mast
+    bx(sx * 0.3, sy * 0.3, sz * 0.42, cx - sx * 0.66, gy + sy * 0.15, cz - sz * 0.3, blueM);
+    cy(0.02 * sx + 0.05, sy * 0.95, cx + sx * 0.3, gy + sy * 0.47, cz - sz * 0.32, steelM);
+  }
+  if (band >= 3) { // rooftop plant + second tank
+    bx(sx * 0.52, sy * 0.2, sz * 0.52, cx, gy + sy * 1.1, cz, tealM);
+    cy(Math.min(sx, sz) * 0.11, sy * 0.42, cx + sx * 0.62, gy + sy * 0.21, cz + sz * 0.34, steelM);
+  }
+  if (band >= 4) { // hi-tech crown: emissive trim + beacon mast
+    bx(sx * 0.6, sy * 0.05, sz * 0.6, cx, gy + sy * 1.22, cz, new THREE.MeshBasicMaterial({ color: 0x38e1c6 }));
+    cy(0.02 * sx + 0.05, sy * 0.7, cx - sx * 0.3, gy + sy * 1.35, cz + sz * 0.3, steelM);
+    const beacon = new THREE.Mesh(new THREE.SphereGeometry(Math.min(sx, sz) * 0.06 + 0.04, 10, 8), new THREE.MeshBasicMaterial({ color: 0x38e1c6 }));
+    beacon.position.set(cx - sx * 0.3, gy + sy * 1.74, cz + sz * 0.3); g.add(beacon);
+  }
+  return g;
+}
+
+let _lampTex: THREE.Texture | null = null;
+function lampTexture(): THREE.Texture {
+  if (_lampTex) return _lampTex;
+  const c = document.createElement('canvas'); c.width = c.height = 64;
+  const ctx = c.getContext('2d')!;
+  const g = ctx.createRadialGradient(32, 32, 2, 32, 32, 30);
+  g.addColorStop(0, 'rgba(255,225,160,1)'); g.addColorStop(0.35, 'rgba(255,190,90,0.55)'); g.addColorStop(1, 'rgba(255,170,60,0)');
+  ctx.fillStyle = g; ctx.fillRect(0, 0, 64, 64);
+  _lampTex = new THREE.CanvasTexture(c);
+  return _lampTex;
+}
+
 export class GameSync3D {
   private map: MapLike; private cb: SyncCallbacks;
   private root = new THREE.Group();
@@ -228,7 +284,11 @@ export class GameSync3D {
   static { /* names set in ctor for debugging */ }
   private curves: Record<LaneName, THREE.CatmullRomCurve3>;
   private towers = new Map<number, { url: string; obj: THREE.Object3D; born: number; base: number }>();
-  private buildings = new Map<string, THREE.Object3D>();
+  private buildings = new Map<string, BldRec>();
+  private towerMarks = new Map<number, { grp: THREE.Group; jam: THREE.Sprite; stun: THREE.Sprite }>();
+  private enemyRibbonMat: THREE.LineDashedMaterial | null = null;
+  private wavePulseAt = -1e9;
+  private buildingActive: Record<string, boolean> = {};
   private platforms = new Map<number, THREE.Object3D>();
   private pads = new Map<number, THREE.Object3D>();
   private rangeRing: THREE.Mesh | null = null;
@@ -281,10 +341,16 @@ export class GameSync3D {
     // cheaper shadow filtering (PCF instead of PCFSoft) — same look at game scale, less GPU
     try { (map as unknown as { renderer?: THREE.WebGLRenderer }).renderer!.shadowMap.type = THREE.PCFShadowMap; } catch { /* noop */ }
     this.curves = Object.fromEntries((Object.keys(LANES) as LaneName[]).map(n => [n, new THREE.CatmullRomCurve3(LANES[n].map(([x, z]) => new THREE.Vector3(x, 0.35, z)), false, 'centripetal')])) as Record<LaneName, THREE.CatmullRomCurve3>;
-    // lane ribbons (subtle, only enemy + trade)
+    // lane ribbons (subtle, only enemy + trade). The enemy route is the PRD
+    // §2.3 dashed red line: dim at rest, bright pulse for a few seconds when
+    // a wave starts (phase transition observed in setState).
     for (const n of ['enemy', 'trade'] as LaneName[]) {
       const pts = LANES[n].map(([x, z]) => new THREE.Vector3(x, 0.3, z));
-      const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), new THREE.LineBasicMaterial({ color: n === 'enemy' ? 0xff5040 : 0x53d769, transparent: true, opacity: 0.28 }));
+      const mat = n === 'enemy'
+        ? new THREE.LineDashedMaterial({ color: 0xff5040, transparent: true, opacity: 0.28, dashSize: 3.4, gapSize: 2.4 })
+        : new THREE.LineBasicMaterial({ color: 0x53d769, transparent: true, opacity: 0.28 });
+      const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), mat);
+      if (n === 'enemy') { line.computeLineDistances(); this.enemyRibbonMat = mat as THREE.LineDashedMaterial; }
       this.statics.add(line);
     }
     // per-slot tower aim: barrel (+Z native) toward nearest point of the enemy lane
@@ -318,6 +384,47 @@ export class GameSync3D {
     this.map.scene.remove(this.root);
   }
 
+  /** Which production buildings are actually working this tick — drives the
+   *  chimney-smoke gate (checklist §12.2: smoke stops when production stops:
+   *  full tank / zero fuel / missing inputs / capped output). */
+  private computeBuildingActive(game: GameState) {
+    const stats = getStats(game);
+    const fuelCap = game.research.includes('reserve') ? 3000 : 2500;
+    this.buildingActive = {
+      oil: stats.oilCapacity > 0 && game.oil < stats.oilCapacity,
+      refinery: game.oil > 0 && game.fuel < fuelCap,
+      power: game.fuel > 0,
+      steel: game.oil > 0 && game.fuel > 0 && game.steel < 2000,
+      arms: game.fuel > 0 && game.steel > 0 && game.ammo < 5000,
+    };
+  }
+
+  /** Warm lamp glows flagged userData.night so the map's night system
+   *  (register() -> nightObjs) switches them on at night. Positions are in
+   *  model-local units against the model's own bounding box. */
+  private attachNightLamps(model: THREE.Object3D, localBox: THREE.Box3, baseScale: number, count: number) {
+    const sx = localBox.max.x - localBox.min.x, sy = localBox.max.y - localBox.min.y, sz = localBox.max.z - localBox.min.z;
+    const spots: [number, number, number][] = count >= 2
+      ? [[localBox.min.x + sx * 0.22, localBox.min.y + sy * 0.85, localBox.min.z + sz * 0.22],
+         [localBox.min.x + sx * 0.78, localBox.min.y + sy * 0.85, localBox.min.z + sz * 0.78]]
+      : [[(localBox.min.x + localBox.max.x) / 2, localBox.max.y + sy * 0.05, (localBox.min.z + localBox.max.z) / 2]];
+    for (const [x, y, z] of spots) {
+      const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: lampTexture(), color: 0xffca7a, transparent: true, opacity: 0.95, depthWrite: false, blending: THREE.AdditiveBlending }));
+      s.position.set(x, y, z);
+      const w = 2.6 / Math.max(baseScale, 0.001); s.scale.set(w, w, 1);
+      s.userData.night = true;
+      model.add(s);
+    }
+  }
+
+  private registerModel(model: THREE.Object3D) { try { this.map.register?.(model); } catch { /* map without a night registry */ } }
+  private unregisterModel(model: THREE.Object3D) { try { this.map.unregister?.(model); } catch { /* noop */ } }
+
+  private dropTowerMarks(slot: number) {
+    const mk = this.towerMarks.get(slot);
+    if (mk) { this.statics.remove(mk.grp); this.towerMarks.delete(slot); }
+  }
+
   /** Refresh window.__telemetry from the logic counters (see the telemetry
    *  field note): maps hold per-modelKind deltas since the last reset(). */
   private syncTelemetry(game: GameState) {
@@ -335,8 +442,12 @@ export class GameSync3D {
   }
 
   setState(game: GameState, opts: { selectedSlot: number | null; targeting: string | null; targetPreview: { x: number; y: number } }) {
+    // wave-start signal for the enemy-route ribbon pulse: the phase edge
+    // into battle (peace/intermission -> battle) is the wave launch moment.
+    if (this.state && this.state.phase !== 'battle' && game.phase === 'battle') this.wavePulseAt = performance.now();
     this.state = game; this.selectedSlot = opts.selectedSlot; this.targeting = opts.targeting;
     this.syncTelemetry(game);
+    this.computeBuildingActive(game);
     // movement stability: cap how far a target may move per state update (~22 u/s) so a
     // hitched tick can no longer teleport ships — they sail fast instead of streaking.
     const nowS = performance.now();
@@ -344,6 +455,20 @@ export class GameSync3D {
     this.lastSetStateAt = nowS;
     this.reconcileStatics(game);
     this.updateSelectionVisuals(game, opts.targetPreview);
+  }
+
+  /** PRD §2.2 visual evolution: stepped scale growth + procedural add-ons on
+   *  the same GLB + a base ring tinted by band (grey/bronze/silver/gold/teal). */
+  private applyBuildingBand(rec: BldRec, band: number) {
+    rec.band = band;
+    const m = 1 + band * 0.1;
+    rec.obj.scale.setScalar(rec.baseScale * m);
+    rec.obj.position.y = rec.groundBase - rec.minY * m;
+    const old = rec.obj.getObjectByName('vis-evo');
+    if (old) rec.obj.remove(old);
+    if (band > 0) rec.obj.add(buildEvoGroup(band, rec.local));
+    (rec.ring.material as THREE.MeshBasicMaterial).color.setHex(BLD_BAND_COLORS[band]);
+    rec.ring.scale.setScalar(rec.ringBase * (1 + band * 0.08));
   }
 
   private towerUrl(t: GameState['towers'][number]): string {
@@ -372,7 +497,7 @@ export class GameSync3D {
       if (this.placing.has('tower-' + t.slot)) return;
       this.placing.add('tower-' + t.slot);
       try {
-        if (cur) { this.statics.remove(cur.obj); this.towers.delete(t.slot); this.towerAnims.delete(t.slot); }
+        if (cur) { this.unregisterModel(cur.obj); this.statics.remove(cur.obj); this.towers.delete(t.slot); this.towerAnims.delete(t.slot); this.dropTowerMarks(t.slot); }
         const slot = SLOTS.find(s => s.id === t.slot); if (!slot) return;
         const model = await loadModel(url);
         model.traverse(o => { o.userData.pick = { type: 'slot', id: t.slot }; });
@@ -382,13 +507,23 @@ export class GameSync3D {
         const fit2 = new THREE.Box3().setFromObject(model);
         model.position.set(slot.x, groundY(this.map, slot.x, slot.z) - fit2.min.y, slot.z);
         model.rotation.y = this.aim.get(t.slot) ?? Math.PI;
+        this.attachNightLamps(model, fit, baseScale, 1);
         this.statics.add(model);
         this.towers.set(t.slot, { url, obj: model, born: performance.now(), base: baseScale });
         this.bindTowerAnim(t.slot, url, model);
+        this.registerModel(model);
+        // status marks above the tower: jammed (boss-4) / disabled (boss-2 stun)
+        const marks = new THREE.Group();
+        const jam = glyphSprite('✕', '#c07aff', 2.6); jam.position.set(-1.7, 0, 0); jam.visible = false;
+        const stun = glyphSprite('✸', '#ffd24b', 2.6); stun.position.set(1.7, 0, 0); stun.visible = false;
+        marks.add(jam); marks.add(stun);
+        marks.position.set(slot.x, groundY(this.map, slot.x, slot.z) + (fit2.max.y - fit2.min.y) + 2.8, slot.z);
+        this.statics.add(marks);
+        this.towerMarks.set(t.slot, { grp: marks, jam, stun });
         this.removePad(t.slot);
       } finally { this.placing.delete('tower-' + t.slot); }
     }));
-    for (const [slotId, rec] of [...this.towers]) if (!seen.has(slotId)) { this.statics.remove(rec.obj); this.towers.delete(slotId); this.towerAnims.delete(slotId); }
+    for (const [slotId, rec] of [...this.towers]) if (!seen.has(slotId)) { this.unregisterModel(rec.obj); this.statics.remove(rec.obj); this.towers.delete(slotId); this.towerAnims.delete(slotId); this.dropTowerMarks(slotId); }
     // slot pads
     for (const slot of SLOTS) {
       if (this.towers.has(slot.id)) { this.removePad(slot.id); continue; }
@@ -410,23 +545,42 @@ export class GameSync3D {
       pad.userData.pickRing = ring;
       this.statics.add(pad); this.pads.set(slot.id, pad);
     }
-    // buildings (level > 0, parallel loads)
+    // buildings (level > 0, parallel loads) — each at its real island/coast
+    // position from buildings-3d.json (audit جدید-۵: no longer one decorative
+    // cluster), evolving through the five PRD §2.2 bands as it levels up.
     await Promise.all(Object.entries(BUILDINGS).map(async ([id, b]) => {
       const level = (game.buildings as Record<string, number>)[id] ?? 0;
-      const has = this.buildings.has(id);
-      if (level > 0 && !has) {
+      const rec = this.buildings.get(id);
+      if (level > 0 && !rec) {
         if (this.placing.has('bld-' + id)) return;
         this.placing.add('bld-' + id);
         try {
           const model = await loadModel(`/models/buildings/${b.glb}.glb`);
           model.traverse(o => { o.userData.pick = { type: 'building', id }; });
           const fit = new THREE.Box3().setFromObject(model); const size = new THREE.Vector3(); fit.getSize(size);
-          model.scale.setScalar((b.glb === 'platform' ? 13 : 9.5) / Math.max(size.x, size.z, 0.001));
+          const baseScale = (b.glb === 'platform' ? 13 : 9.5) / Math.max(size.x, size.z, 0.001);
+          model.scale.setScalar(baseScale);
           const fit2 = new THREE.Box3().setFromObject(model);
-          model.position.set(b.x, (b.water ? 0 : groundY(this.map, b.x, b.z)) - fit2.min.y, b.z);
-          this.statics.add(model); this.buildings.set(id, model); this.genericAnims.set('bld-' + id, collectAnims(model, id).generic);
+          const groundBase = b.water ? 0 : groundY(this.map, b.x, b.z);
+          model.position.set(b.x, groundBase - fit2.min.y, b.z);
+          this.attachNightLamps(model, fit, baseScale, 2);
+          const ringBase = Math.max(size.x, size.z) * baseScale * 0.62;
+          const ring = new THREE.Mesh(new THREE.RingGeometry(0.9, 1.02, 48), new THREE.MeshBasicMaterial({ color: BLD_BAND_COLORS[0], transparent: true, opacity: 0.5, side: THREE.DoubleSide, depthWrite: false }));
+          ring.rotation.x = -Math.PI / 2; ring.position.set(b.x, groundBase + 0.22, b.z); ring.scale.setScalar(ringBase);
+          this.statics.add(model); this.statics.add(ring);
+          const nrec: BldRec = { obj: model, band: -1, baseScale, groundBase, minY: fit2.min.y, local: fit.clone(), ring, ringBase };
+          this.buildings.set(id, nrec);
+          this.applyBuildingBand(nrec, buildingBand(level));
+          this.genericAnims.set('bld-' + id, collectAnims(model, id).generic);
+          this.registerModel(model);
         } finally { this.placing.delete('bld-' + id); }
-      } else if (level <= 0 && has) { this.statics.remove(this.buildings.get(id)!); this.buildings.delete(id); this.genericAnims.delete('bld-' + id); }
+      } else if (level > 0 && rec) {
+        const band = buildingBand(level);
+        if (band !== rec.band) this.applyBuildingBand(rec, band);
+      } else if (level <= 0 && rec) {
+        this.unregisterModel(rec.obj);
+        this.statics.remove(rec.obj); this.statics.remove(rec.ring); this.buildings.delete(id); this.genericAnims.delete('bld-' + id);
+      }
     }));
     // platforms (parallel loads)
     const built = new Set(game.idle.platforms ?? []);
@@ -438,10 +592,13 @@ export class GameSync3D {
         try {
           const model = await loadModel('/models/buildings/platform.glb');
           const fit = new THREE.Box3().setFromObject(model); const size = new THREE.Vector3(); fit.getSize(size);
-          model.scale.setScalar(12 / Math.max(size.x, size.z, 0.001));
+          const pScale = 12 / Math.max(size.x, size.z, 0.001);
+          model.scale.setScalar(pScale);
           const fit2 = new THREE.Box3().setFromObject(model);
           model.position.set(p.x, -fit2.min.y, p.z);
+          this.attachNightLamps(model, fit, pScale, 1);
           this.statics.add(model); this.platforms.set(p.id, model); this.genericAnims.set('plat-' + p.id, collectAnims(model, 'plat' + p.id).generic);
+          this.registerModel(model);
         } finally { this.placing.delete('plat-' + p.id); }
         if (this.pads.has(-100 - p.id)) { this.statics.remove(this.pads.get(-100 - p.id)!); this.pads.delete(-100 - p.id); }
       } else if (!built.has(p.id) && !has && !this.pads.has(-100 - p.id)) {
@@ -621,6 +778,41 @@ export class GameSync3D {
     if (ent) { this.dyn.remove(ent.obj); this.ents.delete(key); }
   }
 
+  /* ===== VIS: per-enemy status indicators (stun / slow / detected-sub /
+     boss-3 shield halo). Predicates replicate the logic tick exactly:
+     slow aura in game.ts uses `< getRange`, sub detection (canSeeSub) `<=`. */
+  private ensureInd(ent: Ent, e: GameState['enemies'][number]) {
+    if (ent.ind) return ent.ind;
+    const boss = e.kind === 'boss';
+    const y = boss ? 9.5 : 5.6; const sz = boss ? 3.6 : 2.5;
+    const mk = (txt: string, color: string, x: number) => { const s = glyphSprite(txt, color, sz); s.position.set(x, y, 0); s.visible = false; ent.obj.add(s); return s; };
+    const ind: NonNullable<Ent['ind']> = { stun: mk('✸', '#ffd24b', -sz * 0.72), slow: mk('❄', '#7ac8ff', 0), eye: mk('◎', '#53d769', sz * 0.72), shield: null };
+    if (boss) {
+      const r = e.boss === 4 ? 17.5 : 14.5;
+      const ring = new THREE.Mesh(new THREE.RingGeometry(r, r + 1.2, 56), new THREE.MeshBasicMaterial({ color: 0x7ac8ff, transparent: true, opacity: 0.5, side: THREE.DoubleSide, depthWrite: false }));
+      ring.rotation.x = -Math.PI / 2; ring.position.y = 1.8; ring.visible = false;
+      ent.obj.add(ring); ind.shield = ring;
+    }
+    ent.ind = ind;
+    return ind;
+  }
+  private enemySlowed(game: GameState, e: GameState['enemies'][number]): boolean {
+    const pos = enemyPosition(e, game.layout); const slots = getSlots(game.layout);
+    for (const t of game.towers) {
+      if (t.kind !== 'ew' && !(t.kind === 'boat' && e.kind !== 'air')) continue;
+      const sp = slots[t.slot]; if (sp && distance(sp, pos) < getRange(game, t)) return true;
+    }
+    return false;
+  }
+  private subDetected(game: GameState, e: GameState['enemies'][number]): boolean {
+    const pos = enemyPosition(e, game.layout); const slots = getSlots(game.layout);
+    for (const t of game.towers) {
+      if (t.kind !== 'ew' && t.kind !== 'boat') continue;
+      const sp = slots[t.slot]; if (sp && distance(sp, pos) <= getRange(game, t)) return true;
+    }
+    return false;
+  }
+
   private loop(now: number) {
     if (!this.alive) return;
     this.raf = requestAnimationFrame(this.loop);
@@ -630,9 +822,11 @@ export class GameSync3D {
     // enemies
     for (const e of game.enemies) {
       const key = `enemy-${e.id}`; alive.add(key);
-      const y = e.kind === 'air' ? 8 : e.kind === 'sub' ? 0.1 : 0.35;
+      // air flies at 8; subs run semi-submerged (hull mostly under, sail out)
+      const y = e.kind === 'air' ? 8 : e.kind === 'sub' ? -0.7 : 0.35;
       this.setTarget(key, 'enemy', e.progress, y, 'X');
-      const wakeLen = e.kind === 'boss' ? (e.boss === 4 ? 30 : 24) : e.kind === 'destroyer' ? 13.5 : e.kind === 'sub' ? 0 : e.kind === 'corvette' ? 10 : 6.5;
+      // no water wake for air targets (audit: air dragged a wake at altitude)
+      const wakeLen = e.kind === 'air' ? 0 : e.kind === 'boss' ? (e.boss === 4 ? 30 : 24) : e.kind === 'destroyer' ? 13.5 : e.kind === 'sub' ? 0 : e.kind === 'corvette' ? 10 : 6.5;
       void this.ensureEnt(key, () => enemyModel(e.kind, e.boss), { bar: e.kind === 'boss' ? 10 : 5, bob: e.kind === 'air' ? 0 : 0.09, wake: wakeLen ? { len: wakeLen, wid: wakeLen * 0.55, fwd: 'X' } : undefined });
       const ent = this.ents.get(key);
       if (ent) {
@@ -641,6 +835,16 @@ export class GameSync3D {
           ent.obj.scale.setScalar(1.07);
           if ((this.prevFlash.get(key) ?? 0) <= 0) { const t = this.targets.get(key); if (t) this.fx.spark(t.pos, '#ffa040', 6); }
         } else ent.obj.scale.setScalar(1);
+        // status indicators (logic-true conditions, see ensureInd note)
+        const ind = this.ensureInd(ent, e);
+        ind.stun.visible = e.stun > 0;
+        ind.slow.visible = e.stun <= 0 && this.enemySlowed(game, e);
+        ind.eye.visible = e.kind === 'sub' && this.subDetected(game, e);
+        if (ind.shield) {
+          const on = e.boss === 3 && e.specialClock < 10; // shield cycle in applyDamage
+          ind.shield.visible = on;
+          if (on) { ind.shield.rotation.z += dt * 0.7; (ind.shield.material as THREE.MeshBasicMaterial).opacity = 0.42 + 0.18 * Math.sin(now / 170); }
+        }
       }
       this.prevFlash.set(key, e.hitFlash ?? 0);
       this.prevHp.set(key, e.hp);
@@ -713,6 +917,27 @@ export class GameSync3D {
       let heading = prev?.heading ?? -0.7;
       if (prev) { const dx = x - prev.pos.x, dz = z - prev.pos.z; if (dx * dx + dz * dz > 0.04) heading = Math.atan2(-dz, dx); }
       this.targets.set(key, { pos: new THREE.Vector3(x, 0.35, z), heading, y: 0.35 });
+    }
+    // tower status marks: disabled by boss-2 stun (game.towerStuns) and
+    // jammed by boss-4 (logic: towers within 26 of the carrier lose 40%)
+    {
+      const boss4 = game.enemies.find(e => e.kind === 'boss' && e.boss === 4 && e.hp > 0);
+      const b4pos = boss4 ? enemyPosition(boss4, game.layout) : null;
+      const slots = getSlots(game.layout);
+      for (const t of game.towers) {
+        const mk = this.towerMarks.get(t.slot); if (!mk) continue;
+        mk.stun.visible = (game.towerStuns?.[t.slot] ?? 0) > 0;
+        const sp = slots[t.slot];
+        mk.jam.visible = !!b4pos && !!sp && distance(sp, b4pos) < 26;
+      }
+    }
+    // enemy-route ribbon pulse after wave start (signal set in setState)
+    if (this.enemyRibbonMat) {
+      const since = (now - this.wavePulseAt) / 1000;
+      if (since >= 0 && since < 4) {
+        const k = 1 - since / 4;
+        this.enemyRibbonMat.opacity = 0.28 + k * (0.5 + 0.22 * Math.sin(now / 85));
+      } else if (this.enemyRibbonMat.opacity !== 0.28) this.enemyRibbonMat.opacity = 0.28;
     }
     // prune dead entities (killed enemies sink with an explosion; others just leave)
     for (const key of [...this.ents.keys()]) if (!alive.has(key)) {
@@ -859,7 +1084,7 @@ export class GameSync3D {
     this.towerAnims.set(slot, ta);
   }
 
-  private applyGeneric(nodes: AnimNode[], t: number, dt: number) {
+  private applyGeneric(nodes: AnimNode[], t: number, dt: number, smokeOn = true) {
     for (const n of nodes) {
       const o = n.obj; const ph = n.phase;
       switch (n.name) {
@@ -893,6 +1118,7 @@ export class GameSync3D {
           if (n.mat && n.baseColor) (n.mat as THREE.MeshBasicMaterial).color.copy(n.baseColor).multiplyScalar(3 + Math.sin(t * 2 + ph) * 1.2);
           break;
         case 'anim:smoke': {
+          if (!smokeOn) break; // production stopped (full tank / no fuel / capped) — no puffs
           if (t >= (o.userData.fxNext ?? 0)) {
             o.userData.fxNext = t + 0.55 + Math.random() * 0.35;
             const wp = o.getWorldPosition(this.animTmp);
@@ -937,11 +1163,12 @@ export class GameSync3D {
     const t = nowMs / 1000;
     const camPos = this.map.camera.position;
     // buildings + platforms: ambient motion only
-    for (const [, nodes] of this.genericAnims) {
+    for (const [key, nodes] of this.genericAnims) {
       if (!nodes.length) continue;
       const p = nodes[0].obj.getWorldPosition(this.animTmp);
       if (p.distanceToSquared(camPos) > 320 * 320) continue;
-      this.applyGeneric(nodes, t, dt);
+      const smokeOn = key.startsWith('bld-') ? (this.buildingActive[key.slice(4)] ?? true) : true;
+      this.applyGeneric(nodes, t, dt, smokeOn);
     }
     // towers: ambient + weapon articulation
     for (const [slot, ta] of this.towerAnims) {
