@@ -171,6 +171,72 @@ ok('hydrated corrupt state survives getStats and reducer ticks', () => {
   assert.ok(Number.isFinite(state.cash));
 });
 
+console.log('round 2 — QA SAVE findings S-1 / S-4 / S-5');
+ok('S-1: prototype-chain contract ids are rejected, never kept', () => {
+  for (const id of ['__proto__', 'constructor', 'toString', 'hasOwnProperty', 'valueOf', 'prototype']) {
+    const game = mustHydrate(corrupt(s => { s.idle.contract = { id, elapsed: 10 }; }));
+    assert.equal(game.idle.contract, null, `contract id ${id} must be dropped`);
+  }
+});
+ok('S-1: contract elapsed can never become NaN', () => {
+  for (const elapsed of [NaN, Infinity, 'x', null, undefined, {}]) {
+    const game = mustHydrate(corrupt(s => { s.idle.contract = { id: 'regional', elapsed }; }));
+    assert.ok(game.idle.contract && Number.isFinite(game.idle.contract.elapsed), `elapsed ${String(elapsed)} must stay finite`);
+    assert.ok(game.idle.contract.elapsed >= 0 && game.idle.contract.elapsed <= 180);
+  }
+});
+ok('S-1 end-to-end: claiming after a poisoned-contract save keeps cash/xp finite and untouched', () => {
+  for (const id of ['__proto__', 'constructor', 'toString']) {
+    const game = mustHydrate(corrupt(s => { s.cash = 7777; s.idle.xp = 555; s.idle.contract = { id, elapsed: 99999 }; }));
+    assert.equal(game.cash, 7777);
+    assert.equal(game.idle.xp, 555);
+    const after = gameReducer(game, { type: 'claim-contract' });
+    assert.ok(Number.isFinite(after.cash) && Number.isFinite(after.idle.xp), 'claim must not NaN the economy');
+    assert.equal(after.cash, 7777, 'no phantom contract payout');
+    assert.equal(after.idle.xp, 555, 'no phantom contract xp');
+    // A re-save / re-load cycle must not reset the economy either.
+    const reloaded = mustHydrate(JSON.parse(JSON.stringify(after)));
+    assert.equal(reloaded.cash, 7777);
+    assert.equal(reloaded.idle.xp, 555);
+  }
+});
+ok('S-1: a real completed contract still claims its exact reward', () => {
+  const game = mustHydrate(corrupt(s => { s.cash = 5000; s.idle.xp = 100; s.idle.contract = { id: 'coastal', elapsed: 60 }; }));
+  const after = gameReducer(game, { type: 'claim-contract' });
+  assert.equal(after.cash, 5800); // coastal pays 800
+  assert.equal(after.idle.xp, 150); // coastal pays 50 xp
+  assert.equal(after.idle.contract, null);
+});
+ok('S-1 sweep: a __proto__ key inside buildings cannot pollute or leak into state', () => {
+  const game = mustHydrate(corrupt(s => {
+    s.buildings = JSON.parse('{"__proto__":{"polluted":1},"constructor":5,"oil":3}');
+  }));
+  assert.equal(Object.prototype.polluted, undefined);
+  assert.equal(game.buildings.oil, 3);
+  assert.deepEqual(Object.keys(game.buildings).sort(), Object.keys(initialGame().buildings).sort());
+});
+ok('S-4: negative bank and cash clamp to zero', () => {
+  const game = mustHydrate(corrupt(s => { s.idle.bank = -50; s.cash = -100; }));
+  assert.equal(game.idle.bank, 0);
+  assert.equal(game.cash, 0);
+});
+ok('S-5: battle arrays and rewards are length-capped', () => {
+  const enemy = { id: 1, kind: 'speed', boss: 0, hp: 50, maxHp: 95, progress: 0.4, stun: 0, specialClock: 0 };
+  const game = mustHydrate(corrupt(s => {
+    s.enemies = Array.from({ length: 600 }, () => ({ ...enemy }));
+    s.pirates = Array.from({ length: 600 }, (_, i) => ({ id: i, progress: 0.2, hp: 100 }));
+    s.merchants = Array.from({ length: 600 }, (_, i) => ({ id: i, progress: 0.2, kind: 'barge', reward: 25, paid: false }));
+    s.contraband = Array.from({ length: 600 }, (_, i) => ({ id: i, progress: 0.2 }));
+    s.idle.rewards = Array.from({ length: 250 }, (_, i) => ({ id: `r${i}`, type: 'daily', title: 't', subtitle: 's', cash: 1, xp: 1 }));
+  }));
+  assert.equal(game.enemies.length, 500);
+  assert.equal(game.pirates.length, 500);
+  assert.equal(game.merchants.length, 500);
+  assert.equal(game.contraband.length, 500);
+  assert.equal(game.idle.rewards.length, 200);
+  assert.equal(game.idle.appliedDailyIds.length <= 64, true);
+});
+
 console.log('runtime detection');
 ok('isNativeRuntime / serverApiEnabled classify window shapes', () => {
   assert.equal(isNativeRuntime({}), false);

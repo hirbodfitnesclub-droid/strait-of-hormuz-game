@@ -311,7 +311,13 @@ export function hydrateGame(raw: unknown): { game: GameState; offline: number } 
     };
   };
   const sanitizeContract = (v: unknown): IdleState["contract"] => {
-    if (!isRec(v) || typeof v.id !== "string" || !(v.id in CONTRACTS)) return null;
+    // Own-property whitelist only. The `in` operator also matches inherited
+    // keys ("__proto__", "constructor", "toString", ...), which are not real
+    // contracts: their duration is undefined, clampNum then produced NaN
+    // elapsed, and claiming the phantom contract turned cash/xp into NaN —
+    // a single tampered save wiped the whole economy. With a real own key
+    // the duration is always a finite number, so elapsed can never be NaN.
+    if (!isRec(v) || typeof v.id !== "string" || !Object.prototype.hasOwnProperty.call(CONTRACTS, v.id)) return null;
     const id = v.id as ContractId;
     return { id, elapsed: clampNum(v.elapsed, 0, 0, CONTRACTS[id].duration) };
   };
@@ -334,6 +340,7 @@ export function hydrateGame(raw: unknown): { game: GameState; offline: number } 
     for (const id of ["harbor", "energy", "supply"] as ManagerId[]) managerLevels[id] = intIn(levels[id], 0, 0, 5);
     const stars: Record<string, number> = {};
     if (isRec(v.stars)) for (const [key, val] of Object.entries(v.stars)) {
+      if (key === "__proto__") continue; // never let a save key reach a prototype slot
       const n = optNum(val);
       if (n !== undefined) stars[key] = intIn(n, 0, 0, 3);
     }
@@ -342,7 +349,7 @@ export function hydrateGame(raw: unknown): { game: GameState; offline: number } 
       : null;
     return {
       revision: intIn(v.revision, 0, 0, Number.MAX_SAFE_INTEGER),
-      bank: num(v.bank, 0),
+      bank: Math.max(0, num(v.bank, 0)),
       collected: Math.max(0, num(v.collected, 0)),
       collections: intIn(v.collections, 0, 0, Number.MAX_SAFE_INTEGER),
       collectionStreak: intIn(v.collectionStreak, 0, 0, 5),
@@ -362,7 +369,7 @@ export function hydrateGame(raw: unknown): { game: GameState; offline: number } 
       lastBattle: sanitizeBattle(v.lastBattle),
       waveStartedAt: num(v.waveStartedAt, 0),
       waveStartKills: intIn(v.waveStartKills, 0, 0, Number.MAX_SAFE_INTEGER),
-      rewards: Array.isArray(v.rewards) ? v.rewards.map(sanitizeReward).filter((r): r is Reward => r !== null) : [],
+      rewards: Array.isArray(v.rewards) ? v.rewards.map(sanitizeReward).filter((r): r is Reward => r !== null).slice(0, 200) : [],
       lootSeed: intIn(v.lootSeed, base.idle.lootSeed, 0, Number.MAX_SAFE_INTEGER),
       openedChests: intIn(v.openedChests, 0, 0, Number.MAX_SAFE_INTEGER),
       completedContracts: intIn(v.completedContracts, 0, 0, Number.MAX_SAFE_INTEGER),
@@ -412,11 +419,14 @@ export function hydrateGame(raw: unknown): { game: GameState; offline: number } 
       ? { id: num(v.id, 0), progress: clampNum(v.progress, 0, 0, 1), kind: v.kind as Merchant["kind"], reward: Math.max(0, num(v.reward, 0)), paid: v.paid === true }
       : null;
 
-  const game: GameState = { ...base, ...saved, buildings: { ...base.buildings, ...saved.buildings }, cards: sanitizeCards(saved.cards), cooldowns: { ...base.cooldowns, ...saved.cooldowns }, idle: sanitizeIdle(saved.idle), shots: [], popups: [] };
-  game.cash = num(game.cash, base.cash); game.oil = num(game.oil, base.oil); game.fuel = num(game.fuel, base.fuel); game.steel = num(game.steel, base.steel); game.ammo = num(game.ammo, base.ammo);
+  // Buildings are rebuilt from the known ids only: spreading the saved
+  // record would carry arbitrary keys (including "__proto__") into the
+  // state, the same prototype-chain hole the contract check had.
+  const game: GameState = { ...base, ...saved, buildings: { ...base.buildings }, cards: sanitizeCards(saved.cards), cooldowns: { ...base.cooldowns, ...saved.cooldowns }, idle: sanitizeIdle(saved.idle), shots: [], popups: [] };
+  game.cash = Math.max(0, num(game.cash, base.cash)); game.oil = num(game.oil, base.oil); game.fuel = num(game.fuel, base.fuel); game.steel = num(game.steel, base.steel); game.ammo = num(game.ammo, base.ammo);
   game.hearts = Math.max(0, Math.min(20, num(game.hearts, 20))); game.wave = Math.max(1, Math.floor(num(game.wave, 1))); game.highestWave = Math.max(0, Math.floor(num(game.highestWave, 0)));
   game.security = Math.max(0, Math.min(100, num(game.security, 70))); game.prestige = Math.max(0, Math.floor(num(game.prestige, 0))); game.oilSplit = Math.max(0, Math.min(100, num(game.oilSplit, 40)));
-  (Object.keys(game.buildings) as BuildingId[]).forEach(k => { game.buildings[k] = Math.max(0, Math.floor(num(game.buildings[k], base.buildings[k]))); });
+  (Object.keys(game.buildings) as BuildingId[]).forEach(k => { game.buildings[k] = Math.max(0, Math.floor(num(saved.buildings[k], base.buildings[k]))); });
   game.towers = (Array.isArray(game.towers) ? game.towers : []).filter(t => t && typeof t === "object" && (TOWER_KINDS as string[]).includes(t.kind) && Number.isInteger(t.slot) && t.slot >= 0 && t.slot < SLOTS.length).map(t => {
     const tier = Math.max(1, Math.min(4, Math.floor(num(t.tier, 1))));
     return {
@@ -438,10 +448,12 @@ export function hydrateGame(raw: unknown): { game: GameState; offline: number } 
   game.speed = saved.speed === 2 || saved.speed === 3 ? saved.speed : 1;
   game.layout = saved.layout === "portrait" ? "portrait" : "landscape";
   game.event = saved.event === "spill" || saved.event === "storm" || saved.event === "vip" ? saved.event : null;
-  game.enemies = Array.isArray(saved.enemies) ? saved.enemies.map(sanitizeEnemy).filter((e): e is Enemy => e !== null) : [];
-  game.pirates = Array.isArray(saved.pirates) ? saved.pirates.map(sanitizePirate).filter((p): p is Pirate => p !== null) : [];
-  game.contraband = Array.isArray(saved.contraband) ? saved.contraband.map(sanitizeContraband).filter((c): c is Contraband => c !== null) : [];
-  game.merchants = Array.isArray(saved.merchants) ? saved.merchants.map(sanitizeMerchant).filter((m): m is Merchant => m !== null) : [];
+  // Length caps: a tampered save must not be able to inflate entity lists
+  // without bound (memory / tick cost). Real battles stay far below these.
+  game.enemies = (Array.isArray(saved.enemies) ? saved.enemies.map(sanitizeEnemy).filter((e): e is Enemy => e !== null) : []).slice(0, 500);
+  game.pirates = (Array.isArray(saved.pirates) ? saved.pirates.map(sanitizePirate).filter((p): p is Pirate => p !== null) : []).slice(0, 500);
+  game.contraband = (Array.isArray(saved.contraband) ? saved.contraband.map(sanitizeContraband).filter((c): c is Contraband => c !== null) : []).slice(0, 500);
+  game.merchants = (Array.isArray(saved.merchants) ? saved.merchants.map(sanitizeMerchant).filter((m): m is Merchant => m !== null) : []).slice(0, 500);
   game.spawnRemaining = intIn(saved.spawnRemaining, 0, 0, Number.MAX_SAFE_INTEGER);
   game.spawnClock = Math.max(0, num(saved.spawnClock, 0));
   game.spawnIndex = intIn(saved.spawnIndex, 0, 0, Number.MAX_SAFE_INTEGER);
@@ -513,12 +525,16 @@ function addRevenue(s: GameState, cash: number) {
   s.idle.lifetimeIncome += cash;
 }
 function grantReward(s: GameState, reward: Reward, reveal = true) {
-  s.cash += reward.cash; s.idle.xp += reward.xp;
-  s.steel = Math.min(2000, s.steel + (reward.steel ?? 0));
-  s.ammo = Math.min(5000, s.ammo + (reward.ammo ?? 0));
-  s.chests += reward.chests ?? 0;
-  s.idle.boostCharges = Math.min(9, s.idle.boostCharges + (reward.boosts ?? 0));
-  if (reward.cards) for (const kind of TOWER_KINDS) s.cards[kind].count += reward.cards[kind] ?? 0;
+  // Defense in depth: a non-finite amount must never reach the state — the
+  // next autosave would serialize NaN as null and reset that resource on
+  // the following load (the tail of the S-1 poisoned-contract chain).
+  const fin = (n: number | undefined) => (typeof n === "number" && Number.isFinite(n) ? n : 0);
+  s.cash += fin(reward.cash); s.idle.xp += fin(reward.xp);
+  s.steel = Math.min(2000, s.steel + fin(reward.steel));
+  s.ammo = Math.min(5000, s.ammo + fin(reward.ammo));
+  s.chests += fin(reward.chests);
+  s.idle.boostCharges = Math.min(9, s.idle.boostCharges + fin(reward.boosts));
+  if (reward.cards) for (const kind of TOWER_KINDS) s.cards[kind].count += fin(reward.cards[kind]);
   if (reveal) s.idle.rewards.push(reward);
 }
 

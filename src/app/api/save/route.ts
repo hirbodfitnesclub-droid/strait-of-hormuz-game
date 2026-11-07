@@ -49,24 +49,40 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    if (!validId(body.id) || !body.state || typeof body.state !== "object" || Array.isArray(body.state)) {
+    if (!isRecord(body) || !validId(body.id) || !body.state || typeof body.state !== "object" || Array.isArray(body.state)) {
       return Response.json({ error: "Invalid save" }, { status: 400 });
     }
     if (JSON.stringify(body.state).length > 200_000) {
       return Response.json({ error: "Save too large" }, { status: 413 });
     }
-    const baseVersion =
-      typeof body.baseVersion === "number" && Number.isFinite(body.baseVersion)
-        ? Math.floor(body.baseVersion)
-        : null;
+    // baseVersion is optional (legacy clients omit it), but when present it
+    // must be a non-negative integer. An invalid value (string, float,
+    // negative, ...) is a client error — 400 — and must never silently
+    // degrade into a legacy unconditional write, which would bypass
+    // conflict detection entirely.
+    if (
+      body.baseVersion !== undefined &&
+      !(typeof body.baseVersion === "number" && Number.isInteger(body.baseVersion) && body.baseVersion >= 0)
+    ) {
+      return Response.json({ error: "Invalid baseVersion" }, { status: 400 });
+    }
+    const baseVersion = body.baseVersion === undefined ? null : (body.baseVersion as number);
+    const saveId = body.id as string; // validated by validId above
     const result = await db.transaction(async transaction => {
       // Serialize writes per save id so the version check cannot race.
-      await transaction.execute(sql`select pg_advisory_xact_lock(hashtext(${body.id}))`);
-      const [existing] = await transaction.select().from(gameSaves).where(eq(gameSaves.id, body.id)).limit(1);
+      await transaction.execute(sql`select pg_advisory_xact_lock(hashtext(${saveId}))`);
+      const [existing] = await transaction.select().from(gameSaves).where(eq(gameSaves.id, saveId)).limit(1);
       const current = existing ? readRecord(existing.state) : { state: null, version: 0 };
-      // Conflict rule: the higher version wins. A client whose base is
-      // behind the server has lost the race and must rebase; a client at or
-      // ahead of the server version may write. Legacy clients that send no
+      // Conflict policy: LAST-WRITER-WINS, guarded (official policy — see
+      // fix-program.md, team SAVE). The version counter is owned by the
+      // server: every successful write stores current + 1, so a client can
+      // never jump the version. A client whose baseVersion is behind the
+      // server has lost the race and gets a 409; per the client-side half
+      // of this policy it then fetches the current server state, keeps a
+      // timestamped local backup of it (localStorage key
+      // "hormuz-server-backup-v1") and only then rebases onto the server
+      // version and overwrites — last writer wins, but the overwritten
+      // progress is never lost silently. Legacy clients that send no
       // baseVersion keep the old unconditional-write behaviour.
       if (baseVersion !== null && baseVersion < current.version) {
         return {
@@ -76,7 +92,7 @@ export async function POST(request: Request) {
           updatedAt: existing ? rowUpdatedAt(existing.updatedAt) : null,
         };
       }
-      const version = Math.max(current.version, baseVersion ?? 0) + 1;
+      const version = current.version + 1;
       const now = new Date();
       const envelope: SaveEnvelope = {
         __hormuzSave: { version, updatedAt: now.toISOString() },
@@ -84,7 +100,7 @@ export async function POST(request: Request) {
       };
       await transaction
         .insert(gameSaves)
-        .values({ id: body.id, state: envelope, updatedAt: now })
+        .values({ id: saveId, state: envelope, updatedAt: now })
         .onConflictDoUpdate({ target: gameSaves.id, set: { state: envelope, updatedAt: now } });
       return { conflict: false as const, version, updatedAt: now.toISOString() };
     });
