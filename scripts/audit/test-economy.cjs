@@ -30,6 +30,26 @@
  *  9) Regression probe: 400 peace ticks on a fixed economy seed — digest
  *     printed for before/after comparison (only ECO-intended flows may
  *     move: α-capped exports and their downstream bank/lifetime numbers).
+ *
+ * Round 2 — QA fixes (independent QA passed all 8 ECO items and the
+ * regression, but blocked the merge on adversarial findings):
+ * 10) VIP pause exploit: the VIP layer freezes with the SAME
+ *     battlePaused flag as the pirate layer — no progress, no damage,
+ *     no resolve while paused.
+ * 11) Orphaned VIP event: a save with event:"vip" but no valid ship is
+ *     repaired in hydrateGame (event cleared, cycle freed); a live ship
+ *     without its event flag re-opens the event.
+ * 12) VIP balance: pirate damage to the VIP is 6/s per pirate (was 12)
+ *     and the ship is immune for its first 5 s — an undefended VIP
+ *     survives ~25 s under fire (was ~12.6 s).
+ * 13) Pirate bounty at a full harbor bank overflows to cash instead of
+ *     being silently clipped; the popup amount is always received.
+ * 14) The inspect action itself enforces the optical-outpost gate in
+ *     the reducer (not just the hidden UI button).
+ * 15) avgExportRate is a ROLLING 6 h game-time window (idle counters
+ *     exportWindowDollars/exportWindowTime, restarted on expiry and at
+ *     prestige) — bank capacity and offline income read the window;
+ *     the lifetime ledger no longer feeds the rate.
  */
 const assert = require('node:assert/strict');
 const { load } = require('../load-game.cjs');
@@ -105,10 +125,14 @@ assert.equal(upgradeCost('oil', 9), Math.ceil(100 * Math.pow(1.15, 9)));
   // fat theoretical rate and a long absence.
   const g6 = ecoBase(); g6.lastSavedAt = Date.now() - 3600e3;
   assert.equal(getOfflineReward(g6, Date.now()).amount, 0, 'offline pays the realized rate only');
-  const g7 = ecoBase(); g7.idle.port.exportedDollars = 36000; g7.elapsed = 3600; g7.lastSavedAt = Date.now() - 3600e3;
+  // Round 2 (15): the rate is the rolling window — seed the window.
+  const g7 = ecoBase(); g7.idle.exportWindowDollars = 36000; g7.idle.exportWindowTime = 3600; g7.lastSavedAt = Date.now() - 3600e3;
   const off7 = getOfflineReward(g7, Date.now());
   assert.ok(off7.amount > 0, 'realized exports earn offline income');
   assert.ok(near(off7.amount, 10 * 3600 * 0.5 * off7.ratio * 1, 60), 'offline = avgRealRate × s × 0.5 × R_Def');
+  // The lifetime ledger alone (outside the window) pays nothing.
+  const g7b = ecoBase(); g7b.idle.port.exportedDollars = 36000; g7b.elapsed = 3600; g7b.lastSavedAt = Date.now() - 3600e3;
+  assert.equal(getOfflineReward(g7b, Date.now()).amount, 0, 'lifetime exports outside the window pay no offline income');
 }
 
 // — 4c) Hero power in R_Def (no flat +30) —
@@ -181,12 +205,19 @@ assert.equal(upgradeCost('oil', 9), Math.ceil(100 * Math.pow(1.15, 9)));
   assert.equal(spawn(g => { g.buildings.optical = 1; }).contraband.length, 1, 'optical outpost reveals contraband');
   assert.equal(spawn(g => { g.research.push('smart'); }).contraband.length, 0, 'smart research alone reveals nothing');
   const inspect = (smart) => {
-    const g = ecoBase(); g.steel = 0; if (smart) g.research.push('smart');
+    const g = ecoBase(); g.buildings.optical = 1; g.steel = 0; if (smart) g.research.push('smart');
     g.contraband = [{ id: 7, progress: 0.5 }];
     return gameReducer(g, { type: 'inspect', id: 7 }).steel;
   };
   assert.equal(inspect(false), 50, 'base inspection reward = 50 steel');
   assert.equal(inspect(true), 75, 'smart customs raises the inspection reward to 75');
+  // Round 2 (14): the reducer itself rejects inspection without the
+  // optical outpost — a ship from a stale/tampered save grants nothing.
+  const gNoOpt = ecoBase(); gNoOpt.steel = 0; gNoOpt.research.push('smart');
+  gNoOpt.contraband = [{ id: 7, progress: 0.5 }];
+  const rejected = gameReducer(gNoOpt, { type: 'inspect', id: 7 });
+  assert.equal(rejected.steel, 0, 'inspect without the optical outpost grants nothing (action-level gate)');
+  assert.equal(rejected.contraband.length, 1, 'the ship is not consumed when inspection is rejected');
 }
 
 // — 7) VIP escort (R6) —
@@ -201,8 +232,8 @@ assert.equal(upgradeCost('oil', 9), Math.ceil(100 * Math.pow(1.15, 9)));
   assert.ok(g.pirates.length >= 2, 'pirates sortied against the VIP');
   assert.ok(vipPosition(g.vipShip).x >= 0, 'VIP has a trade-lane position');
 
-  // Pirates alongside damage the ship.
-  const g2 = startVip(); g2.pirates = [{ id: 500, progress: g2.vipShip.progress, hp: 100 }];
+  // Pirates alongside damage the ship (engagement after the 5 s grace).
+  const g2 = startVip(); g2.vipShip.age = 10; g2.pirates = [{ id: 500, progress: g2.vipShip.progress, hp: 100 }];
   const hpBefore = g2.vipShip.hp;
   const after2 = tick(g2, 0.125, 1);
   assert.ok(after2.vipShip && after2.vipShip.hp < hpBefore, 'pirate alongside damages the VIP');
@@ -217,7 +248,7 @@ assert.equal(upgradeCost('oil', 9), Math.ceil(100 * Math.pow(1.15, 9)));
   assert.equal(after3.event, null);
 
   // Destruction fines security instead of paying.
-  const g4 = startVip(); g4.vipShip.hp = 1; g4.pirates = [{ id: 501, progress: g4.vipShip.progress, hp: 100 }];
+  const g4 = startVip(); g4.vipShip.hp = 1; g4.vipShip.age = 10; g4.pirates = [{ id: 501, progress: g4.vipShip.progress, hp: 100 }];
   const sec4 = g4.security, cash4 = g4.cash;
   const after4 = tick(g4, 0.125, 8);
   assert.equal(after4.vipShip, null, 'VIP destroyed');
@@ -291,6 +322,147 @@ assert.equal(upgradeCost('oil', 9), Math.ceil(100 * Math.pow(1.15, 9)));
   assert.equal(gameReducer(g2, { type: 'hero-select', hero: 1 }).hero.active, 1, 'swap allowed in peace');
 }
 
+// — 10) Round 2: VIP freezes with battlePaused (no progress/damage/resolve) —
+{
+  const startVip = () => {
+    const g = ecoBase(); g.eventCount = 2; g.eventClock = 180; // counter → third event type = vip
+    return tick(g, 0.125, 1);
+  };
+  const pausedTick = (s, n) => { let g = s; for (let i = 0; i < n; i++) g = gameReducer(g, { type: 'tick', dt: 0.125, battlePaused: true }); return g; };
+
+  // 10 s of pause mid-crossing: nothing moves, nothing resolves.
+  const g = startVip(); g.vipShip.progress = 0.5; g.vipShip.age = 10; g.pirates = [{ id: 800, progress: 0.5, hp: 100 }];
+  const cash0 = g.cash, sec0 = g.security;
+  const frozen = pausedTick(g, 80); // 10 s
+  assert.ok(frozen.vipShip, 'VIP still at sea after a paused window');
+  assert.equal(frozen.vipShip.progress, 0.5, 'no VIP progress while paused');
+  assert.equal(frozen.vipShip.hp, 300, 'no VIP damage while paused (latched pirate frozen too)');
+  assert.equal(frozen.vipShip.age, 10, 'VIP age (grace clock) frozen while paused');
+  assert.equal(frozen.cash, cash0, 'no payout while paused');
+  assert.equal(frozen.security, sec0, 'no security change while paused');
+  assert.equal(frozen.event, 'vip', 'the event does not resolve while paused');
+
+  // QA's exploit scenario: hold the pause past the whole crossing — the
+  // ship must NOT resolve; unpausing settles it normally.
+  const g2 = startVip(); g2.vipShip.progress = 0.999; g2.pirates = [];
+  const held = pausedTick(g2, 400); // 50 s of pause ≥ the 45 s crossing
+  assert.ok(held.vipShip && held.event === 'vip', 'a full-crossing pause does not resolve the VIP');
+  assert.equal(held.cash, g2.cash, 'no risk-free +1000 through the pause exploit');
+  const settled = tick(held, 0.125, 4);
+  assert.equal(settled.vipShip, null, 'VIP resolves once unpaused');
+  assert.equal(settled.cash, g2.cash + 1000, 'unpaused crossing pays the escort reward');
+}
+
+// — 11) Round 2: orphaned VIP event repaired (hydrate + tick net) —
+{
+  // The QA deadlock save: event:"vip" with vipShip:null.
+  const raw = ecoBase(); raw.event = 'vip'; raw.vipShip = null;
+  const { game } = hydrateGame(JSON.parse(JSON.stringify(raw)));
+  assert.equal(game.event, null, 'orphaned vip event is cleared at hydrate');
+  assert.equal(game.vipShip, null);
+  // The freed cycle runs again: a fresh event starts within 250 s.
+  const after = tick(game, 1, 250);
+  assert.ok(after.eventCount >= 1, `event cycle restarted after the repair (eventCount ${after.eventCount})`);
+
+  // The mirror image: a live ship without its event flag re-opens the
+  // event, survives the repair and resolves normally.
+  const raw2 = ecoBase(); raw2.event = null;
+  raw2.vipShip = { progress: 0.999, hp: 300, maxHp: 300, age: 10 };
+  const fixed = hydrateGame(JSON.parse(JSON.stringify(raw2))).game;
+  assert.equal(fixed.event, 'vip', 'a live VIP ship re-opens its event at hydrate');
+  assert.ok(fixed.vipShip && fixed.vipShip.hp === 300, 'the ship survives the repair');
+  const crossed = tick(fixed, 0.125, 4);
+  assert.equal(crossed.vipShip, null, 'repaired VIP resolves');
+  assert.equal(crossed.cash, fixed.cash + 1000, 'repaired VIP pays the escort reward');
+
+  // Tick-level net: an orphan flag built in memory is freed on tick 1.
+  const raw3 = ecoBase(); raw3.event = 'vip'; raw3.vipShip = null;
+  assert.equal(tick(raw3, 0.125, 1).event, null, 'tick frees an orphaned vip flag even without hydrate');
+}
+
+// — 12) Round 2: VIP balance — 5 s grace, then 6 dmg/s per pirate —
+{
+  const startVip = () => {
+    const g = ecoBase(); g.eventCount = 2; g.eventClock = 180;
+    g.hero = { x: -500, y: -500, active: 0 }; // hero far away: no defense
+    return tick(g, 0.125, 1);
+  };
+  // Grace: latched pirates deal NO damage during the first 5 s.
+  const g = startVip();
+  g.pirates = [{ id: 600, progress: g.vipShip.progress, hp: 100 }, { id: 601, progress: g.vipShip.progress, hp: 100 }];
+  const grace = tick(g, 0.125, 32); // 4 s < 5 s grace
+  assert.ok(grace.vipShip && grace.vipShip.hp === 300, `no VIP damage during the 5 s grace (hp ${grace.vipShip?.hp})`);
+
+  // Under fire: 2 pirates × 6/s → 300 HP lasts ≈25 s after the grace.
+  // Pirate HP is pinned so ambient coast-guard fire (4/s) cannot end
+  // the measurement early — this isolates the pirate→VIP damage rate.
+  const g2 = startVip();
+  g2.pirates = [{ id: 602, progress: 0, hp: 100000 }, { id: 603, progress: 0, hp: 100000 }];
+  let cur = g2, t = 0, diedAt = 0;
+  for (let i = 0; i < 400 && !diedAt; i++) { cur = tick(cur, 0.125, 1); t += 0.125; if (!cur.vipShip) diedAt = t; }
+  assert.ok(diedAt > 0, 'an undefended VIP is eventually destroyed');
+  assert.ok(diedAt >= 28 && diedAt <= 33, `undefended VIP survives ≈30 s (5 s grace + ≈25 s under fire); died at ${diedAt}s — QA measured 12.6 s before the fix`);
+}
+
+// — 13) Round 2: pirate bounty overflows to cash at a full bank —
+{
+  const g = ecoBase(); g.research.push('coastguard'); // 12 dps guard fire
+  const cap = getStats(g).bankCapacity;
+  g.idle.bank = cap; // bank completely full
+  g.pirates = [{ id: 700, progress: 0.5, hp: 1 }];
+  const cash0 = g.cash;
+  const after = tick(g, 0.125, 2);
+  assert.equal(after.piratesDestroyed, 1, 'pirate destroyed');
+  assert.equal(after.idle.bank, cap, 'bank stays at capacity (nothing swallowed, nothing over)');
+  assert.equal(after.cash, cash0 + 50, 'full bank → the whole bounty overflows to cash');
+  assert.ok(after.popups.some(p => p.text === '+50'), 'popup reports the +50 actually received');
+
+  // Partial room: what fits goes to the bank, the rest to cash.
+  const g2 = ecoBase(); g2.research.push('coastguard');
+  const cap2 = getStats(g2).bankCapacity;
+  g2.idle.bank = cap2 - 20;
+  g2.pirates = [{ id: 701, progress: 0.5, hp: 1 }];
+  const cash2 = g2.cash;
+  const after2 = tick(g2, 0.125, 2);
+  assert.equal(after2.idle.bank, cap2, 'bank topped up exactly to capacity');
+  assert.equal(after2.cash, cash2 + 30, 'the remaining 30 overflows to cash');
+}
+
+// — 15) Round 2: avgExportRate is a rolling 6 h window —
+{
+  // The rate reads the window counters only — lifetime ledger and total
+  // elapsed time no longer feed it.
+  const g = ecoBase();
+  g.idle.exportWindowDollars = 21600; g.idle.exportWindowTime = 3600;
+  g.idle.port.exportedDollars = 999999; g.elapsed = 999999;
+  assert.ok(near(getStats(g).avgExportRate, 6, 1e-9), 'avgExportRate = window $ / window time');
+  assert.ok(near(getStats(g).bankCapacity, 6 * 6 * 3600, 1), 'bank capacity sizes off the window rate');
+
+  // Accumulation: loading a tanker feeds the window exactly like the
+  // lifetime ledger; window time tracks game time.
+  const g2 = ecoBase(); g2.oil = 5000; g2.buildings.tank = 20;
+  g2.idle.port.tanker = { stage: 'loading', progress: 1, load: 0 };
+  const after2 = tick(g2, 0.125, 64); // 8 s of loading
+  assert.ok(after2.idle.exportWindowDollars > 0, 'the window accumulates realized exports');
+  assert.ok(near(after2.idle.exportWindowDollars, after2.idle.port.exportedDollars, 1e-9), 'window $ == lifetime $ inside the first window');
+  assert.ok(near(after2.idle.exportWindowTime, 8, 1e-9), 'window time tracks game time');
+
+  // Expiry: crossing 6 h of game time restarts the window empty.
+  const g3 = ecoBase();
+  g3.idle.exportWindowDollars = 5000; g3.idle.exportWindowTime = 6 * 3600 - 0.5;
+  const after3 = tick(g3, 1, 1);
+  assert.equal(after3.idle.exportWindowTime, 0, 'expired window restarts (time)');
+  assert.equal(after3.idle.exportWindowDollars, 0, 'expired window restarts (dollars)');
+  assert.equal(getStats(after3).avgExportRate, 0, 'the rate restarts with the window');
+
+  // Prestige restarts the window.
+  const g4 = ecoBase(); Object.assign(g4, { cash: 200000, highestWave: 12 });
+  g4.idle.exportWindowDollars = 7200; g4.idle.exportWindowTime = 1800;
+  const after4 = gameReducer(g4, { type: 'prestige' });
+  assert.equal(after4.idle.exportWindowDollars, 0, 'prestige restarts the export window ($)');
+  assert.equal(after4.idle.exportWindowTime, 0, 'prestige restarts the export window (time)');
+}
+
 // — 9) Regression probe: 400 peace ticks, fixed economy seed —
 {
   const g = ecoBase();
@@ -301,6 +473,8 @@ assert.equal(upgradeCost('oil', 9), Math.ceil(100 * Math.pow(1.15, 9)));
     ammo: Math.round(after.ammo * 100) / 100, bank: Math.round(after.idle.bank * 100) / 100,
     lifetimeIncome: Math.round(after.idle.lifetimeIncome * 100) / 100,
     exportedDollars: Math.round((after.idle.port.exportedDollars ?? 0) * 100) / 100,
+    exportWindowDollars: Math.round((after.idle.exportWindowDollars ?? 0) * 100) / 100,
+    exportWindowTime: Math.round((after.idle.exportWindowTime ?? 0) * 100) / 100,
     tankerStage: after.idle.port.tanker?.stage ?? null, tankerLoad: Math.round((after.idle.port.tanker?.load ?? 0) * 100) / 100,
     cycles: after.idle.port.cycles, merchants: after.merchants.length, security: after.security,
     destroyed: after.destroyed, piratesDestroyed: after.piratesDestroyed ?? 0,

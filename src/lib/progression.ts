@@ -46,6 +46,12 @@ export interface IdleState {
   port: PortState;
   platforms: number[];
   challengeRuns: number;
+  /** Rolling 6 h game-time export window: dollars actually banked from
+   *  tanker exports inside the current window (avgExportRate numerator). */
+  exportWindowDollars: number;
+  /** Game-time seconds elapsed inside the current export window. The
+   *  window restarts empty on expiry (6 h) and at prestige. */
+  exportWindowTime: number;
 }
 export interface PortState { tanker: { stage: "approach" | "loading" | "depart"; progress: number; load: number } | null; nextIn: number; cycles: number; /** Lifetime realized export income in $ — the basis of the realized export rate (R11). */ exportedDollars: number; }
 export function initialIdle(): IdleState {
@@ -56,6 +62,7 @@ export function initialIdle(): IdleState {
     waveStartedAt: 0, waveStartKills: 0, rewards: [], lootSeed: 17381, openedChests: 0, completedContracts: 0,
     contract: null, offline: null, appliedDailyIds: [],
     port: { tanker: { stage: "approach", progress: 0, load: 0 }, nextIn: 0, cycles: 0, exportedDollars: 0 }, platforms: [], challengeRuns: 0,
+    exportWindowDollars: 0, exportWindowTime: 0,
   };
 }
 
