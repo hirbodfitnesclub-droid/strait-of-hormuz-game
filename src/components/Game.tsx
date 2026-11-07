@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useReducer, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import {
   Anchor, ArrowLeft, Award, Bell, Blocks, Check, ChevronDown, ChevronLeft, CircleHelp,
-  Coins, Crosshair, Factory, FastForward, Flame, FlaskConical, Heart, Home, Layers3,
+  Coins, Crosshair, Factory, FastForward, Flame, FlaskConical, Fuel, Gauge, Heart, Home, Layers3,
   Map as MapIcon, Minus, Moon, MoreHorizontal, Navigation, Pause, Play, Plus,
   Droplets, Rocket, Settings2, Shield, ShieldCheck, Sparkles, Sun, Swords, Target, Volume2,
   VolumeX, Waves, X, Zap, Star, UsersRound, ClipboardList, Gift,
@@ -11,7 +11,7 @@ import {
 import { SLOTS, BUILDINGS, TOWERS, gameReducer, getStats, hydrateGame, initialGame, enemyPosition, waveComposition, bossEnemy, type BuildingId, type Spell, type TowerKind, platformCost } from "@/lib/game";
 import { BattleAudio, type BattleSound } from "@/lib/battle-audio";
 import { isWater, nearestWater } from "@/lib/navigation";
-import { compact, fa } from "./game-ui";
+import { compact, fa, stabilityBreakdown } from "./game-ui";
 import WorldView3D from "./WorldView3D";
 import TowerSheet from "./TowerSheet";
 import SlotRadial from "./SlotRadial";
@@ -31,9 +31,14 @@ const spells: { id: Spell; name: string; short: string; icon: typeof Rocket; coo
   { id: "emp", name: "پالس الکترومغناطیسی", short: "پالس EMP", icon: Zap, cooldown: 90, key: "2" },
   { id: "overdrive", name: "اورکلاک دفاع", short: "اورکلاک", icon: Flame, cooldown: 120, key: "3" },
 ];
-const navigation: { id: "map" | "economy" | "missions" | "managers" | "more"; label: string; icon: typeof MapIcon }[] = [
-  { id:"map",label:"نقشه",icon:MapIcon }, { id:"economy",label:"اقتصاد",icon:Factory },
-  { id:"missions",label:"مأموریت‌ها",icon:ClipboardList }, { id:"managers",label:"مدیران",icon:UsersRound }, { id:"more",label:"بیشتر",icon:MoreHorizontal },
+/* Bottom bar per checklist §۱۴: اقتصاد / برجک‌ها / شهر / فناوری / اتاق جنگ —
+   the four panels the audit found buried inside "بیشتر" (متوسط-۳۹) are
+   first-class nav items now; missions/managers/heroes/events/settings live
+   in the More menu. */
+const navigation: { id: PanelName | "more"; label: string; icon: typeof MapIcon }[] = [
+  { id:"economy",label:"اقتصاد",icon:Factory }, { id:"defense",label:"برجک‌ها",icon:Shield },
+  { id:"city",label:"شهر",icon:Home }, { id:"research",label:"فناوری",icon:FlaskConical },
+  { id:"war",label:"اتاق جنگ",icon:Swords }, { id:"more",label:"بیشتر",icon:MoreHorizontal },
 ];
 
 export default function Game() {
@@ -50,6 +55,7 @@ export default function Game() {
   const [selectedSlot, setSelectedSlot] = useState<number | null>(null);
   const [sheetSlot, setSheetSlot] = useState<number | null>(null);
   const [valveOpen, setValveOpen] = useState(false);
+  const [stabOpen, setStabOpen] = useState(false);
   useEffect(() => { if (selectedSlot === null) setSheetSlot(null); }, [selectedSlot]);
   const [selectedBuilding, setSelectedBuilding] = useState<BuildingId | null>(null);
   const [previewKind, setPreviewKind] = useState<TowerKind>("cannon");
@@ -96,6 +102,10 @@ export default function Game() {
   interfaceRef.current = interfacePaused;
   gameRef.current = game; soundRef.current = sound; vibrationRef.current = vibration; pauseRef.current = battlePaused;
   const stats = getStats(game);
+  /* Real export $/s from the ECO team's stat (R11). Consumed defensively:
+     until getStats provides it, every "real rate" display stays hidden
+     instead of presenting the theoretical dollarRate as real income. */
+  const realExportRate = (stats as { realExportRate?: number }).realExportRate;
   const isNight = game.manualNight !== (Math.floor(game.elapsed / 180) % 2 === 1);
 
   const notify = useCallback((message: string) => {
@@ -241,7 +251,7 @@ export default function Game() {
       const sc = scenarioForWave(game.wave, game.mode);
       setBulletin({ kind: "briefing", scenario: sc, wave: game.wave });
       setDiary(appendDiary({ at: Date.now(), wave: game.wave, kind: "before", headline: sc.newsBefore.headline, body: sc.newsBefore.body }));
-      playSound(isBoss ? "boss" : "wave"); setCoachDismissed(true);
+      playSound(isBoss ? "boss" : "wave");
       if (vibrationRef.current && typeof navigator !== "undefined" && "vibrate" in navigator && isBoss) navigator.vibrate([40, 40, 60]);
     } else if (previousPhase.current === "battle" && game.phase === "intermission") {
       setAnnouncement(null); playSound("victory");
@@ -287,6 +297,7 @@ export default function Game() {
   const activateSpell = (spell: Spell) => {
     if (!activeBattle) { notify("ابتدا موج را شروع کنید؛ سپس از مهارت‌ها کمک بگیرید."); return; }
     if (game.cooldowns[spell] > 0) return;
+    if (coachStep === 3) setCoachDismissed(true); // coach step 3 done: a spell was used
     feedback(); setShowMapTools(false);
     if (spell === "strike") {
       const strongest = [...game.enemies].sort((a, b) => b.hp - a.hp)[0];
@@ -388,19 +399,30 @@ export default function Game() {
   const total = 5 + Math.min(game.wave, 15) + (game.wave % 5 === 0 ? 1 : 0);
   const progress = activeBattle ? Math.max(0, Math.min(1, 1 - remaining / total)) : game.phase === "intermission" ? 1 : 0;
   const actionLabel = activeBattle ? paused ? "ادامه نبرد" : "مکث نبرد" : game.phase === "intermission" ? "موج بعدی" : game.phase === "defeat" ? "دوباره تلاش کن" : "شروع دفاع";
-  const showCoach = false;
+  /* Three-step first-run coach (checklist §۱۴): build a defense line →
+     start the wave → help with a spell. New players only (no completed
+     wave, no prestige), dismissible, and once dismissed or finished it
+     never returns — the flag persists in preferences, and highestWave
+     advancing past 0 retires it for good. */
+  const coachStep = !preferencesLoaded || coachDismissed || game.prestige > 0 || game.highestWave > 0 ? 0
+    : game.phase === "battle" ? 3
+    : game.towers.length === 0 ? 1 : 2;
+  const showCoach = coachStep > 0;
   const boss = activeBattle ? bossEnemy(game) : null;
   const showCombo = activeBattle && (game.combo ?? 0) >= 3;
   const previewUnits = !activeBattle ? waveComposition(game.wave) : [];
   const mission = currentMission(game);
   const coachTarget = !mission ? "" : mission.id === "first-profit" ? "collect" : mission.id === "first-defense" || mission.id === "third-wave" || mission.id === "first-boss" || mission.id === "tenth-wave" ? "battle" : mission.metric === "building" ? "building" : mission.metric === "towers" || mission.metric === "towerTier" ? "tower" : mission.metric === "managers" ? "manager" : "";
-  const moreIsActive = moreOpen || (panel !== null && panel !== "economy") || progressPanel==="contracts" || progressPanel==="daily";
+  const moreIsActive = moreOpen || panel === "hero" || panel === "events" || panel === "settings" || progressPanel !== null;
+  const goMap = () => { setPanel(null); setProgressPanel(null); setMoreOpen(false); setTargeting(null); setSelectedSlot(null); setSelectedBuilding(null); feedback(); };
 
-  return <div className={`game-shell ${activeBattle ? "in-battle" : ""} ${cinematic ? "cinematic" : "effects-light"} ${reducedMotion ? "reduce-motion" : ""} ${coachTarget ? `coach-${coachTarget}` : ""} ${game.hearts <= 5 && activeBattle ? "danger-low" : ""}`} dir="rtl">
+  return <div className={`game-shell ${activeBattle ? "in-battle" : ""} ${cinematic ? "cinematic" : "effects-light"} ${reducedMotion ? "reduce-motion" : ""} ${coachTarget ? `coach-${coachTarget}` : ""} ${coachStep === 3 ? "coach-spell" : ""} ${game.hearts <= 5 && activeBattle ? "danger-low" : ""}`} dir="rtl">
     <header className="app-header">
       <div className="app-brand"><span className="brand-symbol"><Anchor size={22} /></span><div><strong>هرمز</strong><span>فرماندهی آب‌های آزاد</span></div></div>
       <div className="essential-resources" aria-label="منابع اصلی">
-        <button className="resource-pill money" onClick={() => openPanel("economy")} aria-label={`دلار نفتی ${fa(game.cash)}`}><Coins size={18} /><span><small>دلار نفتی</small><strong>{compact(game.cash)}</strong></span><em>+{fa(stats.dollarRate)}/ث</em></button>
+        <button className="resource-pill money" onClick={() => openPanel("economy")} aria-label={`دلار نفتی ${fa(game.cash)}`}><Coins size={18} /><span><small>دلار نفتی</small><strong>{compact(game.cash)}</strong></span>{typeof realExportRate === "number" && <em>+{fa(realExportRate, 1)}/ث</em>}</button>
+        <button className={`resource-pill ${game.oil >= stats.oilCapacity - 1 ? "low-resource" : ""}`} onClick={() => openPanel("economy")} aria-label={`نفت خام ${fa(game.oil)} از ${fa(stats.oilCapacity)} بشکه`}><Droplets size={17} /><span><small>نفت خام</small><strong>{compact(game.oil)}</strong></span></button>
+        <button className={`resource-pill ${game.fuel < 100 ? "low-resource" : ""}`} onClick={() => openPanel("economy")} aria-label={`سوخت ${fa(game.fuel)}`}><Fuel size={17} /><span><small>سوخت</small><strong>{compact(game.fuel)}</strong></span></button>
         <button className="resource-pill" onClick={() => openPanel("economy")} aria-label={`فولاد ${fa(game.steel)}`}><Blocks size={17} /><span><small>فولاد</small><strong>{compact(game.steel)}</strong></span></button>
         <button className={`resource-pill ${game.ammo < 100 ? "low-resource" : ""}`} onClick={() => openPanel("economy")} aria-label={`مهمات ${fa(game.ammo)}`}><Target size={18} /><span><small>مهمات</small><strong>{compact(game.ammo)}</strong></span></button>
       </div>
@@ -411,14 +433,15 @@ export default function Game() {
 <WorldView3D game={game} selectedSlot={selectedSlot} targeting={targeting} targetPreview={targetPreview} isNight={isNight} onSlot={chooseSlot} onBuilding={chooseBuilding} onPlatform={id => { const built = game.idle.platforms ?? []; if (built.includes(id)) return; if (game.cash < platformCost(built.length)) { notify("دلار کافی برای ساخت سکوی نفتی ندارید."); return; } dispatch({ type: "build-platform", id }); notify("سکوی نفتی ساخته شد؛ +۸ بشکه بر ثانیه"); feedback(); }} onHero={() => { setTargeting("hero"); setTargetPreview(game.hero); setSelectedSlot(null); feedback(); }} onHero2={() => { if (game.hero2) { setTargeting("hero2"); setTargetPreview(game.hero2); setSelectedSlot(null); feedback(); } }} onInspect={id => { dispatch({ type: "inspect", id }); notify("محموله کشف شد؛ ۵۰ فولاد دریافت کردید."); feedback(); }} onGroundAction={handleGroundAction} onGroundHover={handleGroundHover} />
 
       <IdleHud game={game} hidden={interfacePaused||targeting!==null} onCollect={collectIncome} onBoost={activateProduction} onBattle={mainAction} onMission={navigateMission} onClaimMission={claimMission} onJournal={()=>openProgress("missions")} onManagers={()=>openProgress("managers")} onDaily={()=>openProgress("daily")} onContracts={()=>openProgress("contracts")} dailyAvailable={daily?.available??false} />
-      <div className="wave-hud"><div className="wave-hud-main"><button onClick={() => openPanel("war")} aria-label="انتخاب حالت نبرد"><Waves size={19} /><span>موج <strong>{fa(game.wave)}</strong><small>{game.mode === "campaign" ? "/ ۲۵" : game.mode === "endless" ? " / ∞" : " / چالش"}</small></span><ChevronDown size={12} /></button><span className="hud-divider" /><span className="base-health"><Heart size={16} fill="currentColor" /><strong>{fa(game.hearts)}</strong><small>/۲۰</small></span></div><div className="wave-progress"><i style={{ width: `${progress * 100}%` }} /></div>{!activeBattle && previewUnits.length > 0 && <div className="wave-preview" aria-label="ترکیب موج بعدی">{previewUnits.map(u => <span key={u.kind === "boss" ? `boss-${u.boss}` : u.kind} className={`preview-unit unit-${u.kind}${u.kind === "boss" ? ` boss-${u.boss}` : ""}`} title={u.kind === "boss" ? "غول‌آخر" : u.kind === "speed" ? "تندرو" : u.kind === "corvette" ? "ناوچه" : u.kind === "air" ? "هوایی" : u.kind === "sub" ? "زیردریایی" : "ناوشکن"}>{u.kind === "boss" ? "☠" : u.kind === "air" ? "✈" : u.kind === "sub" ? "⚓" : u.kind === "destroyer" ? "⬢" : u.kind === "corvette" ? "⬣" : "▲"}<b>{fa(u.count)}</b></span>)}</div>}{activeBattle && <div className="wave-caption">{battlePaused ? <><Pause size={10} /> نبرد متوقف است</> : <><i /> {fa(remaining)} هدف باقی‌مانده</>}</div>}</div>
+      <div className="wave-hud-wrap"><div className="wave-hud"><div className="wave-hud-main"><button onClick={() => openPanel("war")} aria-label="انتخاب حالت نبرد"><Waves size={19} /><span>موج <strong>{fa(game.wave)}</strong><small>{game.mode === "campaign" ? "/ ۲۵" : game.mode === "endless" ? " / ∞" : " / چالش"}</small></span><ChevronDown size={12} /></button><span className="hud-divider" /><span className="base-health"><Heart size={16} fill="currentColor" /><strong>{fa(game.hearts)}</strong><small>/۲۰</small></span></div><div className="wave-progress"><i style={{ width: `${progress * 100}%` }} /></div><div className="wave-status-row"><button className="wave-status-item" onClick={() => openPanel("city")} aria-label="شبکهٔ برق؛ جزئیات مصرف و تولید در پنل شهر"><Zap size={11} />برق <b>{fa(stats.grid * 100)}٪</b></button><button className="wave-status-item" onClick={() => { setStabOpen(!stabOpen); feedback(); }} aria-expanded={stabOpen} aria-label="پایداری ملی و اجزای آن"><Gauge size={11} />پایداری <b>{fa(Math.round(stats.stability))}٪</b></button></div>{!activeBattle && previewUnits.length > 0 && <div className="wave-preview" aria-label="ترکیب موج بعدی">{previewUnits.map(u => <span key={u.kind === "boss" ? `boss-${u.boss}` : u.kind} className={`preview-unit unit-${u.kind}${u.kind === "boss" ? ` boss-${u.boss}` : ""}`} title={u.kind === "boss" ? "غول‌آخر" : u.kind === "speed" ? "تندرو" : u.kind === "corvette" ? "ناوچه" : u.kind === "air" ? "هوایی" : u.kind === "sub" ? "زیردریایی" : "ناوشکن"}>{u.kind === "boss" ? "☠" : u.kind === "air" ? "✈" : u.kind === "sub" ? "⚓" : u.kind === "destroyer" ? "⬢" : u.kind === "corvette" ? "⬣" : "▲"}<b>{fa(u.count)}</b></span>)}</div>}{activeBattle && <div className="wave-caption">{battlePaused ? <><Pause size={10} /> نبرد متوقف است</> : <><i /> {fa(remaining)} هدف باقی‌مانده</>}</div>}</div>{stabOpen && <div className="valve-pop stab-pop" role="dialog" aria-label="اجزای پایداری ملی"><strong>پایداری ملی · {fa(Math.round(stats.stability))} از ۱۰۰</strong>{stabilityBreakdown(game, stats).map(row => <div className="stab-row" key={row.label}><span>{row.label}</span><div className="stab-bar"><i style={{ width: `${Math.min(100, (row.value / row.max) * 100)}%` }} /></div><b>+{fa(row.value, 1)}</b></div>)}<small>پایداری روی راندمان همهٔ تولید اثر می‌گذارد؛ ضعیف‌ترین جزء را تقویت کنید.</small><button className="valve-done" onClick={() => setStabOpen(false)}>بستن</button></div>}</div>
       {boss && !interfacePaused && !targeting && <div className="boss-bar" role="status" aria-label={`غول‌آخر موج ${fa(game.wave)}`}><span className="boss-skull">☠</span><div className="boss-track"><div className="boss-fill" style={{ width: `${Math.max(0, (boss.hp / boss.maxHp) * 100)}%` }} /><span className="boss-label">غول‌آخر موج {fa(game.wave)} · {fa(Math.max(0, Math.ceil(boss.hp)))} / {fa(boss.maxHp)}</span></div></div>}
       {showCombo && !interfacePaused && !targeting && <div className="combo-badge" aria-hidden="true"><Flame size={16} fill="currentColor" /><strong>×{fa(game.combo)}</strong><span>کمبو!</span><i style={{ width: `${Math.min(100, (game.comboTimer / 3.5) * 100)}%` }} /></div>}
 
       <div className="world-status"><button className="status-pill" onClick={() => openPanel("events")}><ShieldCheck size={14} /><span>امنیت {fa(game.security)}٪</span><i /></button><button className="weather-toggle" onClick={() => { dispatch({ type: "night" }); feedback(); }} aria-label="تغییر روز و شب">{isNight ? <Moon size={16} /> : <Sun size={16} />}<span>{isNight ? "شب" : "روز"}</span></button><div className="valve-wrap"><button className={`status-pill valve-pill ${valveOpen ? "open" : ""}`} onClick={() => { setValveOpen(!valveOpen); feedback(); }} aria-expanded={valveOpen} aria-label="شیر نفت؛ درصد صادرات نفت خام"><Droplets size={14} /><span>صادرات {fa(game.oilSplit)}٪</span></button>{valveOpen && <div className="valve-pop" role="dialog" aria-label="تنظیم شیر نفت"><strong>شیر نفت α · مسیر نفت خام</strong><div className="valve-presets">{[{ value: 70, label: "درآمد بیشتر" }, { value: 40, label: "متعادل" }, { value: 20, label: "تولید دفاعی" }].map(p => <button key={p.value} className={game.oilSplit === p.value ? "selected" : ""} onClick={() => dispatch({ type: "split", value: p.value })}>{p.label}<span>صادرات {fa(p.value)}٪</span></button>)}</div><div className="allocation-labels"><span>صادرات <b>{fa(game.oilSplit)}٪</b></span><span>پالایش <b>{fa(100 - game.oilSplit)}٪</b></span></div><input type="range" dir="ltr" min="0" max="100" value={game.oilSplit} onChange={e => dispatch({ type: "split", value: Number(e.target.value) })} aria-label="درصد صادرات نفت" style={{ background: `linear-gradient(to right,#eac788 ${game.oilSplit}%,#3a5655 ${game.oilSplit}%)` }} /><small>پالایش بیشتر یعنی سوخت و فولاد دفاعی بیشتر؛ صادرات بیشتر یعنی دلار بیشتر.</small><button className="valve-done" onClick={() => setValveOpen(false)}>بستن</button></div>}</div></div>
       <div className="view-controls"><button className={`map-view-toggle ${showMapTools ? "active" : ""}`} onClick={() => setShowMapTools(!showMapTools)} aria-label="کنترل نمای نقشه" aria-expanded={showMapTools}><Layers3 size={18} /></button>{showMapTools && <div className="view-options"><button onClick={() => updateZoom(zoom * 1.5)} aria-label="بزرگ‌نمایی"><Plus size={18} /></button><span>{fa(zoom * 100)}٪</span><button onClick={() => updateZoom(zoom / 1.5)} aria-label="کوچک‌نمایی"><Minus size={18} /></button><button onClick={() => { setZoom(1); setPan({ x: 0, y: 0 }); }} aria-label="بازنشانی نما"><Navigation size={17} /></button></div>}</div>
       {!showCoach && !interfacePaused && !targeting && <button className="quick-build-button" onClick={quickBuild} title="ساخت برجک · B"><Plus size={18}/><span>ساخت برجک</span><kbd>B</kbd></button>}
-      {(game.event || game.ammo < 100 || stats.grid < 0.9 || game.oil >= stats.oilCapacity - 1) && <button className="context-alert" onClick={() => openPanel(game.event ? "events" : stats.grid < 0.9 ? "city" : "economy")}><span /><strong>{game.event ? "یک رویداد نیاز به توجه دارد" : game.ammo < 100 ? "مهمات رو به اتمام است" : stats.grid < 0.9 ? "برق شبکه را تقویت کنید" : "مخزن نفت پر شده است"}</strong><ChevronLeft size={15} /></button>}
+      {showCoach && !interfacePaused && !targeting && <div className="quick-coach" role="status"><span className="coach-symbol">{coachStep === 1 ? <Shield size={16} /> : coachStep === 2 ? <Play size={16} /> : <Sparkles size={16} />}</span><p>قدم {fa(coachStep)} از ۳ · <b>{coachStep === 1 ? "اولین برجک دفاعی‌ات را بساز" : coachStep === 2 ? "موج اول دشمن را فراخوانی کن" : "با یک مهارت به برجک‌ها کمک کن"}</b><br />{coachStep === 1 ? "روی یک جایگاه ساحلی برجک بساز تا راه نفت‌کش‌ها امن شود." : coachStep === 2 ? "دشمن در راه است؛ نبرد را شروع کن تا برجک‌ها دفاع کنند." : "از نوار مهارت‌های پایین صفحه یک اسپل بزن؛ مثلاً پالس یا اورکلاک."}</p>{coachStep === 1 && <button className="coach-build" onClick={quickBuild}>ساخت برجک</button>}{coachStep === 2 && <button className="coach-build" onClick={mainAction}>شروع موج</button>}<button className="coach-dismiss" onClick={() => setCoachDismissed(true)} aria-label="رد کردن راهنما"><X size={14} /></button></div>}
+      {(game.event || game.ammo < 100 || stats.grid < 0.9 || game.oil >= stats.oilCapacity - 1) && <button className="context-alert" onClick={() => openPanel(game.event ? "events" : stats.grid < 0.9 ? "city" : "economy")}><span /><strong>{game.event ? `رویداد فعال در تنگه؛ پایان تا ${fa(Math.max(0, Math.ceil(60 - game.eventClock)))} ثانیه` : game.ammo < 100 ? "مهمات رو به اتمام است" : stats.grid < 0.9 ? "برق شبکه را تقویت کنید" : "مخزن نفت پر شده است"}</strong><ChevronLeft size={15} /></button>}
 
       {announcement && !targeting && !interfacePaused && <div className={`battle-announcement ${announcement.type}`} key={`${announcement.title}-${announcement.subtitle}`} role="status"><span>{announcement.type === "success" ? <ShieldCheck size={24} /> : announcement.type === "power" ? <Sparkles size={24} /> : <Swords size={24} />}</span><div><strong>{announcement.title}</strong><p>{announcement.subtitle}</p></div></div>}
       {bulletin && !otherInterface && <div className={`news-bulletin ${bulletin.kind}`} role="alertdialog" aria-label="بولتن خبری جنگ"><div className="news-head"><span className="news-live"><Bell size={13} /> خبرگزاری تنگه</span><span className="news-op">عملیات «{bulletin.scenario.operationName}» · {bulletin.scenario.zone}</span><button className="news-x" onClick={() => setBulletin(null)} aria-label="بستن بولتن"><X size={15} /></button></div><strong>{bulletin.kind === "briefing" ? bulletin.scenario.newsBefore.headline : bulletin.kind === "defeat" ? bulletin.scenario.newsDefeat.headline : bulletin.scenario.newsVictory.headline}</strong><p>{bulletin.kind === "briefing" ? bulletin.scenario.newsBefore.body : bulletin.kind === "defeat" ? bulletin.scenario.newsDefeat.body : bulletin.scenario.newsVictory.body}</p>{bulletin.kind === "briefing" && <><p className="news-brief">{bulletin.scenario.briefing}</p><div className="news-chips"><span>هدف: {bulletin.scenario.objective}</span><span>دشمن: {bulletin.scenario.enemyFlavor}</span>{bulletin.scenario.specialCondition && <span>شرایط: {bulletin.scenario.specialCondition}</span>}</div></>}<div className="news-actions"><button onClick={() => setBulletin(null)}>{bulletin.kind === "briefing" ? "آغاز نبرد" : "بستن"}</button><button className="news-diary-btn" onClick={() => setDiaryOpen(true)}><ClipboardList size={14} /> دفترچه جنگ ({fa(diary.length)})</button></div></div>}
@@ -429,10 +452,10 @@ export default function Game() {
         <div className="support-actions" aria-label="مهارت‌های پشتیبانی">{spells.map(spell => {
           const cooldown = game.cooldowns[spell.id], ready = activeBattle && cooldown <= 0;
           return <button key={spell.id} className={`support-button spell-${spell.id} ${ready ? "ready" : ""} ${cooldown > 0 ? "cooling" : ""}`} onClick={() => activateSpell(spell.id)} aria-label={`${spell.name}${cooldown > 0 ? `، شارژ ${fa(Math.ceil(cooldown))} ثانیه` : ""}`} aria-disabled={cooldown > 0} title={`${spell.name} · ${spell.key}`}><span className="support-icon"><spell.icon size={21} />{cooldown > 0 && <svg viewBox="0 0 44 44" className="cooldown-ring"><circle cx="22" cy="22" r="20" style={{ strokeDashoffset: `${126 * (1 - cooldown / spell.cooldown)}` }} /></svg>}{cooldown > 0 && <b className="cooldown-count">{fa(Math.ceil(cooldown))}</b>}</span><span>{spell.short}</span></button>;
-        })}</div><div className="command-separator" /><button className={`main-battle-action ${activeBattle ? "battle-running" : ""} ${paused ? "is-paused" : ""}`} onClick={mainAction}>{activeBattle && !paused ? <Pause size={19} fill="currentColor" /> : <Play size={19} fill="currentColor" />}<span><strong>{actionLabel}</strong><small>{game.phase === "intermission" ? `+۲۵٪ پاداش · ${fa(Math.ceil(game.countdown))} ثانیه` : activeBattle ? paused ? "آمادهٔ ادامه" : "برجک‌ها خودکار شلیک می‌کنند" : "موج اول را فراخوانی کنید"}</small></span>{!activeBattle && <ArrowLeft size={18} />}</button><button className="battle-speed" onClick={() => { dispatch({ type: "speed" }); feedback(); }} aria-label={`تغییر سرعت نبرد؛ ${game.speed} برابر`} title="سرعت نبرد"><FastForward size={17} /><strong>{fa(game.speed)}×</strong></button>
+        })}<button className={`support-button boost-button ${game.idle.boostRemaining > 0 ? "ready" : ""}`} onClick={activateProduction} disabled={game.idle.boostCharges <= 0 && game.idle.boostRemaining <= 0} aria-label="تقویت تولید؛ ۶۰ ثانیه تولید دوبرابر" title="تقویت تولید · ۶۰ ثانیه ×۲"><span className="support-icon"><Zap size={21} /></span><span>{game.idle.boostRemaining > 0 ? `تولید ×۲ · ${fa(Math.ceil(game.idle.boostRemaining))}ث` : `تقویت تولید · ${fa(game.idle.boostCharges)} شارژ`}</span></button></div><div className="command-separator" /><button className={`main-battle-action ${activeBattle ? "battle-running" : ""} ${paused ? "is-paused" : ""}`} onClick={mainAction}>{activeBattle && !paused ? <Pause size={19} fill="currentColor" /> : <Play size={19} fill="currentColor" />}<span><strong>{actionLabel}</strong><small>{game.phase === "intermission" ? `+۲۵٪ پاداش · ${fa(Math.ceil(game.countdown))} ثانیه` : activeBattle ? paused ? "آمادهٔ ادامه" : "برجک‌ها خودکار شلیک می‌کنند" : "موج اول را فراخوانی کنید"}</small></span>{!activeBattle && <ArrowLeft size={18} />}</button><button className="battle-speed" onClick={() => { dispatch({ type: "speed" }); feedback(); }} aria-label={`تغییر سرعت نبرد؛ ${game.speed} برابر`} title="سرعت نبرد"><FastForward size={17} /><strong>{fa(game.speed)}×</strong></button>
       </div>}
       {targeting && <div className="targeting-prompt" role="status"><span className={targeting}><Crosshair size={22} /></span><div><strong>{targeting === "strike" ? "کجا را هدف بگیریم؟" : "ناو به کجا برود؟"}</strong><p>{targeting === "strike" ? "روی محدودهٔ دلخواه در آبراه بزنید." : "یک نقطه روی آب انتخاب کنید."}</p></div><button onClick={() => setTargeting(null)} aria-label="لغو هدف‌گیری"><X size={19} /></button></div>}
-      <nav className="bottom-navigation" aria-label="ناوبری اصلی">{navigation.map(item => <button key={item.id} className={`nav-item ${(item.id === "map" && !panel && !moreOpen && !progressPanel) || panel === item.id || progressPanel === item.id || (item.id === "more" && moreIsActive) ? "active" : ""}`} onClick={() => { if (item.id === "map") { setPanel(null); setProgressPanel(null); setMoreOpen(false); setTargeting(null); setSelectedSlot(null); setSelectedBuilding(null); feedback(); } else if (item.id === "more") { setMoreOpen(true);setProgressPanel(null);setSelectedSlot(null);feedback(); } else if(item.id==="missions"||item.id==="managers")openProgress(item.id);else openPanel(item.id); }}><item.icon size={20} strokeWidth={1.7} /><span>{item.label}</span>{item.id === "more" && (game.chests > 0 || game.event) && <i className="nav-notification" />}</button>)}</nav>
+      <nav className="bottom-navigation" aria-label="ناوبری اصلی">{navigation.map(item => <button key={item.id} className={`nav-item ${panel === item.id || (item.id === "more" && moreIsActive) ? "active" : ""}`} onClick={() => { if (item.id === "more") { setPanel(null); setProgressPanel(null); setSelectedSlot(null); setSelectedBuilding(null); setMoreOpen(true); feedback(); } else if (panel === item.id) { setPanel(null); feedback(); } else openPanel(item.id); }}><item.icon size={20} strokeWidth={1.7} /><span>{item.label}</span>{item.id === "more" && (game.chests > 0 || game.event) && <i className="nav-notification" />}</button>)}</nav>
     </main>
 
     {selectedBuilding !== null && <BuildingSheet key={selectedBuilding} id={selectedBuilding} game={game} dispatch={dispatch} close={() => setSelectedBuilding(null)} notify={notify} feedback={feedback} onEconomy={() => openPanel(BUILDINGS[selectedBuilding].category === "city" ? "city" : "economy")} onManagers={()=>openProgress("managers")} />}
@@ -440,7 +463,7 @@ export default function Game() {
     {sheetSlot !== null && <TowerSheet key={sheetSlot} game={game} slot={sheetSlot} kind={previewKind} onKindChange={setPreviewKind} dispatch={dispatch} close={() => setSheetSlot(null)} onResearch={() => openPanel("research")} onBuild={buildTower} feedback={feedback} notify={notify} />}
     {panel && <Panels panel={panel} game={game} dispatch={dispatch} close={() => setPanel(null)} notify={notify} sound={sound} setSound={setSound} vibration={vibration} setVibration={setVibration} cinematic={cinematic} setCinematic={setCinematic} onSelectTower={chooseSlot} onSelectBuilding={chooseBuilding} />}
     {progressPanel && <ProgressionPanels panel={progressPanel} game={game} dispatch={dispatch} close={()=>setProgressPanel(null)} navigate={navigateMission} feedback={feedback} notify={notify} daily={daily} dailyBusy={dailyBusy} dailyError={dailyError} claimDaily={claimDaily} reloadDaily={()=>void reloadDaily()} />}
-    {moreOpen && <MoreMenu game={game} close={() => setMoreOpen(false)} open={openPanel} openProgress={openProgress} />}
+    {moreOpen && <MoreMenu game={game} close={() => setMoreOpen(false)} open={openPanel} openProgress={openProgress} goMap={goMap} />}
     {!otherInterface && (game.idle.offline ? <OfflineView game={game} dispatch={dispatch} feedback={feedback}/> : game.idle.rewards[0] ? <RewardView key={game.idle.rewards[0].id} reward={game.idle.rewards[0]} dispatch={dispatch} feedback={feedback}/> : pendingReport ? <BattleResultView report={pendingReport} dispatch={dispatch} autoBattle={game.idle.autoBattle} feedback={feedback} onDevelop={()=>openPanel("defense")}/> : null)}
     {incomeBurst && !interfacePaused && <div className="income-burst" key={incomeBurst.id} aria-hidden="true"><strong>+${compact(incomeBurst.cash)}</strong>{Array.from({length:9},(_,i)=><span key={i} style={{"--coin-i":i} as React.CSSProperties}><Coins size={19}/></span>)}</div>}
     {helpOpen && <QuickGuide close={() => setHelpOpen(false)} />}
@@ -448,18 +471,17 @@ export default function Game() {
   </div>;
 }
 
-function MoreMenu({ game, close, open, openProgress }: { game: ReturnType<typeof initialGame>; close: () => void; open: (panel: PanelName) => void; openProgress:(panel:ProgressPanel)=>void }) {
+function MoreMenu({ game, close, open, openProgress, goMap }: { game: ReturnType<typeof initialGame>; close: () => void; open: (panel: PanelName) => void; openProgress:(panel:ProgressPanel)=>void; goMap:()=>void }) {
   const ref = useDialog<HTMLElement>(close);
-  const items: { panel: PanelName; icon: typeof Shield; title: string; sub: string; badge?: string }[] = [
-    { panel: "city", icon: Home, title: "شهر و زیرساخت", sub: "برق، آب و جزایر" },
-    { panel: "defense", icon: Shield, title: "شبکهٔ دفاعی", sub: "برجک‌ها و کارت‌های ارتقا", badge: game.chests ? `${fa(game.chests)} صندوقچه` : undefined },
-    { panel: "hero", icon: Award, title: "فرماندهان", sub: "انتخاب یگان ویژه" },
-    { panel: "war", icon: Swords, title: "اتاق جنگ", sub: "کمپین، بقا و چالش" },
-    { panel: "events", icon: Bell, title: "گزارش‌های تنگه", sub: "رویدادها و امنیت", badge: game.event ? "جدید" : undefined },
-    { panel: "settings", icon: Settings2, title: "تنظیمات", sub: "صدا، جلوه‌ها و ذخیره" },
-    { panel:"research",icon:FlaskConical,title:"پژوهشگاه ملی",sub:"مزیت‌های دائمی تولید و دفاع" },
+  const items: { key: string; icon: typeof Shield; title: string; sub: string; badge?: string; act: () => void }[] = [
+    { key: "map", icon: MapIcon, title: "نقشهٔ تنگه", sub: "بازگشت به نمای زنده", act: goMap },
+    { key: "missions", icon: ClipboardList, title: "مأموریت‌ها", sub: "هدف‌ها و پاداش فصل", act: () => openProgress("missions") },
+    { key: "managers", icon: UsersRound, title: "مدیران", sub: "خودکارسازی بندر و تولید", act: () => openProgress("managers") },
+    { key: "hero", icon: Award, title: "فرماندهان", sub: "انتخاب یگان ویژه", act: () => open("hero") },
+    { key: "events", icon: Bell, title: "گزارش‌های تنگه", sub: "رویدادها و امنیت", badge: game.event ? "جدید" : undefined, act: () => open("events") },
+    { key: "settings", icon: Settings2, title: "تنظیمات", sub: "صدا، جلوه‌ها و ذخیره", act: () => open("settings") },
   ];
-  return <div className="compact-dialog-backdrop" onClick={close}><section className="more-menu" ref={ref} role="dialog" aria-modal="true" aria-labelledby="more-title" tabIndex={-1} onClick={e => e.stopPropagation()}><div className="sheet-handle" /><header><div><span className="sheet-eyebrow">مرکز فرماندهی</span><h2 id="more-title">همه‌چیز، همین‌جاست.</h2></div><button className="close-control" onClick={close} aria-label="بستن منو"><X size={19} /></button></header><div className="more-grid">{items.map(item => <button key={item.panel} onClick={() => open(item.panel)}><span className="more-icon"><item.icon size={22} /></span><strong>{item.title}</strong><small>{item.sub}</small>{item.badge && <span className="more-badge">{item.badge}</span>}<ArrowLeft size={14} className="more-arrow" /></button>)}</div><div className="more-business-links"><button onClick={()=>openProgress("contracts")}><ShipIcon/> قراردادهای تجاری <ArrowLeft size={14}/></button><button onClick={()=>openProgress("daily")}><Gift size={18}/> هدیهٔ روزانه <ArrowLeft size={14}/></button></div><p className="menu-save-note"><Check size={12} /> پیشرفت شما خودکار ذخیره می‌شود.</p></section></div>;
+  return <div className="compact-dialog-backdrop" onClick={close}><section className="more-menu" ref={ref} role="dialog" aria-modal="true" aria-labelledby="more-title" tabIndex={-1} onClick={e => e.stopPropagation()}><div className="sheet-handle" /><header><div><span className="sheet-eyebrow">مرکز فرماندهی</span><h2 id="more-title">همه‌چیز، همین‌جاست.</h2></div><button className="close-control" onClick={close} aria-label="بستن منو"><X size={19} /></button></header><div className="more-grid">{items.map(item => <button key={item.key} onClick={item.act}><span className="more-icon"><item.icon size={22} /></span><strong>{item.title}</strong><small>{item.sub}</small>{item.badge && <span className="more-badge">{item.badge}</span>}<ArrowLeft size={14} className="more-arrow" /></button>)}</div><div className="more-business-links"><button onClick={()=>openProgress("contracts")}><ShipIcon/> قراردادهای تجاری <ArrowLeft size={14}/></button><button onClick={()=>openProgress("daily")}><Gift size={18}/> هدیهٔ روزانه <ArrowLeft size={14}/></button></div><p className="menu-save-note"><Check size={12} /> پیشرفت شما خودکار ذخیره می‌شود.</p></section></div>;
 }
 
 function QuickGuide({ close }: { close: () => void }) {

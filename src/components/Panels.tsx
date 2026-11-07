@@ -8,7 +8,7 @@ import {
   ShieldCheck, Sparkles, Swords, Target, Trophy, Waves, X, Zap,
 } from "lucide-react";
 import {
-  BUILDINGS, CHALLENGE_RULES, ISLANDS, RESEARCH, SLOTS, TOWERS, TOWER_KINDS, getStats, towerDps, upgradeCost,
+  BUILDINGS, CHALLENGE_RULES, ISLANDS, RESEARCH, SLOTS, TOWERS, TOWER_KINDS, getStats, tankerCapacityFor, towerDps, upgradeCost,
   type Action, type BuildingId, type GameState, type Mode, type TowerKind,
   powerBreakdown,
 } from "@/lib/game";
@@ -65,6 +65,32 @@ function BuildingCard({ id, game, dispatch, notify, inspect }: { id: BuildingId;
   </div>;
 }
 
+/** Port & tanker card: live cycle state from idle.port (stage, load,
+ *  countdowns) plus the REAL export rate when the ECO team's stat exists.
+ *  realExportRate is consumed defensively — until it lands in getStats the
+ *  rate row simply stays hidden instead of showing the theoretical rate
+ *  (audit finding: HUD showed theoretical dollarRate as if it were real). */
+function PortCard({ game }: { game: GameState }) {
+  const stats = getStats(game);
+  const port = game.idle.port ?? { tanker: null, nextIn: 0, cycles: 0 };
+  const capacity = tankerCapacityFor(game.buildings.dock);
+  const tanker = port.tanker;
+  const realRate = (stats as { realExportRate?: number }).realExportRate;
+  const stageLabel = !tanker ? "در انتظار نفت‌کش بعدی" : tanker.stage === "approach" ? "نفت‌کش در راه پهلوگیری است" : tanker.stage === "loading" ? "در حال بارگیری نفت خام" : "در حال خروج از بندر";
+  const stagePct = !tanker ? 0 : tanker.stage === "loading" ? tanker.load / Math.max(1, capacity) : tanker.progress;
+  const stageEta = tanker && tanker.stage === "approach" ? Math.ceil((1 - tanker.progress) / 0.04) : tanker && tanker.stage === "depart" ? Math.ceil(tanker.progress / 0.04) : null;
+  return <section className="port-card" aria-label="وضعیت بندر و نفت‌کش">
+    <div className="port-card-head"><span><Ship size={18} /></span><div><h3>بندر و نفت‌کش</h3><p>{stageLabel}</p></div><span className="tiny-badge">چرخهٔ تکمیل‌شده: {fa(port.cycles)}</span></div>
+    <div className="small-progress"><i style={{ width: `${Math.round(stagePct * 100)}%` }} /></div>
+    <div className="port-card-rows">
+      {tanker ? <span>بار نفت‌کش <b>{compact(tanker.load)} / {compact(capacity)} بشکه</b></span> : <span>نفت‌کش بعدی <b>تا {fa(Math.max(0, Math.ceil(port.nextIn)))} ثانیهٔ دیگر</b></span>}
+      {stageEta !== null && <span>پایان این مرحله <b>~{fa(stageEta)} ثانیه</b></span>}
+      <span>سهم صادرات از تولید (α) <b>{fa(game.oilSplit)}٪</b></span>
+      {typeof realRate === "number" && <span>نرخ صادرات واقعی <b className="green-text">+${fa(realRate, 1)}/ث</b></span>}
+    </div>
+  </section>;
+}
+
 function Economy({ game, dispatch, notify, onSelectBuilding }: Props) {
   const stats = getStats(game);
   return <>
@@ -75,6 +101,7 @@ function Economy({ game, dispatch, notify, onSelectBuilding }: Props) {
       <div><span>ظرفیت مخزن</span><strong>{compact(game.oil)} <small>/ {compact(stats.oilCapacity)}</small></strong></div>
     </div>
     <section className="oil-allocation"><div className="allocation-heading"><span><Droplets size={18} /></span><div><h3>نفت به کدام مسیر برود؟</h3><p>انتخاب شما فوراً روی درآمد و تولید اثر می‌گذارد.</p></div></div><div className="allocation-presets">{[{value:70,label:"درآمد بیشتر",sub:"صادرات ۷۰٪"},{value:40,label:"متعادل",sub:"صادرات ۴۰٪"},{value:20,label:"تولید دفاعی",sub:"پالایش ۸۰٪"}].map(preset => <button key={preset.value} className={game.oilSplit === preset.value ? "selected" : ""} onClick={() => dispatch({type:"split",value:preset.value})}><strong>{preset.label}</strong><span>{preset.sub}</span>{game.oilSplit === preset.value && <Check size={12}/>}</button>)}</div><div className="allocation-labels"><span>صادرات <b>{fa(game.oilSplit)}٪</b></span><span>پالایش <b>{fa(100-game.oilSplit)}٪</b></span></div><input type="range" dir="ltr" min="0" max="100" value={game.oilSplit} onChange={e=>dispatch({type:"split",value:Number(e.target.value)})} aria-label="درصد صادرات نفت" style={{background:`linear-gradient(to right,#eac788 ${game.oilSplit}%,#3a5655 ${game.oilSplit}%)`}} /><div className="supply-resources"><span><Droplets size={14}/> نفت <b>{compact(game.oil)}</b></span><span><Fuel size={14}/> سوخت <b>{compact(game.fuel)}</b></span><span><Zap size={14}/> برق <b>{fa(stats.grid*100)}٪</b></span></div></section>
+    <PortCard game={game} />
     <div className="drawer-section-heading"><div><strong>زنجیره تأمین</strong><p>هر ۱۰ سطح، تولید سازه دو برابر می‌شود.</p></div><span className="tiny-badge">۶ سازه</span></div>
     <div className="building-list">{(["oil", "tank", "dock", "refinery", "steel", "arms"] as BuildingId[]).map(id => <BuildingCard key={id} id={id} game={game} dispatch={dispatch} notify={notify} inspect={onSelectBuilding} />)}</div>
     <div className="drawer-note"><Flame size={16} /> نفت بیشتر برای پالایش، سوخت و مهمات بیشتری برای دفاع فراهم می‌کند.</div>
@@ -96,6 +123,7 @@ function Defense({ game, dispatch, notify, onSelectTower, close }: Props) {
 }
 
 function City({ game, dispatch, notify, onSelectBuilding }: Props) {
+  const [prestigeArmed, setPrestigeArmed] = useState(false);
   const stats = getStats(game);
   return <>
     <div className="drawer-intro"><div className="intro-icon teal"><BatteryCharging size={23} /></div><div><strong>پشتوانه یک تنگه قدرتمند</strong><p>برق، آب و رفاه، راندمان صنعت و پدافند را تعیین می‌کنند.</p></div></div>
@@ -108,7 +136,30 @@ function City({ game, dispatch, notify, onSelectBuilding }: Props) {
       if (game.cash < island.cost) { notify("دلار کافی برای آزادسازی جزیره ندارید."); return; }
       dispatch({ type: "unlock", island: island.id }); notify(`${island.name} آزاد شد.`);
     }}>{game.islands.includes(island.id) ? "آزاد شده" : `آزادسازی $${compact(island.cost)}`}</button></div>)}</div>
-    <div className="prestige-box"><Award size={24} /><div><strong>طرح جامع توسعه ملی</strong><p>با رسیدن به موج ۱۰ و ۱۰۰ هزار دلار، وارد فاز جدید شوید و نشان دائمی بگیرید.</p><small>نشان اقتدار: {fa(game.prestige)}</small></div><button disabled={game.cash < 100000 || game.highestWave < 10} onClick={() => { if(window.confirm("پول، خزانه و سطح سازه‌های اقتصادی از ابتدا شروع می‌شوند. مدیرها، کارت‌ها و جزایر حفظ می‌شوند و یک نشان دائمی قدرت دریافت می‌کنید. آمادهٔ شروع فاز تازه هستید؟")){ dispatch({ type: "prestige" }); notify("فاز جدید توسعه ملی آغاز شد."); } }}>امضای فرمان</button></div>
+    <div className="prestige-box"><Award size={24} /><div><strong>طرح جامع توسعه ملی</strong><p>با رسیدن به موج ۱۰ و ۱۰۰ هزار دلار، وارد فاز جدید شوید و نشان دائمی بگیرید.</p><small>نشان اقتدار: {fa(game.prestige)}</small></div><button disabled={game.cash < 100000 || game.highestWave < 10} onClick={() => setPrestigeArmed(true)}>بررسی فرمان</button></div>
+    {prestigeArmed && <div className="prestige-confirm" role="alertdialog" aria-label="تأیید طرح جامع توسعه ملی">
+      <strong>پیش از امضای فرمان، دقیقاً چه اتفاقی می‌افتد؟</strong>
+      <div className="prestige-lists">
+        <div><h4>از نو شروع می‌شود</h4><ul>
+          <li>دلار و همهٔ منابع (نفت، سوخت، فولاد، مهمات)</li>
+          <li>سطح همهٔ ساختمان‌ها</li>
+          <li>همهٔ برجک‌های مستقر — خط دفاع از نو ساخته می‌شود</li>
+          <li>سکوهای نفتی، بانک بندر و چرخهٔ نفت‌کش</li>
+          <li>مأموریت‌های دریافت‌شده و قرارداد فعال</li>
+          <li>نبرد از موج ۱</li>
+        </ul></div>
+        <div><h4>حفظ می‌شود</h4><ul>
+          <li>همهٔ پژوهش‌های تکمیل‌شده</li>
+          <li>کارت‌های ارتقای برجک‌ها و سطحشان</li>
+          <li>مدیرها و سطحشان</li>
+          <li>جزیره‌های آزادشده</li>
+          <li>فرماندهان و صندوقچه‌ها</li>
+          <li>رکورد بالاترین موج و ستاره‌های کمپین</li>
+        </ul></div>
+      </div>
+      <p>پاداش فوری: ۲۰۰ تجربه + ۲ صندوقچه + ۲ شارژ تقویت تولید؛ و هر نشان اقتدار برای همیشه +۱۰٪ تولید و آسیب برجک‌ها می‌دهد.</p>
+      <div className="prestige-actions"><button className="prestige-go" onClick={() => { dispatch({ type: "prestige" }); setPrestigeArmed(false); notify("فاز جدید توسعه ملی آغاز شد."); }}>امضای فرمان و شروع فاز تازه</button><button onClick={() => setPrestigeArmed(false)}>انصراف</button></div>
+    </div>}
   </>;
 }
 
@@ -152,16 +203,17 @@ function Heroes({ game, dispatch, notify, close }: Props) {
     { name: "دریادار مهندس", ship: "ناو پهپادبر", skill: "حمله به قوی‌ترین هدف در میدان", icon: Radio },
     { name: "فرمانده زیردریایی فاتح", ship: "زیردریایی شکارچی", skill: "تخصص در شکار ناوهای سنگین", icon: Anchor },
   ];
-  return <><div className="drawer-intro"><div className="intro-icon gold"><Award size={23} /></div><div><strong>فرمانده خود را انتخاب کنید</strong><p>یگان فرمانده را روی نقشه لمس کنید و به آبراه بفرستید.</p></div></div><div className="hero-list">{heroes.map((hero, i) => <div className={`hero-card ${game.hero.active === i ? "chosen" : ""}`} key={hero.name}><div className="hero-avatar"><hero.icon size={24} /></div><div><strong>{hero.name}</strong><span>{hero.ship}</span><p><Sparkles size={13} /> {hero.skill}</p></div><button onClick={() => { dispatch({ type: "hero-select", hero: i }); close(); notify("فرمانده انتخاب شد. برای جابه‌جایی، ناو قهرمان را لمس کنید."); }}>{game.hero.active === i ? "انتخاب‌شده" : "انتخاب"}</button></div>)}</div>
-  {game.highestWave >= 5 ? <><div className="drawer-section-heading space-top"><div><strong>فرمانده دوم — استقرار همزمان</strong><p>دو فرمانده می‌توانند همزمان در آبراه بجنگند؛ پرسونا باید متفاوت از فرمانده اول باشد.</p></div></div><div className="hero-list">{heroes.map((hero, i) => { const deployed = game.hero2?.active === i, isFirst = game.hero.active === i; return <div className={`hero-card ${deployed ? "chosen" : ""}`} key={`h2-${hero.name}`}><div className="hero-avatar"><hero.icon size={24} /></div><div><strong>{hero.name}</strong><span>{hero.ship}</span><p><Sparkles size={13} /> {hero.skill}</p></div><button disabled={isFirst} onClick={() => { if (game.hero2) { dispatch({ type: "hero2-select", hero: i }); notify("پرسونای فرمانده دوم تغییر کرد."); } else { if (game.cash < 3000) { notify("برای استقرار فرمانده دوم ۳۰۰۰ دلار لازم است."); return; } dispatch({ type: "deploy-hero2", hero: i }); notify("فرمانده دوم در آبراه مستقر شد."); } close(); }}>{isFirst ? "فرمانده اول" : deployed ? "فرمانده دوم" : game.hero2 ? "جایگزینی" : "استقرار · $۳٬۰۰۰"}</button></div>; })}</div>{game.hero2 && <button className="all-research-toggle" onClick={() => { dispatch({ type: "recall-hero2" }); notify("فرمانده دوم فراخوانده شد."); }}>فراخوان فرمانده دوم</button>}</> : <div className="drawer-note"><LockKeyhole size={15} /> فرمانده دوم پس از شکست نخستین غول‌آخر (موج ۵) آزاد می‌شود.</div>}</>;
+  const inBattle = game.phase === "battle";
+  return <><div className="drawer-intro"><div className="intro-icon gold"><Award size={23} /></div><div><strong>فرمانده خود را انتخاب کنید</strong><p>یگان فرمانده را روی نقشه لمس کنید و به آبراه بفرستید.</p></div></div>{inBattle && <div className="drawer-note"><LockKeyhole size={15} /> وسط نبرد تعویض فرمانده ممکن نیست؛ تغییر پرسونا فقط بیرون از نبرد انجام می‌شود.</div>}<div className="hero-list">{heroes.map((hero, i) => <div className={`hero-card ${game.hero.active === i ? "chosen" : ""}`} key={hero.name}><div className="hero-avatar"><hero.icon size={24} /></div><div><strong>{hero.name}</strong><span>{hero.ship}</span><p><Sparkles size={13} /> {hero.skill}</p></div><button disabled={inBattle} onClick={() => { dispatch({ type: "hero-select", hero: i }); close(); notify("فرمانده انتخاب شد. برای جابه‌جایی، ناو قهرمان را لمس کنید."); }}>{game.hero.active === i ? "انتخاب‌شده" : inBattle ? "قفل در نبرد" : "انتخاب"}</button></div>)}</div>
+  {game.highestWave >= 5 ? <><div className="drawer-section-heading space-top"><div><strong>فرمانده دوم — استقرار همزمان</strong><p>دو فرمانده می‌توانند همزمان در آبراه بجنگند؛ پرسونا باید متفاوت از فرمانده اول باشد.</p></div></div><div className="hero-list">{heroes.map((hero, i) => { const deployed = game.hero2?.active === i, isFirst = game.hero.active === i, swapLocked = inBattle && !!game.hero2; return <div className={`hero-card ${deployed ? "chosen" : ""}`} key={`h2-${hero.name}`}><div className="hero-avatar"><hero.icon size={24} /></div><div><strong>{hero.name}</strong><span>{hero.ship}</span><p><Sparkles size={13} /> {hero.skill}</p></div><button disabled={isFirst || swapLocked} onClick={() => { if (game.hero2) { dispatch({ type: "hero2-select", hero: i }); notify("پرسونای فرمانده دوم تغییر کرد."); } else { if (game.cash < 3000) { notify("برای استقرار فرمانده دوم ۳۰۰۰ دلار لازم است."); return; } dispatch({ type: "deploy-hero2", hero: i }); notify("فرمانده دوم در آبراه مستقر شد."); } close(); }}>{isFirst ? "فرمانده اول" : deployed ? "فرمانده دوم" : swapLocked ? "قفل در نبرد" : game.hero2 ? "جایگزینی" : "استقرار · $۳٬۰۰۰"}</button></div>; })}</div>{game.hero2 && <button className="all-research-toggle" onClick={() => { dispatch({ type: "recall-hero2" }); notify("فرمانده دوم فراخوانده شد."); }}>فراخوان فرمانده دوم</button>}</> : <div className="drawer-note"><LockKeyhole size={15} /> فرمانده دوم پس از شکست نخستین غول‌آخر (موج ۵) آزاد می‌شود.</div>}</>;
 }
 function Events({ game, dispatch, notify }: Props) {
   const titles = { spill: "بحران نشت نفت", storm: "طوفان حاره‌ای مونسون", vip: "اسکورت کاروان ویژه" };
   const descriptions = { spill: "لوله زیرآبی آسیب دیده است؛ کشتی مهار را اعزام کنید.", storm: "برد برجک‌ها ۲۰٪ کاهش یافته است. مراقب آبراه باشید.", vip: "یک کاروان دیپلماتیک از تنگه عبور می‌کند؛ از آن پشتیبانی کنید." };
-  return <><div className="drawer-intro"><div className="intro-icon gold"><Activity size={23} /></div><div><strong>گزارش زنده منطقه</strong><p>در برابر بحران‌ها واکنش به‌موقع نشان دهید.</p></div></div>{game.event ? <div className="event-card"><span className="event-alert">رویداد فعال</span><strong>{titles[game.event]}</strong><p>{descriptions[game.event]}</p><button onClick={() => {
+  return <><div className="drawer-intro"><div className="intro-icon gold"><Activity size={23} /></div><div><strong>گزارش زنده منطقه</strong><p>در برابر بحران‌ها واکنش به‌موقع نشان دهید.</p></div></div>{game.event ? <div className="event-card"><span className="event-alert">رویداد فعال</span><strong>{titles[game.event]}</strong><p>{descriptions[game.event]}</p><span className="event-countdown">پایان خودکار رویداد تا {fa(Math.max(0, Math.ceil(60 - game.eventClock)))} ثانیه</span><button onClick={() => {
     if (game.event === "spill" && game.cash < 300) { notify("برای اعزام کشتی ۳۰۰ دلار نیاز است."); return; }
     dispatch({ type: "resolve-event" }); notify("فرمان رسیدگی به رویداد ثبت شد.");
-  }}>{game.event === "spill" ? "اعزام کشتی مهار · $۳۰۰" : game.event === "vip" ? "پشتیبانی از کاروان" : "عبور از طوفان"}</button></div> : <div className="empty-event"><ShieldCheck size={32} /><strong>همه چیز آرام است</strong><p>در حال حاضر رویداد فعالی در تنگه گزارش نشده است.</p></div>}<div className="drawer-section-heading space-top"><div><strong>گزارش فرماندهی</strong><p>آخرین وضعیت منطقه تحت کنترل شما</p></div></div><div className="report-row"><span><Ship size={16} /> کشتی‌های عبوری</span><strong>{fa(game.trafficCount)}</strong></div><div className="report-row"><span><Target size={16} /> دشمنان منهدم‌شده</span><strong>{fa(game.destroyed)}</strong></div><div className="report-row"><span><ShieldCheck size={16} /> امنیت آبراه</span><strong>{fa(game.security)}٪</strong></div></>;
+  }}>{game.event === "spill" ? "اعزام کشتی مهار · $۳۰۰" : game.event === "vip" ? "پشتیبانی از کاروان" : "عبور از طوفان"}</button></div> : <div className="empty-event"><ShieldCheck size={32} /><strong>همه چیز آرام است</strong><p>در حال حاضر رویداد فعالی در تنگه گزارش نشده است. رویداد بعدی تا حدود {fa(Math.max(0, Math.ceil(180 - game.eventClock)))} ثانیهٔ دیگر گزارش می‌شود.</p></div>}<div className="drawer-section-heading space-top"><div><strong>گزارش فرماندهی</strong><p>آخرین وضعیت منطقه تحت کنترل شما</p></div></div><div className="report-row"><span><Ship size={16} /> کشتی‌های عبوری</span><strong>{fa(game.trafficCount)}</strong></div><div className="report-row"><span><Target size={16} /> دشمنان منهدم‌شده</span><strong>{fa(game.destroyed)}</strong></div><div className="report-row"><span><ShieldCheck size={16} /> امنیت آبراه</span><strong>{fa(game.security)}٪</strong></div></>;
 }
 function Settings({ dispatch, notify, sound, setSound, vibration, setVibration, cinematic, setCinematic }: Props) {
   const settings = [

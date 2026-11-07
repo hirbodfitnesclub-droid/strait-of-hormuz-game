@@ -232,6 +232,7 @@ export class GameSync3D {
   private platforms = new Map<number, THREE.Object3D>();
   private pads = new Map<number, THREE.Object3D>();
   private rangeRing: THREE.Mesh | null = null;
+  private rangeRingNext: THREE.Mesh | null = null;
   private targetRing: THREE.Mesh | null = null;
   private ents = new Map<string, Ent>();
   private aim = new Map<number, number>();
@@ -460,18 +461,28 @@ export class GameSync3D {
   }
 
   private updateSelectionVisuals(game: GameState, targetPreview: { x: number; y: number }) {
-    if (this.rangeRing) { this.statics.remove(this.rangeRing); this.rangeRing = null; }
+    if (this.rangeRing) { this.statics.remove(this.rangeRing); this.rangeRing.geometry.dispose(); (this.rangeRing.material as THREE.Material).dispose(); this.rangeRing = null; }
+    if (this.rangeRingNext) { this.statics.remove(this.rangeRingNext); this.rangeRingNext.geometry.dispose(); (this.rangeRingNext.material as THREE.Material).dispose(); this.rangeRingNext = null; }
     if (this.targetRing) { this.statics.remove(this.targetRing); this.targetRing = null; }
     if (this.selectedSlot !== null) {
       const slot = SLOTS.find(s => s.id === this.selectedSlot);
       const tower = game.towers.find(t => t.slot === this.selectedSlot);
       if (slot) {
+        // PRD §۸٫۲: green ring = current range, blue ring = next level's range.
         const rangePct = tower ? getRange(game, tower) : 17;
         const r = rangePct * 6.58;
-        const ring = new THREE.Mesh(new THREE.RingGeometry(r - 1.2, r, 64), new THREE.MeshBasicMaterial({ color: 0x7ac8ff, transparent: true, opacity: 0.35, side: THREE.DoubleSide, depthWrite: false }));
+        const ring = new THREE.Mesh(new THREE.RingGeometry(r - 1.2, r, 64), new THREE.MeshBasicMaterial({ color: 0x51e88a, transparent: true, opacity: 0.4, side: THREE.DoubleSide, depthWrite: false }));
         ring.rotation.x = -Math.PI / 2;
         ring.position.set(slot.x, groundY(this.map, slot.x, slot.z) + 0.4, slot.z);
         this.statics.add(ring); this.rangeRing = ring;
+        if (tower && tower.tier < 4) {
+          const nextPct = getRange(game, { ...tower, tier: tower.tier + 1 });
+          const rn = nextPct * 6.58;
+          const next = new THREE.Mesh(new THREE.RingGeometry(rn - 1.2, rn, 64), new THREE.MeshBasicMaterial({ color: 0x7ac8ff, transparent: true, opacity: 0.3, side: THREE.DoubleSide, depthWrite: false }));
+          next.rotation.x = -Math.PI / 2;
+          next.position.set(slot.x, groundY(this.map, slot.x, slot.z) + 0.4, slot.z);
+          this.statics.add(next); this.rangeRingNext = next;
+        }
       }
     }
     if (this.targeting) {

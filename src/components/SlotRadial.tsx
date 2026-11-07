@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, type Dispatch } from "react";
 import { ArrowUp, Blocks, Coins, Crosshair, Info, LockKeyhole, Trash2, X } from "lucide-react";
 import { PRIORITY_LABELS, SLOTS, TOWERS, TOWER_KINDS, towerUpgradeCost, type Action, type GameState, type TowerKind } from "@/lib/game";
-import { compact, fa } from "./game-ui";
+import { compact, fa, sellRefund, TargetEmojis } from "./game-ui";
 import TowerModel from "./TowerModel";
 
 /* Radial slot menu (PRD §10.2): opens ON the tapped slot — upgrade top, priority
@@ -51,11 +51,12 @@ export default function SlotRadial({ game, slot, dispatch, close, openSheet, onB
     feedback();
     notify("برجک ارتقا یافت؛ دفاع شما قدرتمندتر شد.");
   };
+  const refund = tower ? sellRefund(game, tower) : null;
   const doSell = () => {
     if (!confirmSell) { setConfirmSell(true); return; }
     dispatch({ type: "sell-tower", slot });
     feedback();
-    notify("برجک فروخته شد و بخشی از منابع بازگشت.");
+    notify("برجک فروخته شد و هزینهٔ ساخت پایه بازگشت.");
     close();
   };
 
@@ -74,8 +75,8 @@ export default function SlotRadial({ game, slot, dispatch, close, openSheet, onB
         <button className="radial-btn radial-left" onClick={() => { dispatch({ type: "priority", slot }); feedback(); }} aria-label="تغییر هدف‌گیری">
           <Crosshair size={17} /><span>هدف‌گیری</span><small>{PRIORITY_LABELS[tower.priority]}</small>
         </button>
-        <button className={`radial-btn radial-bottom ${confirmSell ? "confirm" : ""}`} onClick={doSell} aria-label="فروش برجک">
-          <Trash2 size={17} /><span>{confirmSell ? "مطمئنی؟ بفروش" : "فروش"}</span>
+        <button className={`radial-btn radial-bottom ${confirmSell ? "confirm" : ""}`} onClick={doSell} aria-label={`فروش برجک؛ بازگشت ${refund ? compact(refund.cash) : ""} دلار`}>
+          <Trash2 size={17} /><span>{confirmSell ? "مطمئنی؟ بفروش" : "فروش"}</span>{refund && <small>بازگشت ${compact(refund.cash)}</small>}
         </button>
         <button className="radial-btn radial-right" onClick={openSheet} aria-label="جزئیات برجک">
           <Info size={17} /><span>جزئیات</span>
@@ -94,7 +95,7 @@ export default function SlotRadial({ game, slot, dispatch, close, openSheet, onB
           return <button key={kind} className={`radial-kind ${afford ? "" : "unaffordable"}`} style={{ transform: `translate(calc(-50% + ${arc[i][0]}px), calc(-50% + ${arc[i][1]}px))` }}
             onClick={() => { if (afford) { onBuild(kind); } else { notify("منابع کافی نیست — درآمد جمع کن یا فولاد بساز."); openSheet(); } }} aria-label={`ساخت ${def.short}`}>
             <span className={`radial-kind-model tower-color-${kind}`}><TowerModel kind={kind} tier={1} preview /></span>
-            <strong>{def.short}</strong><small><Coins size={10} /> {compact(def.cost)} · <Blocks size={10} /> {fa(def.steel)}</small>
+            <strong>{def.short}</strong><TargetEmojis targets={def.targets} /><small><Coins size={10} /> {compact(def.cost)} · <Blocks size={10} /> {fa(def.steel)}</small>
           </button>;
         })}
         <div className="radial-center empty">

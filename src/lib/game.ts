@@ -1087,8 +1087,11 @@ export function gameReducer(state: GameState, action: Action): GameState {
     case "prestige": {
       if (s.cash >= 100000 && s.highestWave >= 10) {
         const fresh=initialGame();s.cash=fresh.cash;s.oil=fresh.oil;s.fuel=fresh.fuel;s.steel=fresh.steel;s.ammo=fresh.ammo;s.buildings=fresh.buildings;s.idle.platforms=[];s.idle.port=fresh.idle.port;s.prestige++;s.phase="peace";s.wave=1;s.hearts=20;s.enemies=[];s.spawnRemaining=0;
+        // R7: planted towers reset on prestige (research, cards, managers,
+        // islands, heroes are kept) — the confirm dialog lists exactly this.
+        s.towers=[];s.towerStuns={};s.pendingImpacts=[];
         s.idle.bank=fresh.idle.bank;s.idle.collected=0;s.idle.collections=0;s.idle.claimedMissions=[];s.idle.claimedMilestones=[];s.idle.lastBattle=null;s.idle.contract=null;s.idle.offline=null;s.idle.rewards=[];
-        grantReward(s,{id:`prestige-${s.prestige}`,type:"milestone",title:"فصل تازهٔ توسعه آغاز شد",subtitle:"تولید و قدرت برجک‌ها برای همیشه ۱۰٪ بیشتر شد. مدیرها، کارت‌ها و جزایر شما حفظ شدند.",cash:0,xp:200,chests:2,boosts:2});
+        grantReward(s,{id:`prestige-${s.prestige}`,type:"milestone",title:"فصل تازهٔ توسعه آغاز شد",subtitle:"تولید و قدرت برجک‌ها برای همیشه ۱۰٪ بیشتر شد. پژوهش، کارت‌ها، مدیرها و جزایر حفظ شدند؛ برجک‌ها از نو ساخته می‌شوند.",cash:0,xp:200,chests:2,boosts:2});
       }
       break;
     }
