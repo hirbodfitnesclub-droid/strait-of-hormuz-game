@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
 import type { GameState, TowerKind, BuildingId } from '@/lib/game';
+import type { BattleSound } from '@/lib/battle-audio';
 
 const ThreeMap = dynamic(() => import('./ThreeMap'), { ssr: false });
 
@@ -19,6 +20,7 @@ type Props = {
   onInspect: (id: number) => void;
   onGroundAction: (point: { x: number; y: number }) => void;
   onGroundHover: (point: { x: number; y: number }) => void;
+  playSound: (kind: BattleSound) => void;
 };
 
 // The 3D world layer for the main game screen: owner's 3D map + live game-state sync.
@@ -90,6 +92,7 @@ export default function WorldView3D(props: Props) {
           const { GameSync3D } = await import('../three-map/gamesync');
           if (syncRef.current) return;
           const sync = new GameSync3D(map as never, {
+            onSound: kind => propsRef.current.playSound(kind),
             onSlot: id => propsRef.current.onSlot(id),
             onBuilding: id => propsRef.current.onBuilding(id as BuildingId),
             onPlatform: id => propsRef.current.onPlatform(id),

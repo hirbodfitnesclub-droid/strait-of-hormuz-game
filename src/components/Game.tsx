@@ -68,7 +68,7 @@ export default function Game() {
   const [zoom, setZoom] = useState(1);
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [dragging, setDragging] = useState(false);
-  const [sound, setSoundState] = useState(false);
+  const [sound, setSoundState] = useState(true); // battle sound defaults ON (studio ruling); the user's saved OFF is respected below
   const [vibration, setVibration] = useState(true);
   const [cinematic, setCinematic] = useState(true);
   const [reducedMotion, setReducedMotion] = useState(false);
@@ -114,7 +114,7 @@ export default function Game() {
     audioRef.current = new BattleAudio();
     try {
       const saved = JSON.parse(localStorage.getItem(PREFERENCES_KEY) ?? "{}");
-      setSoundState(saved.sound === true); setVibration(saved.vibration !== false); setCinematic(saved.cinematic !== false);
+      setSoundState(saved.sound !== false); setVibration(saved.vibration !== false); setCinematic(saved.cinematic !== false);
       setCoachDismissed(saved.coachDismissed === true);
     } catch { /* Defaults are safe when storage is unavailable. */ }
     setPreferencesLoaded(true);
@@ -408,7 +408,7 @@ export default function Game() {
     </header>
 
     <main className={`game-map ${targeting ? "aiming" : ""} ${selectedSlot !== null || selectedBuilding !== null ? "choosing-tower" : ""}`} ref={mapRef} onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp} onPointerCancel={onPointerUp} onClick={onMapClick}>
-<WorldView3D game={game} selectedSlot={selectedSlot} targeting={targeting} targetPreview={targetPreview} isNight={isNight} onSlot={chooseSlot} onBuilding={chooseBuilding} onPlatform={id => { const built = game.idle.platforms ?? []; if (built.includes(id)) return; if (game.cash < platformCost(built.length)) { notify("دلار کافی برای ساخت سکوی نفتی ندارید."); return; } dispatch({ type: "build-platform", id }); notify("سکوی نفتی ساخته شد؛ +۸ بشکه بر ثانیه"); feedback(); }} onHero={() => { setTargeting("hero"); setTargetPreview(game.hero); setSelectedSlot(null); feedback(); }} onHero2={() => { if (game.hero2) { setTargeting("hero2"); setTargetPreview(game.hero2); setSelectedSlot(null); feedback(); } }} onInspect={id => { dispatch({ type: "inspect", id }); notify("محموله کشف شد؛ ۵۰ فولاد دریافت کردید."); feedback(); }} onGroundAction={handleGroundAction} onGroundHover={handleGroundHover} />
+<WorldView3D game={game} selectedSlot={selectedSlot} targeting={targeting} targetPreview={targetPreview} isNight={isNight} onSlot={chooseSlot} onBuilding={chooseBuilding} onPlatform={id => { const built = game.idle.platforms ?? []; if (built.includes(id)) return; if (game.cash < platformCost(built.length)) { notify("دلار کافی برای ساخت سکوی نفتی ندارید."); return; } dispatch({ type: "build-platform", id }); notify("سکوی نفتی ساخته شد؛ +۸ بشکه بر ثانیه"); feedback(); }} onHero={() => { setTargeting("hero"); setTargetPreview(game.hero); setSelectedSlot(null); feedback(); }} onHero2={() => { if (game.hero2) { setTargeting("hero2"); setTargetPreview(game.hero2); setSelectedSlot(null); feedback(); } }} onInspect={id => { dispatch({ type: "inspect", id }); notify("محموله کشف شد؛ ۵۰ فولاد دریافت کردید."); feedback(); }} onGroundAction={handleGroundAction} onGroundHover={handleGroundHover} playSound={playSound} />
 
       <IdleHud game={game} hidden={interfacePaused||targeting!==null} onCollect={collectIncome} onBoost={activateProduction} onBattle={mainAction} onMission={navigateMission} onClaimMission={claimMission} onJournal={()=>openProgress("missions")} onManagers={()=>openProgress("managers")} onDaily={()=>openProgress("daily")} onContracts={()=>openProgress("contracts")} dailyAvailable={daily?.available??false} />
       <div className="wave-hud"><div className="wave-hud-main"><button onClick={() => openPanel("war")} aria-label="انتخاب حالت نبرد"><Waves size={19} /><span>موج <strong>{fa(game.wave)}</strong><small>{game.mode === "campaign" ? "/ ۲۵" : game.mode === "endless" ? " / ∞" : " / چالش"}</small></span><ChevronDown size={12} /></button><span className="hud-divider" /><span className="base-health"><Heart size={16} fill="currentColor" /><strong>{fa(game.hearts)}</strong><small>/۲۰</small></span></div><div className="wave-progress"><i style={{ width: `${progress * 100}%` }} /></div>{!activeBattle && previewUnits.length > 0 && <div className="wave-preview" aria-label="ترکیب موج بعدی">{previewUnits.map(u => <span key={u.kind === "boss" ? `boss-${u.boss}` : u.kind} className={`preview-unit unit-${u.kind}${u.kind === "boss" ? ` boss-${u.boss}` : ""}`} title={u.kind === "boss" ? "غول‌آخر" : u.kind === "speed" ? "تندرو" : u.kind === "corvette" ? "ناوچه" : u.kind === "air" ? "هوایی" : u.kind === "sub" ? "زیردریایی" : "ناوشکن"}>{u.kind === "boss" ? "☠" : u.kind === "air" ? "✈" : u.kind === "sub" ? "⚓" : u.kind === "destroyer" ? "⬢" : u.kind === "corvette" ? "⬣" : "▲"}<b>{fa(u.count)}</b></span>)}</div>}{activeBattle && <div className="wave-caption">{battlePaused ? <><Pause size={10} /> نبرد متوقف است</> : <><i /> {fa(remaining)} هدف باقی‌مانده</>}</div>}</div>
