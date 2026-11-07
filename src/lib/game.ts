@@ -37,7 +37,7 @@ export interface Enemy {
   armorBreak?: number;
   hitFlash?: number;
 }
-export interface Pirate { id: number; progress: number; hp: number; }
+export interface Pirate { id: number; progress: number; hp: number; /** VIP-event escorts (R6): a dedicated attack group, not traffic pirates — while the VIP ship lives they are exempt from the passive coast-guard erosion; hero/tower/boat fire still hits them in full. */ vipEscort?: boolean; }
 /** The VIP golden supertanker (R6): a real ship on the trade lane with HP.
  *  Pirates engage it while it crosses; a safe crossing pays the old event
  *  reward, destruction fines security instead. */
@@ -774,7 +774,12 @@ function tick(s: GameState, delta: number, battlePaused = false) {
   for (const pirate of battlePaused ? [] : s.pirates) {
     pirate.progress += dt * (s.event === "storm" ? 0.06 : 0.085);
     const pos = piratePosition(pirate, s.layout);
-    pirate.hp -= (s.research.includes("coastguard") ? 12 : 4) * dt;
+    // VIP escorts are exempt from the passive coast-guard erosion while
+    // their target lives (manager ruling, QA round 3): without this the
+    // base 4/s erosion killed both escorts at ~25 s and an undefended
+    // VIP crossed with HP to spare. Hero / tower / boat fire below is
+    // NOT exempt — escorts die to real fire only.
+    if (!(pirate.vipEscort && s.vipShip)) pirate.hp -= (s.research.includes("coastguard") ? 12 : 4) * dt;
     if (distance(s.hero, pos) < 18) pirate.hp -= 22 * dt;
     for (const tower of s.towers) {
       const slot = getSlots(s.layout)[tower.slot];
@@ -789,8 +794,9 @@ function tick(s: GameState, delta: number, battlePaused = false) {
     // its hull; the coast guard / hero / tower fire in this same pass is
     // the defense (R6). Balance (manager ruling, QA round 2): 6 dmg/s
     // per pirate (was 12) and no damage at all during the ship's first
-    // 5 s — an undefended VIP now survives ~25 s under fire (was
-    // ~12.6 s) so the player gets a real reaction window.
+    // 5 s. Escorts are exempt from the passive erosion above while the
+    // ship lives (round 3), so an undefended VIP sinks at ≈30 s
+    // (5 s grace + 300 HP / 12 per s) and the event honestly fails.
     if (s.vipShip && Math.abs(pirate.progress - s.vipShip.progress) < 0.08) {
       pirate.progress = s.vipShip.progress - 0.02;
       if ((s.vipShip.age ?? 0) >= 5) s.vipShip.hp -= 6 * dt;
@@ -820,7 +826,7 @@ function tick(s: GameState, delta: number, battlePaused = false) {
       // R6: the VIP event is a real escort — a golden supertanker with HP
       // enters the trade lane and pirates sortie against it.
       s.vipShip = { progress: 0, hp: 300, maxHp: 300, age: 0 };
-      s.pirates.push({ id: s.nextId++, progress: 0, hp: 100 }, { id: s.nextId++, progress: -0.06, hp: 100 });
+      s.pirates.push({ id: s.nextId++, progress: 0, hp: 100, vipEscort: true }, { id: s.nextId++, progress: -0.06, hp: 100, vipEscort: true });
     }
   }
   if (s.event && s.event !== "vip" && s.eventClock >= 60) {

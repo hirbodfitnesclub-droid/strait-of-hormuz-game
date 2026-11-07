@@ -50,6 +50,14 @@
  *     exportWindowDollars/exportWindowTime, restarted on expiry and at
  *     prestige) — bank capacity and offline income read the window;
  *     the lifetime ledger no longer feeds the rate.
+ *
+ * Round 3 — QA round-2 holdout (VIP balance):
+ * 16) VIP escorts carry vipEscort:true and are exempt from the passive
+ *     coast-guard erosion while the VIP ship lives — round 2's probes
+ *     pinned pirate HP, which hid that the base 4/s erosion killed both
+ *     real escorts at ~25 s and let an undefended VIP cross with 58.5 HP.
+ *     With real escorts: undefended TTK = 5 s grace + 300/(2×6) ≈ 30 s;
+ *     escorts die only to hero/tower/boat fire; defended crossings live.
  */
 const assert = require('node:assert/strict');
 const { load } = require('../load-game.cjs');
@@ -461,6 +469,75 @@ assert.equal(upgradeCost('oil', 9), Math.ceil(100 * Math.pow(1.15, 9)));
   const after4 = gameReducer(g4, { type: 'prestige' });
   assert.equal(after4.idle.exportWindowDollars, 0, 'prestige restarts the export window ($)');
   assert.equal(after4.idle.exportWindowTime, 0, 'prestige restarts the export window (time)');
+}
+
+// — 16) Round 3: VIP escorts exempt from passive erosion while VIP lives —
+{
+  const startVip = () => {
+    const g = ecoBase(); g.eventCount = 2; g.eventClock = 180;
+    g.hero = { x: -500, y: -500, active: 0 }; // hero far away unless the probe places it
+    return tick(g, 0.125, 1);
+  };
+  // The event spawns exactly two flagged escorts at full HP.
+  const spawn = startVip();
+  assert.equal(spawn.pirates.filter(p => p.vipEscort).length, 2, 'VIP event sorties two flagged escorts');
+  assert.ok(spawn.pirates.every(p => p.hp === 100), 'escorts keep the standard 100 HP');
+
+  // Exemption scope: flagged + VIP alive → no erosion; unflagged → 4/s;
+  // flagged but VIP gone → erosion resumes.
+  const e1 = startVip(); const escId = e1.pirates[0].id;
+  const afterE1 = tick(e1, 0.125, 8); // 1 s
+  assert.equal(afterE1.pirates.find(p => p.id === escId).hp, 100, 'escort takes no passive erosion while the VIP lives');
+  const e2 = startVip(); e2.pirates = [{ id: 900, progress: 0.3, hp: 100 }];
+  assert.ok(near(tick(e2, 0.125, 8).pirates[0].hp, 96, 0.01), 'traffic pirate still erodes at 4/s');
+  const e3 = startVip(); e3.pirates = [{ id: 901, progress: 0.3, hp: 100, vipEscort: true }]; e3.vipShip = null; e3.event = null;
+  assert.ok(near(tick(e3, 0.125, 8).pirates[0].hp, 96, 0.01), 'escort erodes again once the VIP is gone');
+
+  // Undefended TTK with the REAL escorts (HP 100, no pinning): the ship
+  // must sink at ≈30 s (5 s grace + 300 HP / 12 dmg/s), escorts still
+  // untouched at that moment, event fails: −10 security, no reward.
+  // Non-escort traffic pirates are stripped between ticks so the
+  // measurement covers exactly the two event escorts.
+  {
+    let cur = startVip();
+    const sec0 = cur.security, cash0 = cur.cash;
+    let t = 0, diedAt = 0, escortHpAtDeath = 0;
+    for (let i = 0; i < 480 && cur.vipShip; i++) {
+      cur = tick(cur, 0.125, 1); t += 0.125;
+      cur.pirates = cur.pirates.filter(p => p.vipEscort);
+      // The kill lands in the pirate pass; the resolve (and the first
+      // post-mortem erosion tick) lands in the NEXT tick's VIP pass —
+      // so sink time and escort HP are read at the hp<=0 crossing.
+      if (!diedAt && cur.vipShip && cur.vipShip.hp <= 0) { diedAt = t; escortHpAtDeath = Math.min(...cur.pirates.map(p => p.hp)); }
+    }
+    assert.ok(diedAt >= 28 && diedAt <= 33, `undefended VIP sinks in the 28–33 s band; sank at ${diedAt}s`);
+    assert.equal(escortHpAtDeath, 100, 'escorts were never eroded — the VIP died to their fire alone');
+    assert.equal(cur.security, sec0 - 10, 'failed escort = −10 security');
+    assert.equal(cur.cash, cash0, 'failed escort pays nothing');
+    console.log(`VIP UNDEFENDED TTK ${diedAt}s (band 28–33)`);
+  }
+
+  // Defended: a type-0 hero stationed on the pirate lane kills escorts
+  // with real fire and the VIP completes its crossing (+$1000, +3 sec).
+  {
+    let cur = startVip();
+    const anchor = G.piratePosition({ progress: 0.45 });
+    cur.hero = { x: anchor.x, y: anchor.y, active: 0 };
+    const sec0 = cur.security, cash0 = cur.cash, destroyed0 = cur.piratesDestroyed;
+    let t = 0, escortKillsBeforeResolve = 0, resolved = false;
+    for (let i = 0; i < 480 && !resolved; i++) {
+      cur = tick(cur, 0.125, 1); t += 0.125;
+      cur.pirates = cur.pirates.filter(p => p.vipEscort); // keep the probe on the event escorts only
+      escortKillsBeforeResolve = cur.piratesDestroyed - destroyed0;
+      if (!cur.vipShip) resolved = true;
+    }
+    assert.ok(resolved, 'defended VIP resolves');
+    assert.ok(t > 40, `VIP completed the crossing (resolved at ${t}s, not sunk early)`);
+    assert.ok(escortKillsBeforeResolve >= 1, `at least one escort died to real fire before the resolve (kills ${escortKillsBeforeResolve})`);
+    assert.equal(cur.cash, cash0 + 1000, 'defended escort pays +$1000');
+    assert.equal(cur.security, Math.min(100, sec0 + 3 + 2 * escortKillsBeforeResolve), 'crossing bonus + pirate-kill security');
+    console.log(`VIP DEFENDED: crossing done at ${t}s, escort kills ${escortKillsBeforeResolve}`);
+  }
 }
 
 // — 9) Regression probe: 400 peace ticks, fixed economy seed —
