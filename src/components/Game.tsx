@@ -5,7 +5,7 @@ import {
   Anchor, ArrowLeft, Award, Bell, Blocks, Check, ChevronDown, ChevronLeft, CircleHelp,
   Coins, Crosshair, Factory, FastForward, Flame, FlaskConical, Heart, Home, Layers3,
   Map as MapIcon, Minus, Moon, MoreHorizontal, Navigation, Pause, Play, Plus,
-  Rocket, Settings2, Shield, ShieldCheck, Sparkles, Sun, Swords, Target, Volume2,
+  Droplets, Rocket, Settings2, Shield, ShieldCheck, Sparkles, Sun, Swords, Target, Volume2,
   VolumeX, Waves, X, Zap, Star, UsersRound, ClipboardList, Gift,
 } from "lucide-react";
 import { SLOTS, BUILDINGS, TOWERS, gameReducer, getStats, hydrateGame, initialGame, enemyPosition, waveComposition, bossEnemy, type BuildingId, type Spell, type TowerKind, platformCost } from "@/lib/game";
@@ -14,6 +14,7 @@ import { isWater, nearestWater } from "@/lib/navigation";
 import { compact, fa } from "./game-ui";
 import WorldView3D from "./WorldView3D";
 import TowerSheet from "./TowerSheet";
+import SlotRadial from "./SlotRadial";
 import BuildingSheet from "./BuildingSheet";
 import Panels, { type PanelName } from "./Panels";
 import { useDialog } from "./useDialog";
@@ -47,6 +48,9 @@ export default function Game() {
   const incomeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hiddenAt = useRef<number | null>(null);
   const [selectedSlot, setSelectedSlot] = useState<number | null>(null);
+  const [sheetSlot, setSheetSlot] = useState<number | null>(null);
+  const [valveOpen, setValveOpen] = useState(false);
+  useEffect(() => { if (selectedSlot === null) setSheetSlot(null); }, [selectedSlot]);
   const [selectedBuilding, setSelectedBuilding] = useState<BuildingId | null>(null);
   const [previewKind, setPreviewKind] = useState<TowerKind>("cannon");
   const [targeting, setTargeting] = useState<"strike" | "hero" | "hero2" | null>(null);
@@ -411,7 +415,7 @@ export default function Game() {
       {boss && !interfacePaused && !targeting && <div className="boss-bar" role="status" aria-label={`غول‌آخر موج ${fa(game.wave)}`}><span className="boss-skull">☠</span><div className="boss-track"><div className="boss-fill" style={{ width: `${Math.max(0, (boss.hp / boss.maxHp) * 100)}%` }} /><span className="boss-label">غول‌آخر موج {fa(game.wave)} · {fa(Math.max(0, Math.ceil(boss.hp)))} / {fa(boss.maxHp)}</span></div></div>}
       {showCombo && !interfacePaused && !targeting && <div className="combo-badge" aria-hidden="true"><Flame size={16} fill="currentColor" /><strong>×{fa(game.combo)}</strong><span>کمبو!</span><i style={{ width: `${Math.min(100, (game.comboTimer / 3.5) * 100)}%` }} /></div>}
 
-      <div className="world-status"><button className="status-pill" onClick={() => openPanel("events")}><ShieldCheck size={14} /><span>امنیت {fa(game.security)}٪</span><i /></button><button className="weather-toggle" onClick={() => { dispatch({ type: "night" }); feedback(); }} aria-label="تغییر روز و شب">{isNight ? <Moon size={16} /> : <Sun size={16} />}<span>{isNight ? "شب" : "روز"}</span></button></div>
+      <div className="world-status"><button className="status-pill" onClick={() => openPanel("events")}><ShieldCheck size={14} /><span>امنیت {fa(game.security)}٪</span><i /></button><button className="weather-toggle" onClick={() => { dispatch({ type: "night" }); feedback(); }} aria-label="تغییر روز و شب">{isNight ? <Moon size={16} /> : <Sun size={16} />}<span>{isNight ? "شب" : "روز"}</span></button><div className="valve-wrap"><button className={`status-pill valve-pill ${valveOpen ? "open" : ""}`} onClick={() => { setValveOpen(!valveOpen); feedback(); }} aria-expanded={valveOpen} aria-label="شیر نفت؛ درصد صادرات نفت خام"><Droplets size={14} /><span>صادرات {fa(game.oilSplit)}٪</span></button>{valveOpen && <div className="valve-pop" role="dialog" aria-label="تنظیم شیر نفت"><strong>شیر نفت α · مسیر نفت خام</strong><div className="valve-presets">{[{ value: 70, label: "درآمد بیشتر" }, { value: 40, label: "متعادل" }, { value: 20, label: "تولید دفاعی" }].map(p => <button key={p.value} className={game.oilSplit === p.value ? "selected" : ""} onClick={() => dispatch({ type: "split", value: p.value })}>{p.label}<span>صادرات {fa(p.value)}٪</span></button>)}</div><div className="allocation-labels"><span>صادرات <b>{fa(game.oilSplit)}٪</b></span><span>پالایش <b>{fa(100 - game.oilSplit)}٪</b></span></div><input type="range" dir="ltr" min="0" max="100" value={game.oilSplit} onChange={e => dispatch({ type: "split", value: Number(e.target.value) })} aria-label="درصد صادرات نفت" style={{ background: `linear-gradient(to right,#eac788 ${game.oilSplit}%,#3a5655 ${game.oilSplit}%)` }} /><small>پالایش بیشتر یعنی سوخت و فولاد دفاعی بیشتر؛ صادرات بیشتر یعنی دلار بیشتر.</small><button className="valve-done" onClick={() => setValveOpen(false)}>بستن</button></div>}</div></div>
       <div className="view-controls"><button className={`map-view-toggle ${showMapTools ? "active" : ""}`} onClick={() => setShowMapTools(!showMapTools)} aria-label="کنترل نمای نقشه" aria-expanded={showMapTools}><Layers3 size={18} /></button>{showMapTools && <div className="view-options"><button onClick={() => updateZoom(zoom * 1.5)} aria-label="بزرگ‌نمایی"><Plus size={18} /></button><span>{fa(zoom * 100)}٪</span><button onClick={() => updateZoom(zoom / 1.5)} aria-label="کوچک‌نمایی"><Minus size={18} /></button><button onClick={() => { setZoom(1); setPan({ x: 0, y: 0 }); }} aria-label="بازنشانی نما"><Navigation size={17} /></button></div>}</div>
       {!showCoach && !interfacePaused && !targeting && <button className="quick-build-button" onClick={quickBuild} title="ساخت برجک · B"><Plus size={18}/><span>ساخت برجک</span><kbd>B</kbd></button>}
       {(game.event || game.ammo < 100 || stats.grid < 0.9 || game.oil >= stats.oilCapacity - 1) && <button className="context-alert" onClick={() => openPanel(game.event ? "events" : stats.grid < 0.9 ? "city" : "economy")}><span /><strong>{game.event ? "یک رویداد نیاز به توجه دارد" : game.ammo < 100 ? "مهمات رو به اتمام است" : stats.grid < 0.9 ? "برق شبکه را تقویت کنید" : "مخزن نفت پر شده است"}</strong><ChevronLeft size={15} /></button>}
@@ -432,7 +436,8 @@ export default function Game() {
     </main>
 
     {selectedBuilding !== null && <BuildingSheet key={selectedBuilding} id={selectedBuilding} game={game} dispatch={dispatch} close={() => setSelectedBuilding(null)} notify={notify} feedback={feedback} onEconomy={() => openPanel(BUILDINGS[selectedBuilding].category === "city" ? "city" : "economy")} onManagers={()=>openProgress("managers")} />}
-    {selectedSlot !== null && <TowerSheet key={selectedSlot} game={game} slot={selectedSlot} kind={previewKind} onKindChange={setPreviewKind} dispatch={dispatch} close={() => setSelectedSlot(null)} onResearch={() => openPanel("research")} onBuild={buildTower} feedback={feedback} notify={notify} />}
+    {selectedSlot !== null && sheetSlot === null && <SlotRadial key={`radial-${selectedSlot}`} game={game} slot={selectedSlot} dispatch={dispatch} close={() => setSelectedSlot(null)} openSheet={() => setSheetSlot(selectedSlot)} onBuild={buildTower} feedback={feedback} notify={notify} />}
+    {sheetSlot !== null && <TowerSheet key={sheetSlot} game={game} slot={sheetSlot} kind={previewKind} onKindChange={setPreviewKind} dispatch={dispatch} close={() => setSheetSlot(null)} onResearch={() => openPanel("research")} onBuild={buildTower} feedback={feedback} notify={notify} />}
     {panel && <Panels panel={panel} game={game} dispatch={dispatch} close={() => setPanel(null)} notify={notify} sound={sound} setSound={setSound} vibration={vibration} setVibration={setVibration} cinematic={cinematic} setCinematic={setCinematic} onSelectTower={chooseSlot} onSelectBuilding={chooseBuilding} />}
     {progressPanel && <ProgressionPanels panel={progressPanel} game={game} dispatch={dispatch} close={()=>setProgressPanel(null)} navigate={navigateMission} feedback={feedback} notify={notify} daily={daily} dailyBusy={dailyBusy} dailyError={dailyError} claimDaily={claimDaily} reloadDaily={()=>void reloadDaily()} />}
     {moreOpen && <MoreMenu game={game} close={() => setMoreOpen(false)} open={openPanel} openProgress={openProgress} />}

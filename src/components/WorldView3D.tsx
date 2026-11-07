@@ -79,6 +79,7 @@ export default function WorldView3D(props: Props) {
             onGroundHover: (x, y) => propsRef.current.onGroundHover({ x, y }),
           });
           syncRef.current = sync;
+          (window as unknown as { __gamesync3d?: unknown }).__gamesync3d = sync;
           const p = propsRef.current;
           sync.setState(p.game, { selectedSlot: p.selectedSlot, targeting: p.targeting, targetPreview: p.targetPreview });
           const mm = map as unknown as { flyTo(x: number, z: number, d: number, dur?: number): void; setTime?: (h: number) => void };

@@ -193,6 +193,17 @@ export function enemyPosition(enemy: Enemy, layout: MapLayout = "landscape") {
   if (enemy.kind === "air") { const path = getLane(layout, "enemy"), start = path[0], end = path[path.length - 1]; return { x: start.x + (end.x - start.x) * enemy.progress, y: start.y + (end.y - start.y) * enemy.progress }; }
   return positionAt(enemy.progress, layout);
 }
+export function powerBreakdown(s: GameState) {
+  const b = s.buildings;
+  const rates: [BuildingId, number][] = [["oil", 5], ["tank", 1], ["dock", 3], ["refinery", 15], ["steel", 25], ["arms", 30], ["water", 6], ["city", 4], ["welfare", 2], ["optical", 4]];
+  const consumers = rates.filter(([id]) => b[id] > 0).map(([id, rate]) => ({ id: id as string, name: BUILDINGS[id].name, mw: b[id] * rate }));
+  const towersMw = s.towers.reduce((sum, t) => sum + TOWERS[t.kind].power * (1 + (t.tier - 1) * 0.2) * (t.tier === 4 && s.research.includes("capacitors") ? 0.65 : 1), 0);
+  if (towersMw > 0.5) consumers.push({ id: "towers", name: "شبکهٔ برجک‌های دفاعی", mw: Math.round(towersMw) });
+  consumers.sort((a, c) => c.mw - a.mw);
+  const stats = getStats(s);
+  return { produced: Math.round(stats.powerProduced), used: Math.round(stats.powerUsed), consumers, grid: stats.grid };
+}
+
 export function piratePosition(pirate: Pirate, layout: MapLayout = "landscape") { return sampleLane(getLane(layout, "pirate"), pirate.progress); }
 export function contrabandPosition(ship: Contraband, layout: MapLayout = "landscape") { return sampleLane(getLane(layout, "trade"), ship.progress); }
 export function merchantPosition(ship: Merchant, layout: MapLayout = "landscape") { return sampleLane(getLane(layout, "trade"), ship.progress); }

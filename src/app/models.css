@@ -196,3 +196,13 @@
 .world-transform.tz-ops .platform-marker { --pf: .62; }
 .world-transform.tz-ops .platform-marker span { display: none; }
 .world-transform.tz-ops .hero-marker { --pf: .78; }
+
+/* Real-model turntable preview (8-angle sheet rendered from the in-game GLB) */
+.tower-turntable { position:absolute; z-index:3; inset:0; overflow:hidden; pointer-events:none; }
+.tower-turntable img { position:absolute; top:0; left:0; height:100%; width:800%; max-width:none; animation:turntable-step 3.6s steps(1) infinite; }
+@keyframes turntable-step {
+  0% { transform:translateX(0); } 12.5% { transform:translateX(-12.5%); } 25% { transform:translateX(-25%); }
+  37.5% { transform:translateX(-37.5%); } 50% { transform:translateX(-50%); } 62.5% { transform:translateX(-62.5%); }
+  75% { transform:translateX(-75%); } 87.5% { transform:translateX(-87.5%); } 100% { transform:translateX(0); }
+}
+@media(prefers-reduced-motion:reduce) { .tower-turntable img { animation:none; } }

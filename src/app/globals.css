@@ -829,3 +829,56 @@ small { font-size: inherit; }
 .map-label .t2 small { font-size: 7.5px; }
 .labels-far .map-label small { display: none; }
 .labels-far .map-label .t0 span { font-size: 14px; }
+
+/* ---- Phase 2: radial slot menu (PRD) ---- */
+.radial-backdrop { position: fixed; inset: 0; z-index: 64; background: rgba(3, 12, 20, 0.25); }
+.slot-radial { position: fixed; z-index: 65; width: 0; height: 0; pointer-events: none; }
+.slot-radial > * { pointer-events: auto; }
+.radial-btn { position: absolute; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; width: 62px; height: 62px; border-radius: 50%; border: 1px solid rgba(147, 197, 253, 0.35); background: rgba(7, 25, 40, 0.92); color: #dceefb; font-family: inherit; font-size: 10.5px; font-weight: 700; cursor: pointer; transform: translate(-50%, -50%); box-shadow: 0 8px 22px rgba(0,0,0,0.45); backdrop-filter: blur(6px); }
+.radial-btn small { font-size: 8.5px; font-weight: 500; color: #9fc3dd; }
+.radial-btn:disabled { opacity: 0.45; cursor: default; }
+.radial-btn.confirm { background: rgba(94, 22, 22, 0.94); border-color: rgba(255, 120, 100, 0.55); }
+.radial-top { left: 0; top: -84px; }
+.radial-bottom { left: 0; top: 84px; }
+.radial-left { left: -88px; top: 0; }
+.radial-right { left: 88px; top: 0; }
+.radial-close { left: 62px; top: -62px; width: 34px; height: 34px; }
+.radial-center { position: absolute; left: 0; top: 0; transform: translate(-50%, -50%); width: 108px; padding: 7px 6px 6px; border-radius: 15px; border: 1px solid rgba(147, 197, 253, 0.3); background: rgba(7, 25, 40, 0.94); color: #e7f3fc; text-align: center; box-shadow: 0 10px 26px rgba(0,0,0,0.5); display: flex; flex-direction: column; align-items: center; gap: 2px; }
+.radial-center strong { font-size: 12px; }
+.radial-center small { font-size: 9.5px; color: #9fc3dd; }
+.radial-model { position: relative; display: block; width: 62px; height: 52px; }
+.radial-pips { display: flex; gap: 3px; }
+.radial-pips i { width: 14px; height: 4px; border-radius: 2px; background: #33506b; }
+.radial-pips i.filled { background: #eac788; }
+.radial-kind { position: absolute; left: 0; top: 0; display: flex; flex-direction: column; align-items: center; gap: 0; width: 84px; padding: 5px 2px 6px; border-radius: 14px; border: 1px solid rgba(147, 197, 253, 0.32); background: rgba(7, 25, 40, 0.93); color: #e7f3fc; font-family: inherit; cursor: pointer; box-shadow: 0 8px 20px rgba(0,0,0,0.45); }
+.radial-kind strong { font-size: 10.5px; }
+.radial-kind small { display: flex; align-items: center; gap: 2px; font-size: 8.5px; color: #c9a959; }
+.radial-kind.unaffordable { opacity: 0.55; }
+.radial-kind-model { position: relative; display: block; width: 56px; height: 46px; }
+.radial-details { display: flex; align-items: center; gap: 4px; margin-top: 3px; padding: 4px 8px; border-radius: 8px; border: 1px solid rgba(147,197,253,0.3); background: rgba(20, 48, 74, 0.8); color: #bcd9f2; font-family: inherit; font-size: 9.5px; cursor: pointer; }
+
+/* ---- Phase 2: oil valve quick access ---- */
+.valve-wrap { position: relative; }
+.valve-pill.open { border-color: rgba(234, 199, 136, 0.6); color: #eac788; }
+.valve-pop { position: absolute; top: calc(100% + 8px); inset-inline-start: 0; z-index: 66; width: min(272px, 78vw); padding: 13px; border-radius: 15px; border: 1px solid rgba(213, 197, 144, 0.35); background: rgba(8, 22, 34, 0.97); color: #e9f2f9; box-shadow: 0 16px 40px rgba(0,0,0,0.55); display: flex; flex-direction: column; gap: 9px; }
+.valve-pop > strong { font-size: 13px; }
+.valve-pop small { font-size: 10.5px; line-height: 1.7; color: #a9c4d8; }
+.valve-presets { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.valve-presets button { display: flex; flex-direction: column; gap: 1px; align-items: center; padding: 7px 2px; border-radius: 10px; border: 1px solid rgba(147,197,253,0.25); background: rgba(16, 40, 60, 0.7); color: #dceefb; font-family: inherit; font-size: 10.5px; font-weight: 700; cursor: pointer; }
+.valve-presets button span { font-size: 8.5px; font-weight: 500; color: #9fc3dd; }
+.valve-presets button.selected { border-color: rgba(234,199,136,0.65); color: #eac788; }
+.valve-pop input[type="range"] { width: 100%; accent-color: #eac788; }
+.valve-done { align-self: flex-end; padding: 5px 14px; border-radius: 9px; border: 0; background: #eac788; color: #231a05; font-family: inherit; font-weight: 800; font-size: 11.5px; cursor: pointer; }
+
+/* ---- Phase 2: power grid breakdown ---- */
+.grid-breakdown { margin-top: 14px; padding: 13px 15px; border: 1px solid rgba(147,197,253,0.16); border-radius: 13px; background: rgba(120, 170, 220, 0.04); }
+.grid-breakdown-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 9px; }
+.grid-breakdown-head strong { font-size: 13px; }
+.grid-breakdown-head span { font-size: 10.5px; color: #9fc3dd; }
+.grid-row { display: grid; grid-template-columns: 1fr 90px 52px; align-items: center; gap: 8px; padding: 3.5px 0; font-size: 11.5px; }
+.grid-row b { text-align: left; font-size: 11px; color: #cfe4f5; }
+.grid-bar { height: 6px; border-radius: 3px; background: rgba(120,170,220,0.14); overflow: hidden; }
+.grid-bar i { display: block; height: 100%; border-radius: 3px; background: linear-gradient(90deg, #53d769, #9be15d); }
+.grid-bar i.over { background: linear-gradient(90deg, #ffb340, #ff5040); }
+.grid-warn { margin-top: 8px; font-size: 10.5px; line-height: 1.8; color: #ffb59d; }
+.grid-empty { font-size: 11px; color: #9fc3dd; }

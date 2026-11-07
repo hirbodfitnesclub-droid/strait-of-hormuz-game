@@ -10,6 +10,7 @@ import {
 import {
   BUILDINGS, CHALLENGE_RULES, ISLANDS, RESEARCH, SLOTS, TOWERS, TOWER_KINDS, getStats, towerDps, upgradeCost,
   type Action, type BuildingId, type GameState, type Mode, type TowerKind,
+  powerBreakdown,
 } from "@/lib/game";
 import { compact, fa, TargetTypes, TowerGlyph } from "./game-ui";
 import { useDialog } from "./useDialog";
@@ -99,6 +100,7 @@ function City({ game, dispatch, notify, onSelectBuilding }: Props) {
   return <>
     <div className="drawer-intro"><div className="intro-icon teal"><BatteryCharging size={23} /></div><div><strong>پشتوانه یک تنگه قدرتمند</strong><p>برق، آب و رفاه، راندمان صنعت و پدافند را تعیین می‌کنند.</p></div></div>
     <div className="summary-grid three"><div><span>تراز برق</span><strong className={stats.powerProduced >= stats.powerUsed ? "green-text" : "red-text"}>{stats.powerProduced >= stats.powerUsed ? "+" : ""}{fa(stats.powerProduced - stats.powerUsed)} <small>MW</small></strong></div><div><span>تراز آب</span><strong className="green-text">+{fa(stats.waterProduced - stats.waterUsed)}</strong></div><div><span>پایداری ملی</span><strong>{fa(stats.stability)}٪</strong></div></div>
+    {(() => { const pb = powerBreakdown(game); const max = Math.max(1, ...pb.consumers.map(c => c.mw)); return <section className="grid-breakdown"><div className="grid-breakdown-head"><strong>مصرف شبکهٔ برق</strong><span>تولید {fa(pb.produced)} · مصرف {fa(pb.used)} MW</span></div>{pb.consumers.length === 0 ? <p className="grid-empty">هنوز مصرف‌کننده‌ای ساخته نشده است.</p> : pb.consumers.map(c => <div className="grid-row" key={c.id}><span>{c.name}</span><div className="grid-bar"><i style={{ width: `${Math.max(4, (c.mw / max) * 100)}%` }} className={pb.produced >= pb.used ? "" : "over"} /></div><b>{fa(c.mw)} MW</b></div>)}{pb.produced < pb.used && <p className="grid-warn">مصرف از تولید بیشتر است — راندمان شبکه به {fa(pb.grid * 100)}٪ افت کرده؛ نیروگاه بسازید یا مصرف را کم کنید.</p>}</section>; })()}
     <div className="drawer-section-heading"><div><strong>زیرساخت‌های حیاتی</strong><p>راندمان شبکه برق: {fa(stats.grid * 100)}٪</p></div></div>
     <div className="building-list">{(["power", "water", "city"] as BuildingId[]).map(id => <BuildingCard key={id} id={id} game={game} dispatch={dispatch} notify={notify} inspect={onSelectBuilding} />)}</div>
     <div className="drawer-section-heading space-top"><div><strong>گسترش قلمرو</strong><p>جزایر جدید، جایگاه‌های تاکتیکی بیشتری آزاد می‌کنند.</p></div></div>

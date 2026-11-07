@@ -432,6 +432,18 @@ export class GameSync3D {
     }
   }
 
+  /** Screen position (CSS px, viewport coords) of a slot — used by the radial menu. */
+  projectSlot(slotId: number): { x: number; y: number } | null {
+    const slot = SLOTS.find(x => x.id === slotId);
+    const cam = (this.map as unknown as { camera?: THREE.Camera }).camera;
+    const el = this.map.renderer?.domElement;
+    if (!slot || !cam || !el) return null;
+    const v = new THREE.Vector3(slot.x, groundY(this.map, slot.x, slot.z) + 0.3, slot.z).project(cam);
+    if (v.z > 1) return null;
+    const r = el.getBoundingClientRect();
+    return { x: r.left + (v.x * 0.5 + 0.5) * r.width, y: r.top + (-v.y * 0.5 + 0.5) * r.height };
+  }
+
   private bindPointer() {
     const el = (this.map as unknown as { canvas?: HTMLCanvasElement }).canvas ?? this.map.renderer?.domElement;
     if (!el) return;
