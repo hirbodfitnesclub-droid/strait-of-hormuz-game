@@ -1,0 +1,20 @@
+GAME ART AND LICENSES
+
+Sea Warfare set (ships and more), by Lowder2
+https://opengameart.org/content/sea-warfare-set-ships-and-more
+Released under Creative Commons CC0 1.0 Universal (Public Domain). Included PNG ship hulls and aircraft are used and animated in this game.
+
+Tower Defence Basic Towers, by Nido
+https://opengameart.org/content/tower-defence-basic-towers
+Released under Creative Commons CC0 1.0 Universal (Public Domain). Included turret, cannon, missile launcher, and projectile PNGs are retained as layered source art; projectile sprites are used in combat.
+
+Industrial building sprites are original images generated for this application and processed into transparent individual assets. Original map backgrounds were generated for this application.
+
+Thirty isometric tower variants are original artwork generated for this application and processed into individually addressable transparent sprites.
+
+Ships with ripple effect, by chabull
+https://opengameart.org/content/ships-with-ripple-effect
+Licensed under Creative Commons Attribution 3.0 Unported (CC BY 3.0): https://creativecommons.org/licenses/by/3.0/
+The original ship hulls, separate gun sprites, destroyed variants and five-frame wake images are resized, rotated and animated in the application. No endorsement by the author is implied.
+
+Manager portraits, reward chest artwork and the anchor app icon were created for this application. They are not part of the third-party naval asset packs listed above.

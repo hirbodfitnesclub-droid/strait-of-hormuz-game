@@ -1,0 +1,198 @@
+/* Map and collision coordinates share the same stretched image rectangle. */
+.game-map { background: #194b50; }
+.world-transform[data-layout="landscape"] .map-image { bottom: 0; background-image: url('/images/hormuz-map-optimized.jpg'); background-size: 100% 100%; }
+.world-transform[data-layout="portrait"] .map-image { bottom: 0; background-image: url('/images/hormuz-map-portrait-optimized.jpg'); background-size: 100% 100%; }
+.world-transform[data-layout="portrait"] .place-port { left: 60%; top: 31%; }
+.world-transform[data-layout="portrait"] .place-qeshm { left: 55%; top: 38%; }
+.world-transform[data-layout="portrait"] .place-hormuz { left: 64%; top: 33%; }
+.world-transform[data-layout="portrait"] .place-larak { left: 63%; top: 37%; }
+.world-transform[data-layout="portrait"] .water-label { left: 26%; top: 62%; }
+.world-transform[data-layout="landscape"] .place-port { left: 60%; top: 31%; }
+.world-transform[data-layout="landscape"] .place-qeshm { left: 55%; top: 38%; }
+.world-transform[data-layout="landscape"] .place-hormuz { left: 64%; top: 33%; }
+.world-transform[data-layout="landscape"] .place-larak { left: 63%; top: 37%; }
+.trade-route { stroke: #bde9e2; opacity: .44; stroke-width: 1.5; }
+.enemy-route { opacity: .35; }
+.enemy-route.active { stroke: #ff8b78; opacity: .85; }
+
+/* The original, separately-rendered industrial models grow at every level. */
+.building-marker { position: absolute; z-index: 7; width: clamp(66px, 7vw, 100px); height: clamp(66px, 7vw, 100px); padding: 0; background: transparent; transform: translate(-50%, -50%) scale(calc(var(--mz, 1) * var(--pf, 1))); }
+.building-marker:hover, .building-marker:focus-visible { z-index: 11; }
+.building-model { position: relative; width: 100%; height: 100%; pointer-events: none; overflow: visible; }
+.building-shadow { position: absolute; z-index: 0; left: 14%; right: 14%; bottom: 16%; height: 19%; border-radius: 50%; background: #0d292b69; }
+.building-main-sprite { position: absolute; z-index: 2; left: 50%; top: 48%; width: 100%; height: 100%; object-fit: contain; transform: translate(-50%, -50%) scale(var(--building-growth)); transform-origin: 50% 70%; animation: building-arrival .6s cubic-bezier(.18,.8,.2,1) both; }
+.building-addon { position: absolute; z-index: 1; width: 55%; height: 55%; object-fit: contain; left: -1%; bottom: 4%; opacity: .9; }
+.building-extra-lights { position: absolute; z-index: 4; top: 45%; left: 24%; right: 24%; height: 1px; display: flex; justify-content: space-between; }
+.building-extra-lights i { width: 3px; height: 3px; border-radius: 50%; background: #ffe58f; box-shadow: 0 0 5px #ffcd7e; animation: building-light 2.8s ease-in-out infinite alternate; }
+.building-extra-lights i:nth-child(2) { animation-delay: .7s; }
+.building-extra-lights i:nth-child(3) { animation-delay: 1.4s; }
+.building-hightech { position: absolute; z-index: 3; left: 12%; right: 12%; bottom: 15%; height: 23%; border: 1px solid #90e3dc8a; border-radius: 48%; transform: rotate(-10deg); box-shadow: 0 0 8px #79ddd939,inset 0 0 5px #79ddd92e; }
+.building-hightech i { position: absolute; width: 3px; height: 3px; border-radius: 50%; background: #b3fff4; }
+.building-hightech i:nth-child(1) { left: 5%; top: 40%; }.building-hightech i:nth-child(2) { left: 35%; top: 0; }.building-hightech i:nth-child(3) { right: 5%; top: 40%; }.building-hightech i:nth-child(4) { left: 55%; bottom: 0; }
+.building-future-ring { position: absolute; z-index: 3; inset: 13%; border: 1px dashed #c0fff1b0; border-radius: 50%; animation: tech-orbit 15s linear infinite; }
+.building-flare { position: absolute; z-index: 4; top: 12%; left: 48%; width: 4px; height: 8px; border-radius: 65% 25% 65% 30%; transform: rotate(28deg); background: #ffd47c; box-shadow: 0 0 5px #ff922c; animation: flare-flicker 1.3s ease-in-out infinite alternate; }
+.building-level-progress { position: absolute; z-index: 5; bottom: 5%; left: 31%; right: 31%; height: 3px; background: #142d2dcc; border-radius: 5px; overflow: hidden; opacity: .8; }
+.building-level-progress i { display: block; width: var(--evolution-progress); height: 100%; border-radius: inherit; background: #eccc7e; transition: width .35s ease; }
+.building-marker-level { position: absolute; z-index: 9; right: 7%; bottom: 13%; min-width: 20px; height: 20px; display: grid; place-items: center; border-radius: 7px; background: #163a36e8; border: 1px solid #d6ca8e8c; color: #f5dfaa; font-size: 10px; font-weight: 800; }
+.building-marker-name { position: absolute; top: 91%; left: 50%; z-index: 10; transform: translateX(-50%); padding: 4px 8px; background: #163b38ec; border: 1px solid #c6dab847; border-radius: 7px; font-size: 10px; color: #eef3dc; white-space: nowrap; opacity: 0; pointer-events: none; transition: opacity .18s; }
+.building-marker:hover .building-marker-name, .building-marker:focus-visible .building-marker-name { opacity: 1; }
+.building-marker:hover .building-main-sprite { filter: brightness(1.15); }
+.model-compact .building-main-sprite { animation: none; }
+.model-compact .building-level-progress, .model-compact .building-flare { display: none; }
+.building-icon { overflow: visible !important; }
+.building-icon .building-model { width: 55px; height: 55px; flex-shrink: 0; }
+@keyframes building-arrival { 0% { opacity: .55; scale: .82; filter: brightness(2); } 40% { opacity: 1; filter: brightness(1.35); } 100% { scale: 1; filter: brightness(1); } }
+@keyframes building-light { from { opacity: .45; } to { opacity: 1; } }
+@keyframes flare-flicker { from { scale: .8 .75; opacity: .7; } to { scale: 1.15 1.25; opacity: 1; } }
+@keyframes tech-orbit { to { rotate: 360deg; } }
+
+/* CC0 turret sprites from Nido: actual separate bases, barrels and launchers. */
+.tower-asset { position: relative; width: 100%; height: 100%; overflow: visible; pointer-events: none; }
+.tower-ground-shadow { position: absolute; left: 17%; right: 17%; bottom: 13%; height: 24%; border-radius: 50%; background: #0a252b70; }
+.tower-base-asset, .tower-dock-asset { position: absolute; width: 78%; height: 78%; left: 11%; top: 15%; object-fit: contain; }
+.tower-dock-asset { width: 102%; height: 102%; left: -1%; top: 0; }
+.tower-weapon-rotation { position: absolute; inset: 13%; z-index: 3; transform: rotate(var(--turret-angle)); transform-origin: 50% 50%; transition: transform .28s linear; }
+.tower-weapon-asset { position: absolute; inset: 11%; width: 78%; height: 78%; object-fit: contain; }
+.tower-asset.firing .tower-weapon-asset { animation: weapon-recoil .28s cubic-bezier(.1,.6,.3,1) infinite; }
+.asset-air .tower-weapon-asset { width: 70%; height: 70%; inset: 15%; }
+.asset-ew .tower-weapon-asset { width: 62%; height: 62%; inset: 19%; opacity: .9; }
+.asset-boat .tower-weapon-rotation { inset: 28%; left: 18%; top: 18%; }
+.tower-upgrade-ring { position: absolute; z-index: 2; inset: 17%; border: 1px solid #e7c675b3; border-radius: 50%; box-shadow: 0 0 0 3px #e7c67524; }
+.level-3 .tower-upgrade-ring { border-width: 2px; box-shadow: 0 0 0 4px #e7c6752b; }
+.tower-support { position: absolute; z-index: 4; bottom: 15%; width: 8px; height: 9px; border: 1px solid #d9d5b1; border-radius: 2px; background: linear-gradient(#73877d,#263f3f); }
+.support-left { left: 12%; }.support-right { right: 12%; }
+.tower-special-halo { position: absolute; z-index: 2; inset: 3%; border: 2px solid #ebd181ba; border-radius: 50%; box-shadow: 0 0 12px #eec16c64,inset 0 0 9px #eec16c33; }
+.special.branch-1 .tower-special-halo { border-color: #8fe6e3cc; box-shadow: 0 0 12px #87e6e976,inset 0 0 9px #87e6e944; }
+.tower-special-module { position: absolute; z-index: 5; right: 4%; top: 16%; width: 12px; height: 12px; border-radius: 3px; transform: rotate(45deg); border: 1px solid #fee5ab; background: #c99d55; box-shadow: 0 0 6px #e8c781; }
+.branch-1 .tower-special-module { background: #69aeb1; border-color: #bbffff; box-shadow: 0 0 6px #a8f7f2; border-radius: 50%; }
+.tower-radar-antenna { position: absolute; z-index: 4; right: 15%; top: 8%; width: 15px; height: 15px; border: 2px solid #aceee1; border-bottom-color: transparent; border-radius: 50%; animation: radar-sweep 2.4s linear infinite; }
+.tower-radar-antenna span { position: absolute; width: 5px; height: 5px; left: 3px; top: 3px; background: #d4fff5; border-radius: 50%; }
+.asset-air .tower-radar-antenna { border-color: #f0d387; border-bottom-color: transparent; }
+.tower-patrol-fleet { position: absolute; z-index: 4; right: -20%; bottom: -2%; width: 60%; height: 45%; }
+.tower-patrol-fleet i { position: absolute; width: 5px; height: 14px; background: url('/assets/ships/patrol.png') center/contain no-repeat; animation: patrol-float 2s ease-in-out infinite alternate; }
+.tower-patrol-fleet i:nth-child(1) { left: 5%; top: 4%; transform: rotate(35deg); }.tower-patrol-fleet i:nth-child(2) { left: 35%; top: 25%; transform: rotate(42deg); animation-delay: .3s; }.tower-patrol-fleet i:nth-child(3) { left: 65%; top: 4%; transform: rotate(50deg); animation-delay: .5s; }.tower-patrol-fleet i:nth-child(4) { left: 18%; top: 63%; }.tower-patrol-fleet i:nth-child(5) { left: 68%; top: 62%; }
+@keyframes weapon-recoil { 0%, 60%, 100% { translate: 0 0; } 15% { translate: 0 4px; } }
+@keyframes radar-sweep { to { rotate: 360deg; } }
+@keyframes patrol-float { to { translate: 3px -4px; } }
+.choice-icon .tower-asset { width: 43px; height: 43px; flex-shrink: 0; }
+.selected-tower-art .tower-asset { width: 68px; height: 68px; }
+.installed-icon .tower-asset { width: 45px; height: 45px; }
+.preview-model .tower-patrol-fleet { display: none; }
+.preview-model .tower-radar-antenna { animation-duration: 4s; }
+.hero-marker { transition: left .12s linear, top .12s linear; }
+.hero-ship-sprite { position: absolute; height: 48px; width: 24px; object-fit: contain; left: 14px; top: 1px; transition: transform .35s linear; }
+.hero-marker::before { content: ""; position: absolute; width: 24px; height: 18px; border-radius: 50%; border: 1px solid #a8eadd88; left: 12px; top: 20px; animation: hero-wake 2s ease-out infinite; }
+@keyframes hero-wake { from { opacity: .8; scale: .7; } to { opacity: 0; scale: 1.8; } }
+.target-reticle.on-land { border-color: #ffaf8b; }
+.target-reticle.on-land span { color: #ffd3bd; border-color: #f2a4836d; }
+
+/* One-tap building inspection, with live, visible evolution. */
+.building-sheet { width: 410px; max-height: calc(100dvh - 48px); display: flex; flex-direction: column; overflow-y: auto; outline: 0; background: #15302ff7; border: 1px solid #d6d0a64d; border-radius: 23px; backdrop-filter: blur(24px); box-shadow: 0 20px 70px #0b24296b; animation: sheet-appear .35s var(--ease); }
+.building-showcase { min-height: 185px; position: relative; display: grid; place-items: center; margin: 0 22px; border: 1px solid #c8d8b729; border-radius: 16px; background: radial-gradient(ellipse at 50% 66%, #4c786c 0, #294d46 35%, #1a3b37 75%); overflow: hidden; }
+.building-showcase-light { position: absolute; width: 150px; height: 45px; border-radius: 50%; left: calc(50% - 75px); bottom: 20px; border: 1px solid #a9d6b64d; box-shadow: 0 0 0 13px #a9d6b609, 0 0 0 26px #a9d6b605; }
+.building-showcase .building-model { width: 205px; height: 185px; }
+.building-showcase .building-level-progress { display: none; }
+.showcase-level, .showcase-tier { position: absolute; top: 12px; font-size: 10px; border-radius: 6px; padding: 4px 8px; color: #e8e9c9; background: #143633b8; border: 1px solid #c3d8ac35; }
+.showcase-level { right: 12px; }.showcase-tier { left: 12px; display: flex; align-items: center; gap: 4px; color: #e8d49a; }
+.building-sheet-copy { padding: 16px 22px 0; }
+.building-sheet-copy > p:first-child { font-size: 11px; color: #b5c8b1; }
+.building-sheet-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 14px; }
+.building-sheet-stats > div { display: flex; flex-direction: column; gap: 7px; padding: 11px; background: #b8d4b50a; border: 1px solid #b8d4b51a; border-radius: 9px; }
+.building-sheet-stats span { display: flex; align-items: center; gap: 5px; color: #a3bba5; font-size: 10px; }.building-sheet-stats svg { color: #dfc98d; }
+.building-sheet-stats strong { font-size: 16px; color: #f0ecd7; }.building-sheet-stats strong small { font-size: 10px; color: #a4bba5; font-weight: 500; }
+.evolution-heading { display: flex; justify-content: space-between; margin-top: 16px; font-size: 10px; color: #a7bca6; }.evolution-heading strong { color: #e3d4a1; font-size: 10px; }
+.evolution-meter { height: 5px; border-radius: 5px; overflow: hidden; margin-top: 7px; background: #a8cdb51a; }.evolution-meter i { display: block; height: 100%; background: linear-gradient(90deg,#81c5a5,#e4c986); border-radius: 5px; transition: width .4s ease; }
+.evolution-hint { display: flex; align-items: flex-start; gap: 6px; margin-top: 10px; font-size: 10px; line-height: 1.9; color: #99b49e; }.evolution-hint svg { color: #e6bb77; margin-top: 3px; }
+.building-sheet-footer { padding: 15px 22px 20px; }.building-sheet-footer .primary-action { justify-content: flex-start; }.building-upgrade-cost { margin-right: auto; display: flex; align-items: center; gap: 5px; direction: ltr; font-size: 11px; }.building-sheet-footer > small { display: block; color: #e5a48d; font-size: 10px; margin-top: 7px; }
+.building-economy-link { display: flex; align-items: center; justify-content: center; gap: 6px; min-height: 35px; width: 100%; background: transparent; color: #adc2a7; font-size: 11px; margin-top: 4px; }
+.version-label a { display: inline-block; margin-top: 10px; color: #b8cfaa; text-decoration: underline; }
+
+@media(max-width:700px) {
+  .building-marker { width: 58px; height: 58px; }
+  .building-marker-level { right: 4%; bottom: 9%; min-width: 16px; height: 16px; font-size: 8px; border-radius: 5px; }
+  .building-marker-name { display: none; }
+  .building-flare { width: 3px; height: 6px; }
+  .building-sheet { width: 100%; max-height: 87dvh; border-radius: 24px 24px 0 0; border-bottom: 0; animation: mobile-sheet-in .35s var(--ease); padding-bottom: env(safe-area-inset-bottom); }
+  .building-showcase { min-height: 160px; margin: 0 20px; }.building-showcase .building-model { width: 175px; height: 160px; }
+  .building-sheet-copy { padding: 13px 20px 0; }.building-sheet-footer { padding: 13px 20px 19px; }
+  .hero-ship-sprite { height: 40px; left: 10px; }
+  .tower-pad .tower-asset { width: 51px; height: 51px; }
+}
+@media(prefers-reduced-motion:reduce) { .building-main-sprite,.building-flare,.building-future-ring,.tower-radar-antenna,.tower-patrol-fleet i,.hero-marker::before { animation: none !important; } }
+
+/* Realistic isometric models: each tier and special branch has its own sprite. */
+.tower-pad.built { width: 82px; height: 82px; }
+.tower-pad .tower-asset { width: 82px; height: 82px; }
+.tower-real-sprite { position:absolute; z-index:3; inset:0; width:100%; height:100%; object-fit:contain; transform:scaleX(var(--tower-facing, 1)); transform-origin:50% 70%; transition:transform .3s ease; animation:tower-materialize .55s cubic-bezier(.2,.8,.2,1) both; }
+.tower-asset.firing .tower-real-sprite { animation:tower-shoot .34s ease-out infinite; }
+.tower-special-glint { position:absolute; z-index:4; left:47%; top:22%; width:4px; height:4px; border-radius:50%; background:#fff0b2; box-shadow:0 0 7px #ffe49b; animation:building-light 1.5s ease-in-out infinite alternate; }
+.tower-asset.branch-1 .tower-special-glint { background:#acfff3; box-shadow:0 0 8px #7cf9ef; }
+.turret-muzzle-flash { position:absolute; z-index:5; right:15%; top:19%; width:16px; height:16px; border-radius:50%; background:radial-gradient(circle,#fffbe4 0%,#ffd875 20%,#ff913e 45%,transparent 72%); mix-blend-mode:screen; animation:muzzle-blink .34s steps(2,end) infinite; }
+.asset-ew .turret-muzzle-flash,.asset-air.branch-1 .turret-muzzle-flash { background:radial-gradient(circle,#fff 0%,#b3fffa 25%,#6dcfff 48%,transparent 72%); }
+.tower-radar-pulse { position:absolute; z-index:2; inset:16%; border:1px solid #8ddfd1; border-radius:50%; opacity:.15; animation:radar-pulse 3s ease-out infinite; }
+.tower-asset.preview-model .tower-real-sprite { animation:none; }
+.choice-icon .tower-asset { width:49px; height:49px; }
+.selected-tower-art .tower-asset { width:85px; height:85px; }
+.installed-icon .tower-asset { width:52px; height:52px; }
+.branch-model { width:56px; height:56px; display:grid; place-items:center; flex-shrink:0; }
+.branch-model .tower-asset { width:56px; height:56px; }
+.special-branches > button { min-height:69px; }
+@keyframes tower-materialize { 0% { opacity:.4; translate:0 7px; scale:.8; } 65% { opacity:1; translate:0 -2px; scale:1.04; } 100% { translate:0 0; scale:1; } }
+@keyframes tower-shoot { 0%,65%,100% { translate:0 0; } 12% { translate:-2px 2px; } }
+@keyframes muzzle-blink { 0%,35% { opacity:1; scale:1; } 36%,100% { opacity:0; scale:.6; } }
+@keyframes radar-pulse { 0% { opacity:.5; scale:.6; } 80%,100% { opacity:0; scale:1.65; } }
+@media(max-width:700px) { .tower-pad.built,.tower-pad .tower-asset { width:60px; height:60px; } .choice-icon .tower-asset { width:42px; height:42px; } }
+@media(prefers-reduced-motion:reduce) { .tower-real-sprite,.turret-muzzle-flash,.tower-radar-pulse,.tower-special-glint { animation:none!important; } }
+
+/* The water image, collision coordinates, SVG paths and ship sprites use one identical world rectangle. */
+.world-transform[data-layout="landscape"],.world-transform[data-layout="portrait"]{inset:0;bottom:0}
+.world-transform[data-layout="landscape"] .map-image,.world-transform[data-layout="portrait"] .map-image{inset:0;bottom:0;background-size:100% 100%;background-position:center}
+
+/* ===== Tower power tiers: readable at a glance, epic at max ===== */
+.tower-pad.built{filter:drop-shadow(0 6px 14px rgba(0,0,0,.45))}
+.tower-pad.built::after{content:"";position:absolute;inset:2px;border-radius:50%;pointer-events:none;border:1px solid rgba(255,255,255,.08)}
+.tower-asset.level-2 .tower-real-sprite{filter:saturate(1.08) brightness(1.04)}
+.tower-asset.level-3 .tower-real-sprite{filter:saturate(1.16) brightness(1.08) drop-shadow(0 0 10px rgba(255,200,110,.35))}
+.tower-asset.level-3::before{content:"";position:absolute;inset:6%;border-radius:50%;border:1px solid rgba(255,205,120,.5);box-shadow:0 0 0 3px rgba(255,190,90,.12),0 0 18px rgba(255,180,80,.25);pointer-events:none}
+.tower-asset.special::before{content:"";position:absolute;inset:0;border-radius:50%;border:2px solid rgba(255,215,140,.85);box-shadow:0 0 0 4px rgba(255,190,90,.15),0 0 26px rgba(255,180,80,.45),inset 0 0 18px rgba(255,200,110,.18);pointer-events:none;animation:special-ring 2.6s ease-in-out infinite}
+.tower-asset.special.branch-1::before{border-color:rgba(130,255,245,.85);box-shadow:0 0 0 4px rgba(120,255,245,.14),0 0 26px rgba(110,255,240,.45),inset 0 0 18px rgba(120,255,245,.18)}
+@keyframes special-ring{50%{box-shadow:0 0 0 6px rgba(255,190,90,.08),0 0 34px rgba(255,180,80,.6),inset 0 0 22px rgba(255,200,110,.3)}}
+.tower-asset.firing .tower-real-sprite{animation:tower-shoot .3s ease-out infinite}
+.tower-tier{display:flex;gap:3px;position:absolute;bottom:-4px;left:50%;transform:translateX(-50%);z-index:6;padding:2px 6px;border-radius:99px;background:rgba(8,20,22,.82);border:1px solid rgba(255,255,255,.12)}
+.tower-tier i{width:14px;height:4px;border-radius:2px;background:rgba(255,255,255,.16)}
+.tower-tier i:nth-child(1){background:#9fb3ad}.tower-tier i:nth-child(2){background:#ffd88f}.tower-tier i:nth-child(3){background:#ff9d5c}.tower-tier i:nth-child(4){background:linear-gradient(90deg,#ffd76a,#7cf9ef)}
+.tower-caption{font-weight:700;text-shadow:0 2px 8px rgba(0,0,0,.8)}
+.empty-pad{transition:transform .18s var(--ease),box-shadow .18s}
+.tower-pad.empty:not(.locked):hover .empty-pad{transform:scale(1.1);box-shadow:0 0 0 3px rgba(140,255,220,.4),0 0 22px rgba(110,255,210,.4)}
+/* Buildings breathe with production */
+.building-marker::after{content:"";position:absolute;left:50%;bottom:8%;width:44%;height:10px;transform:translateX(-50%);border-radius:50%;background:radial-gradient(ellipse,rgba(255,215,140,.28),transparent 70%);opacity:0;transition:opacity .3s}
+.building-marker:hover::after{opacity:1}
+.building-model.evolution-4 .building-main-sprite,.building-model.evolution-5 .building-main-sprite{filter:saturate(1.15) brightness(1.08) drop-shadow(0 0 14px rgba(130,255,240,.3))}
+.hero-marker{filter:drop-shadow(0 6px 12px rgba(0,0,0,.5))}
+.hero-marker.chosen{filter:drop-shadow(0 0 14px rgba(140,255,225,.8))}
+
+/* Portrait density: smaller pads/markers so the strait core stays tappable */
+.world-transform[data-layout="portrait"] .building-marker { width: 46px; height: 46px; }
+.world-transform[data-layout="portrait"] .tower-pad { width: 38px; height: 38px; }
+.world-transform[data-layout="portrait"] .platform-marker img { width: 38px; height: 38px; }
+
+/* ——— Zoom tiers (LOD): markers are screen-space UI (counter-scaled by --mz),
+   so their size is zoom-independent; tiers only change the factor (--pf) and
+   what is visible. World content (ships, towers on canvas, the map itself)
+   scales with the world: zoomed out everything is tiny, zoomed in you build. ——— */
+.world-transform.tz-strategic .tower-pad { --pf: .3; opacity: .85; }
+.world-transform.tz-strategic .tower-pad > * { visibility: hidden; }
+.world-transform.tz-strategic .building-marker { display: none !important; }
+.world-transform.tz-strategic .platform-marker { --pf: .38; }
+.world-transform.tz-strategic .platform-marker span { display: none; }
+.world-transform.tz-strategic .hero-marker { --pf: .5; }
+.world-transform.tz-strategic .hero-marker small, .world-transform.tz-strategic .hero-marker .hero-star { display: none; }
+.world-transform.tz-strategic .contraband-marker { display: none !important; }
+.world-transform.tz-strategic .map-place { display: none !important; }
+.world-transform.tz-strategic .map-place.place-port, .world-transform.tz-strategic .water-label { display: block !important; }
+.world-transform.tz-ops .tower-pad { --pf: .72; }
+.world-transform.tz-ops .building-marker { --pf: .62; }
+.world-transform.tz-ops .building-marker span { display: none; }
+.world-transform.tz-ops .platform-marker { --pf: .62; }
+.world-transform.tz-ops .platform-marker span { display: none; }
+.world-transform.tz-ops .hero-marker { --pf: .78; }
