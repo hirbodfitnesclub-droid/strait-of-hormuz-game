@@ -1,5 +1,6 @@
 import { initialIdle, MISSIONS, MANAGERS, CONTRACTS, currentMission, missionProgress, managerCost, operationInfo, previewChest, advanceLootSeed, type IdleState, type ManagerId, type ContractId, type UpgradeQuantity, type Reward } from "./progression";
 import { findWaterRoute, getLane, nearestWater, sampleLane, type MapLayout, type Point } from "./navigation";
+import { weaponSpec, modelKindFor, specInterval, flightTime, type ModelKind } from "./weapons-spec";
 
 export type BuildingId = "oil" | "tank" | "dock" | "refinery" | "steel" | "arms" | "power" | "water" | "city" | "welfare" | "optical";
 export type TowerKind = "cannon" | "heavy" | "missile" | "air" | "ew" | "boat";
@@ -17,6 +18,9 @@ export interface Tower {
   focusId?: number;
   focusTime?: number;
   lastPopup?: number;
+  /** Battle-seconds until this tower may fire again (discrete-fire core).
+   *  Absent/0 = ready. Decremented by battle time only while in battle. */
+  cooldown?: number;
 }
 export interface Enemy {
   id: number;
@@ -36,7 +40,36 @@ export interface Enemy {
 export interface Pirate { id: number; progress: number; hp: number; }
 export interface Contraband { id: number; progress: number; }
 export interface Merchant { id: number; progress: number; kind: "barge" | "bulk" | "container" | "tanker"; reward: number; paid: boolean; }
-export interface Shot { x1: number; y1: number; x2: number; y2: number; kind: TowerKind; }
+/** One discrete shot event, emitted the moment a tower (or hero) fires.
+ *  Damage is NOT applied here — it lands when the matching PendingImpact
+ *  resolves after flightDur battle-seconds. Renderers (gamesync/FX) consume
+ *  these records; `interval` is the firing interval that produced the shot
+ *  and is the source for the tower's animation charge period. */
+export interface Shot {
+  slot: number;              // owning tower slot; -1 = hero shot
+  kind: TowerKind;           // FX family (hero shots carry their FX family kind)
+  modelKind: ModelKind | "hero";
+  targetId: number;
+  flightDur: number;         // battle-seconds until impact (0 = hitscan)
+  damage: number;            // rolled per-shot damage, before target-side modifiers
+  crit: boolean;
+  interval: number;          // seconds between this tower's shots (0 = beam/pirate)
+  x1: number; y1: number; x2: number; y2: number;
+}
+/** A projectile in flight. eta counts down in battle time; on arrival the
+ *  shot's damage resolves through applyDamage — or fizzles if the target is
+ *  dead, has leaked, or (for tower shots) has left the tower's range. */
+export interface PendingImpact {
+  targetId: number;
+  eta: number;
+  damage: number;
+  crit: boolean;
+  slot: number;              // tower slot; -1 = hero shot
+  kind: TowerKind | "hero";
+  modelKind: ModelKind | "hero";
+  branch: number | null;
+  heroType?: number;         // hero shots only (type 2 breaks armor on impact)
+}
 export interface Popup { id: number; x: number; y: number; text: string; life: number; }
 export interface GameState {
   version: number;
@@ -51,6 +84,7 @@ export interface GameState {
   security: number; hearts: number; wave: number; highestWave: number;
   phase: Phase; mode: Mode; speed: 1 | 2 | 3; layout: MapLayout;
   enemies: Enemy[]; pirates: Pirate[]; contraband: Contraband[]; merchants: Merchant[]; shots: Shot[]; popups: Popup[];
+  pendingImpacts: PendingImpact[];
   spawnRemaining: number; spawnClock: number; spawnIndex: number; nextId: number; earlyBonus: boolean;
   countdown: number; trafficClock: number; trafficCount: number; destroyed: number;
   elapsed: number; cooldowns: Record<Spell, number>; overdrive: number;
@@ -175,7 +209,7 @@ export function initialGame(): GameState {
     research: [],
     cards: { cannon: { count: 0, level: 1 }, heavy: { count: 0, level: 1 }, missile: { count: 0, level: 1 }, air: { count: 0, level: 1 }, ew: { count: 0, level: 1 }, boat: { count: 0, level: 1 } },
     islands: ["main", "qeshm"], security: 70, hearts: 20, wave: 1, highestWave: 0,
-    phase: "peace", mode: "campaign", speed: 1, layout: "landscape", enemies: [], pirates: [], contraband: [], merchants: [{ id: 1, progress: .24, kind: "bulk", reward: 120, paid: false }, { id: 2, progress: .63, kind: "container", reward: 500, paid: false }], shots: [], popups: [],
+    phase: "peace", mode: "campaign", speed: 1, layout: "landscape", enemies: [], pirates: [], contraband: [], merchants: [{ id: 1, progress: .24, kind: "bulk", reward: 120, paid: false }, { id: 2, progress: .63, kind: "container", reward: 500, paid: false }], shots: [], popups: [], pendingImpacts: [],
     spawnRemaining: 0, spawnClock: 0, spawnIndex: 0, nextId: 3, earlyBonus: false, countdown: 15, trafficClock: 0, trafficCount: 0,
     destroyed: 0, elapsed: 0, cooldowns: { strike: 0, emp: 0, overdrive: 0 }, overdrive: 0,
     hero: { ...sampleLane(getLane("landscape", "enemy"), .45), active: 0 }, hero2: null, towerStuns: {}, challengeRule: 0, chests: 0, prestige: 0, event: null, eventClock: 0,
@@ -193,11 +227,17 @@ export function enemyPosition(enemy: Enemy, layout: MapLayout = "landscape") {
   if (enemy.kind === "air") { const path = getLane(layout, "enemy"), start = path[0], end = path[path.length - 1]; return { x: start.x + (end.x - start.x) * enemy.progress, y: start.y + (end.y - start.y) * enemy.progress }; }
   return positionAt(enemy.progress, layout);
 }
+/** Tower power draw in MW, read from the canonical weapons spec (R1) —
+ *  replaces the old flat TOWERS.power × tier-growth formula. The tier-4
+ *  "capacitors" research discount (−35%) is unchanged. */
+export function towerPowerMw(s: GameState, t: Tower) {
+  return weaponSpec(t.kind, t.tier, t.branch).powerMW * (t.tier === 4 && s.research.includes("capacitors") ? 0.65 : 1);
+}
 export function powerBreakdown(s: GameState) {
   const b = s.buildings;
   const rates: [BuildingId, number][] = [["oil", 5], ["tank", 1], ["dock", 3], ["refinery", 15], ["steel", 25], ["arms", 30], ["water", 6], ["city", 4], ["welfare", 2], ["optical", 4]];
   const consumers = rates.filter(([id]) => b[id] > 0).map(([id, rate]) => ({ id: id as string, name: BUILDINGS[id].name, mw: b[id] * rate }));
-  const towersMw = s.towers.reduce((sum, t) => sum + TOWERS[t.kind].power * (1 + (t.tier - 1) * 0.2) * (t.tier === 4 && s.research.includes("capacitors") ? 0.65 : 1), 0);
+  const towersMw = s.towers.reduce((sum, t) => sum + towerPowerMw(s, t), 0);
   if (towersMw > 0.5) consumers.push({ id: "towers", name: "شبکهٔ برجک‌های دفاعی", mw: Math.round(towersMw) });
   consumers.sort((a, c) => c.mw - a.mw);
   const stats = getStats(s);
@@ -214,7 +254,7 @@ export function distance(a: { x: number; y: number }, b: { x: number; y: number 
 export function getStats(s: GameState) {
   const b = s.buildings;
   const powerProduced = b.power * 60 * (s.fuel > 0.01 ? 1 : 0.2) * (s.research.includes("oilmaster") ? 1.15 : 1);
-  const towerPower = s.towers.reduce((sum, t) => sum + TOWERS[t.kind].power * (1 + (t.tier - 1) * 0.2) * (t.tier === 4 && s.research.includes("capacitors") ? 0.65 : 1), 0);
+  const towerPower = s.towers.reduce((sum, t) => sum + towerPowerMw(s, t), 0);
   const powerUsed = b.oil * 5 + b.tank + b.dock * 3 + b.refinery * 15 + b.steel * 25 + b.arms * 30 + b.water * 6 + b.city * 4 + (b.welfare ?? 0) * 2 + (b.optical ?? 0) * 4 + towerPower;
   const waterProduced = b.water * 30 * (s.research.includes("watertech") ? 2 : 1);
   const waterUsed = b.city * 14 + b.refinery * 5;
@@ -231,16 +271,27 @@ export function getStats(s: GameState) {
   const oilCapacity = b.tank * 500 * Math.pow(2, Math.floor(b.tank / 10)) * (s.research.includes("tanktech") ? 1.2 : 1);
   return { powerProduced, powerUsed, waterProduced, waterUsed, grid, stability, multi, productionBoost, output, oilRate, exportRate, dollarRate, oilCapacity };
 }
-export function towerDps(s: GameState, tower: Tower) {
-  const def = TOWERS[tower.kind];
+/** Shooter-side damage multipliers shared by per-shot damage and display DPS:
+ *  prestige, family card level and the research tree. (The old flat
+ *  1.8^(tier-1) growth and the tier-4 branch bonus are gone — per-tier and
+ *  per-branch strength now lives in the weapons spec itself, per R1.) */
+export function damageTech(s: GameState, tower: Tower) {
   let tech = 1 + s.prestige * 0.1 + (s.cards[tower.kind].level - 1) * 0.1;
   if (s.research.includes("titanium") && (tower.kind === "cannon" || tower.kind === "heavy")) tech *= 1.25;
   if (s.research.includes("targeting")) tech *= 1.1;
   if (s.research.includes("gunpowder") && tower.kind === "missile") tech *= 1.1;
   if (s.research.includes("electronics") && (tower.kind === "air" || tower.kind === "ew")) tech *= 1.1;
   if (s.research.includes("doctrine")) tech *= 1.15;
-  if (tower.tier === 4) tech *= tower.branch === 0 ? 1.25 : 1.4;
-  return def.damage * Math.pow(1.8, tower.tier - 1) * def.rate * tech * getStats(s).grid;
+  return tech;
+}
+/** Expected damage per second, derived from the weapons spec so the UI and
+ *  offline rewards track the real discrete-fire numbers: per-shot damage
+ *  (with crit expectation) ÷ firing interval × tech × grid. For the laser,
+ *  spec damage already IS its base DPS (beam ramp not included). */
+export function towerDps(s: GameState, tower: Tower) {
+  const spec = weaponSpec(tower.kind, tower.tier, tower.branch);
+  const base = spec.mode === "beam" ? spec.damage : (spec.damage * (1 + spec.critChance)) / specInterval(spec);
+  return base * damageTech(s, tower) * getStats(s).grid;
 }
 export function getRange(s: GameState, tower: Tower) {
   const base = tower.kind === "air" && tower.tier === 4 && tower.branch === 0 ? 65 : TOWERS[tower.kind].range;
@@ -265,7 +316,7 @@ export function hydrateGame(raw: unknown): { game: GameState; offline: number } 
   const saved = raw as GameState;
   if (saved.version !== 1 || !saved.buildings || !Array.isArray(saved.towers) || !saved.cards) return null;
   const base = initialGame();
-  const game: GameState = { ...base, ...saved, buildings: { ...base.buildings, ...saved.buildings }, cards: { ...base.cards, ...saved.cards }, cooldowns: { ...base.cooldowns, ...saved.cooldowns }, idle: { ...base.idle, ...saved.idle, managerLevels: { ...base.idle.managerLevels, ...saved.idle?.managerLevels } }, shots: [], popups: [] };
+  const game: GameState = { ...base, ...saved, buildings: { ...base.buildings, ...saved.buildings }, cards: { ...base.cards, ...saved.cards }, cooldowns: { ...base.cooldowns, ...saved.cooldowns }, idle: { ...base.idle, ...saved.idle, managerLevels: { ...base.idle.managerLevels, ...saved.idle?.managerLevels } }, shots: [], popups: [], pendingImpacts: [] };
   // Tamper hardening: a corrupted or hand-edited save must never crash the game.
   const num = (v: unknown, fb: number) => typeof v === "number" && Number.isFinite(v) ? v : fb;
   game.cash = num(game.cash, base.cash); game.oil = num(game.oil, base.oil); game.fuel = num(game.fuel, base.fuel); game.steel = num(game.steel, base.steel); game.ammo = num(game.ammo, base.ammo);
@@ -273,7 +324,7 @@ export function hydrateGame(raw: unknown): { game: GameState; offline: number } 
   game.security = Math.max(0, Math.min(100, num(game.security, 70))); game.prestige = Math.max(0, Math.floor(num(game.prestige, 0))); game.oilSplit = Math.max(0, Math.min(100, num(game.oilSplit, 40)));
   game.idle.bank = num(game.idle.bank, 0);
   (Object.keys(game.buildings) as BuildingId[]).forEach(k => { game.buildings[k] = Math.max(0, Math.floor(num(game.buildings[k], base.buildings[k]))); });
-  game.towers = (Array.isArray(game.towers) ? game.towers : []).filter(t => t && typeof t === "object" && (TOWER_KINDS as string[]).includes(t.kind) && Number.isInteger(t.slot) && t.slot >= 0 && t.slot < SLOTS.length).map(t => ({ ...t, tier: Math.max(1, Math.min(4, Math.floor(num(t.tier, 1)))) }));
+  game.towers = (Array.isArray(game.towers) ? game.towers : []).filter(t => t && typeof t === "object" && (TOWER_KINDS as string[]).includes(t.kind) && Number.isInteger(t.slot) && t.slot >= 0 && t.slot < SLOTS.length).map(t => ({ ...t, tier: Math.max(1, Math.min(4, Math.floor(num(t.tier, 1)))), cooldown: Math.max(0, num((t as Tower).cooldown, 0)) }));
   game.islands = (Array.isArray(game.islands) ? game.islands : base.islands).filter(id => ISLANDS.some(i => i.id === id));
   if (!game.islands.includes("main")) game.islands.push("main");
   game.research = (Array.isArray(game.research) ? game.research : []).filter(r => typeof r === "string");
@@ -383,6 +434,8 @@ function startWave(s: GameState, early: boolean) {
   if (s.earlyBonus) s.ammo = Math.min(5000, s.ammo + 25);
   if (s.mode === "challenge") { s.challengeRule = (s.idle.challengeRuns ?? 0) % 3; s.idle.challengeRuns = (s.idle.challengeRuns ?? 0) + 1; }
   s.phase = "battle";
+  s.pendingImpacts = []; // no projectiles carry over between waves
+  for (const t of s.towers) t.cooldown = 0; // every tower opens fire ready
   s.idle.waveStartedAt = s.elapsed; s.idle.waveStartKills = s.destroyed; s.idle.lastBattle = null;
   s.combo = 0; s.comboTimer = 0; s.waveLeaked = false; s.slowmo = 0;
   s.spawnRemaining = 5 + Math.min(s.wave, 15) + (s.wave % 5 === 0 ? 1 : 0);
@@ -402,6 +455,91 @@ function canSeeSub(s: GameState, pos: { x: number; y: number }) {
 function bounty(s: GameState, enemy: Enemy) {
   const base = enemy.kind === "boss" ? 700 : enemy.kind === "destroyer" ? 120 : enemy.kind === "corvette" ? 65 : 35;
   return Math.round(base * Math.pow(1.1, s.wave) * (s.earlyBonus ? 1.25 : 1));
+}
+
+export interface DamageSource {
+  kind: TowerKind | "hero" | "burn" | "aura";
+  modelKind?: ModelKind | "hero";
+  slot?: number;           // firing tower's slot (jammer context); omit for non-tower sources
+  branch?: number | null;
+  direct?: boolean;        // the shot's primary hit — eligible for destroyer interception
+}
+
+/** The single damage path for the whole game (audit متوسط-۸). Every damage
+ *  source — tower shots at impact, heroes, burn-over-time, auras — passes
+ *  through here, so target-side defenses apply uniformly:
+ *  - corvette composite armor halves cannon-family fire (railgun pierces);
+ *  - the Titan (boss 3) shield cuts ALL sources to 35% while its cycle is up
+ *    (first 10s of every 15s) — heroes and burn no longer bypass it;
+ *  - the Supercarrier (boss 4) jammer weakens towers firing from inside 26;
+ *  - destroyer point-defense nullifies the first direct missile-family shot
+ *    to land in each 5-second window, at the moment of impact — hypersonic
+ *    is immune, and an EMP-branch tower in range disables the defense.
+ *  Returns the damage actually dealt (0 when intercepted). */
+export function applyDamage(s: GameState, target: Enemy, raw: number, source: DamageSource): number {
+  if (raw <= 0 || target.hp <= 0) return 0;
+  let damage = raw;
+  if (target.kind === "corvette" && source.kind === "cannon" && source.branch !== 1 && !(target.armorBreak ?? 0)) damage *= 0.5;
+  if (target.kind === "boss" && target.boss === 3 && target.specialClock < 10 && !(target.armorBreak ?? 0)) damage *= 0.35;
+  if (source.slot !== undefined && source.slot >= 0) {
+    const slotPos = getSlots(s.layout)[source.slot];
+    const jammer = s.enemies.find(e => e.kind === "boss" && e.boss === 4 && e.hp > 0);
+    if (slotPos && jammer && distance(slotPos, enemyPosition(jammer, s.layout)) < 26) damage *= 0.6;
+  }
+  if (source.direct && source.kind === "missile" && target.kind === "destroyer" && source.modelKind !== "hypersonic" && (target.intercept ?? 0) <= 0) {
+    const targetPos = enemyPosition(target, s.layout);
+    const defenseDisabled = s.towers.some(t => t.kind === "ew" && t.tier === 4 && t.branch === 0 && distance(getSlots(s.layout)[t.slot], targetPos) < getRange(s, t));
+    if (!defenseDisabled) { target.intercept = 5; return 0; }
+  }
+  target.hp -= damage;
+  if (damage > 0) target.hitFlash = 1;
+  return damage;
+}
+
+/** Enemies a tower may engage right now, in its priority order. Shared by
+ *  the firing pass and by impact-time multi-target branch effects. */
+function towerCandidates(s: GameState, tower: Tower) {
+  const slot = getSlots(s.layout)[tower.slot];
+  const def = TOWERS[tower.kind], range = getRange(s, tower);
+  const candidates = s.enemies.filter(e => {
+    const pos = enemyPosition(e, s.layout), target = enemyTarget(e);
+    return e.hp > 0 && e.progress < 1 && def.targets.includes(target) && distance(slot, pos) <= range && (target !== "sub" || canSeeSub(s, pos));
+  });
+  candidates.sort((a, b) => tower.priority === "strongest" ? b.hp - a.hp : tower.priority === "weakest" ? a.hp - b.hp : tower.priority === "air" ? Number(b.kind === "air") - Number(a.kind === "air") || b.progress - a.progress : b.progress - a.progress);
+  return candidates;
+}
+
+/** Resolve one projectile's arrival. Wave-1 MECH teams refine the branch
+ *  effects below; ROOT keeps their current per-shot percentages, moved from
+ *  per-tick application to the impact moment (checklist §۰٫۲/۰٫۳). */
+function resolveImpact(s: GameState, p: PendingImpact) {
+  const target = s.enemies.find(e => e.id === p.targetId);
+  // Void shot: target destroyed or leaked while the projectile was in flight.
+  if (!target || target.hp <= 0 || target.progress >= 1) return;
+  const tower = p.slot >= 0 ? s.towers.find(t => t.slot === p.slot) : undefined;
+  const targetPos = enemyPosition(target, s.layout);
+  // Void shot: target left the firing tower's range before impact (hitscan
+  // resolves in the same tick it fires, so it is naturally exempt).
+  if (tower && distance(getSlots(s.layout)[tower.slot], targetPos) > getRange(s, tower)) return;
+  const source: DamageSource = { kind: p.kind, modelKind: p.modelKind, slot: p.slot, branch: p.branch, direct: true };
+  const dealt = applyDamage(s, target, p.damage, source);
+  if (p.heroType === 2) target.armorBreak = 5; // hero type 2 cracks armor on impact
+  if (dealt <= 0) return; // intercepted at the destroyer's point-defense: no effects ride along
+  if (p.crit) s.popups.push({ id: s.nextId++, x: targetPos.x, y: targetPos.y - 1.5, text: `✸−${Math.max(1, Math.round(dealt))}`, life: 1.2 });
+  if (!tower) return;
+  const splashSource: DamageSource = { ...source, direct: false };
+  if (tower.kind === "heavy") {
+    const nearby = towerCandidates(s, tower).filter(other => other.id !== target.id && distance(targetPos, enemyPosition(other, s.layout)) < 9).slice(0, 4);
+    for (const other of nearby) applyDamage(s, other, p.damage * 0.35, splashSource);
+    if (tower.tier === 4 && tower.branch === 0) for (const e of [target, ...nearby]) { e.burn = 3; e.burnDamage = Math.max(e.burnDamage ?? 0, 18); }
+    if (tower.tier === 4 && tower.branch === 1) target.stun = Math.max(target.stun, 2);
+  }
+  if (tower.tier === 4 && tower.kind === "missile" && tower.branch === 1) {
+    for (const other of towerCandidates(s, tower).filter(e => e.id !== target.id).slice(0, 3)) applyDamage(s, other, p.damage * 0.7, splashSource);
+  }
+  if (tower.tier === 4 && tower.kind === "cannon" && tower.branch === 1) {
+    for (const other of towerCandidates(s, tower).filter(e => e.id !== target.id).slice(0, 4)) applyDamage(s, other, p.damage * 0.5, splashSource);
+  }
 }
 
 export type WaveUnit = { kind: Enemy["kind"]; count: number; boss: number };
@@ -510,7 +648,8 @@ function tick(s: GameState, delta: number, battlePaused = false) {
       if (slot && TOWERS[tower.kind].targets.includes("sea") && distance(slot, pos) < getRange(s, tower)) {
         pirate.hp -= towerDps(s, tower) * dt * (s.ammo > 0 ? 1 : 1 / 3);
         s.ammo = Math.max(0, s.ammo - TOWERS[tower.kind].rate * dt);
-        s.shots.push({ x1: slot.x, y1: slot.y, x2: pos.x, y2: pos.y, kind: tower.kind });
+        const mk = modelKindFor(tower.kind, tower.tier, tower.branch);
+        s.shots.push({ slot: tower.slot, kind: tower.kind, modelKind: mk, targetId: pirate.id, flightDur: flightTime(mk, distance(slot, pos)), damage: 0, crit: false, interval: 0, x1: slot.x, y1: slot.y, x2: pos.x, y2: pos.y });
       }
     }
     if (pirate.hp <= 0) { s.cash += 50; s.security = Math.min(100, s.security + 2); s.destroyed++; s.popups.push({ id: s.nextId++, x: pos.x, y: pos.y, text: "+50", life: 1.4 }); }
@@ -563,7 +702,7 @@ function tick(s: GameState, delta: number, battlePaused = false) {
   const reinforcements: Enemy[] = [];
   for (const enemy of s.enemies) {
     const pos = enemyPosition(enemy, s.layout);
-    if ((enemy.burn ?? 0) > 0) { enemy.hp -= (enemy.burnDamage ?? 0) * battleDt; enemy.burn = Math.max(0, (enemy.burn ?? 0) - battleDt); }
+    if ((enemy.burn ?? 0) > 0) { applyDamage(s, enemy, (enemy.burnDamage ?? 0) * battleDt, { kind: "burn" }); enemy.burn = Math.max(0, (enemy.burn ?? 0) - battleDt); }
     enemy.intercept = Math.max(0, (enemy.intercept ?? 0) - battleDt);
     enemy.armorBreak = Math.max(0, (enemy.armorBreak ?? 0) - battleDt);
     enemy.hitFlash = Math.max(0, (enemy.hitFlash ?? 0) - battleDt * 3);
@@ -571,7 +710,7 @@ function tick(s: GameState, delta: number, battlePaused = false) {
     for (const t of s.towers) {
       if ((t.kind === "ew" || (t.kind === "boat" && enemy.kind !== "air")) && distance(getSlots(s.layout)[t.slot], pos) < getRange(s, t)) {
         slow = Math.min(slow, t.kind === "boat" ? (t.tier === 4 ? 0.25 : 0.48) : (t.tier === 4 ? 0.4 : 0.7));
-        if (t.kind === "ew" && t.tier === 4 && t.branch === 1 && enemy.kind === "air") enemy.hp -= 20 * battleDt;
+        if (t.kind === "ew" && t.tier === 4 && t.branch === 1 && enemy.kind === "air") applyDamage(s, enemy, 20 * battleDt, { kind: "aura" });
       }
     }
     if (enemy.stun > 0) { enemy.stun = Math.max(0, enemy.stun - battleDt); slow = 0; }
@@ -599,67 +738,72 @@ function tick(s: GameState, delta: number, battlePaused = false) {
       const heroTarget = heroTargets[0];
       if (heroTarget) {
         const pos = enemyPosition(heroTarget, s.layout);
-        heroTarget.hp -= hero.active === 1 ? 260 : hero.active === 2 ? 145 : 75;
-        if (hero.active === 2) heroTarget.armorBreak = 5;
-        s.shots.push({ x1: hero.x, y1: hero.y, x2: pos.x, y2: pos.y, kind: hero.active === 1 ? "air" : "missile" });
+        const damage = hero.active === 1 ? 260 : hero.active === 2 ? 145 : 75;
+        const flightDur = flightTime(hero.active === 1 ? "bavar" : "silo", distance(hero, pos));
+        // Hero damage lands at impact through the single damage path (applyDamage).
+        s.pendingImpacts.push({ targetId: heroTarget.id, eta: flightDur, damage, crit: false, slot: -1, kind: "hero", modelKind: "hero", branch: null, heroType: hero.active });
+        s.shots.push({ slot: -1, kind: hero.active === 1 ? "air" : "missile", modelKind: "hero", targetId: heroTarget.id, flightDur, damage, crit: false, interval: heroInterval, x1: hero.x, y1: hero.y, x2: pos.x, y2: pos.y });
         hero.attackClock = 0;
       }
     }
   };
   heroAttack(s.hero);
   if (s.hero2) heroAttack(s.hero2);
+  // — Discrete fire (fix-program ROOT core; audit بحرانی-۱..۵) —
+  // Each tower owns a cooldown timer; when it elapses the tower fires ONE
+  // shot from the canonical spec, the projectile flies for flightDur
+  // battle-seconds, and only then does its damage land (resolveImpact).
   for (const tower of s.towers) {
     const slot = getSlots(s.layout)[tower.slot];
     if (!slot) continue;
     if ((s.towerStuns?.[tower.slot] ?? 0) > 0) continue; // knocked out by Leviathan missiles
-    const def = TOWERS[tower.kind], range = getRange(s, tower);
-    const candidates = s.enemies.filter(e => {
-      const pos = enemyPosition(e, s.layout), target = enemyTarget(e);
-      return e.hp > 0 && e.progress < 1 && def.targets.includes(target) && distance(slot, pos) <= range && (target !== "sub" || canSeeSub(s, pos));
-    });
-    candidates.sort((a, b) => tower.priority === "strongest" ? b.hp - a.hp : tower.priority === "weakest" ? a.hp - b.hp : tower.priority === "air" ? Number(b.kind === "air") - Number(a.kind === "air") || b.progress - a.progress : b.progress - a.progress);
+    const spec = weaponSpec(tower.kind, tower.tier, tower.branch);
+    if (spec.mode === "beam") {
+      // Thermal laser: a continuous hitscan beam — no projectile, no
+      // cooldown, no ammo. Damage ramps +100%/s of focus on one target,
+      // capped at ×5 (spec damage 90 is the base DPS, per R1).
+      const beamTarget = towerCandidates(s, tower)[0];
+      if (!beamTarget) { tower.focusId = undefined; tower.focusTime = 0; continue; }
+      const beamPos = enemyPosition(beamTarget, s.layout);
+      tower.focusTime = tower.focusId === beamTarget.id ? (tower.focusTime ?? 0) + battleDt : 0;
+      tower.focusId = beamTarget.id;
+      const dealt = applyDamage(s, beamTarget, spec.damage * Math.min(5, 1 + tower.focusTime) * damageTech(s, tower) * stats.grid * battleDt,
+        { kind: tower.kind, modelKind: spec.modelKind, slot: tower.slot, branch: tower.branch });
+      s.shots.push({ slot: tower.slot, kind: tower.kind, modelKind: spec.modelKind, targetId: beamTarget.id, flightDur: 0, damage: dealt, crit: false, interval: 0, x1: slot.x, y1: slot.y, x2: beamPos.x, y2: beamPos.y });
+      continue;
+    }
+    tower.cooldown = Math.max(0, (tower.cooldown ?? 0) - battleDt);
+    if (tower.cooldown > 0) continue;
+    const candidates = towerCandidates(s, tower);
     const target = candidates[0];
     if (!target) { tower.focusId = undefined; tower.focusTime = 0; continue; }
-    const ammoNeed = def.rate * battleDt;
-    const ammoMultiplier = s.overdrive > 0 ? 1 : s.ammo >= ammoNeed ? 1 : 1 / 3;
-    if (s.overdrive <= 0) s.ammo = Math.max(0, s.ammo - ammoNeed);
-    let damage = towerDps(s, tower) * battleDt * ammoMultiplier * (s.overdrive > 0 ? 2 : 1);
-    if ((distance(slot, s.hero) < 18 && s.hero.active === 0) || (s.hero2 && distance(slot, s.hero2) < 18 && s.hero2.active === 0)) damage *= 1.2;
-    if (target.kind === "corvette" && tower.kind === "cannon" && tower.branch !== 1 && !(target.armorBreak ?? 0)) damage *= 0.5;
-    if (target.kind === "boss" && target.boss === 3 && target.specialClock < 10 && !(target.armorBreak ?? 0)) damage *= 0.35; // Titan shield: up 10s of every 15s cycle
-    const jammer = s.enemies.find(e => e.kind === "boss" && e.boss === 4 && e.hp > 0);
-    if (jammer && distance(slot, enemyPosition(jammer, s.layout)) < 26) damage *= 0.6; // Supercarrier radar jam
-    if (tower.tier === 4 && tower.kind === "missile" && tower.branch === 0) damage *= 2;
-    if (tower.tier === 4 && tower.kind === "air" && tower.branch === 1) {
-      tower.focusTime = tower.focusId === target.id ? (tower.focusTime ?? 0) + battleDt : 0;
-      tower.focusId = target.id; damage *= Math.min(5, 1 + tower.focusTime);
-    }
     const targetPos = enemyPosition(target, s.layout);
-    const disabledDefense = s.towers.some(t => t.kind === "ew" && t.tier === 4 && t.branch === 0 && distance(getSlots(s.layout)[t.slot], targetPos) < getRange(s, t));
-    if (target.kind === "destroyer" && tower.kind === "missile" && (target.intercept ?? 0) <= 0 && !disabledDefense && !(tower.tier === 4 && tower.branch === 0)) { damage = 0; target.intercept = 5; }
-    const critChance = tower.tier === 4 ? 0.16 : tower.tier === 3 ? 0.12 : 0.08;
-    const isCrit = damage > 0 && Math.random() < critChance * battleDt * def.rate * 2.2;
-    if (isCrit) damage *= 2;
-    target.hp -= damage;
-    if (damage > 0) target.hitFlash = 1;
-    s.shots.push({ x1: slot.x, y1: slot.y, x2: targetPos.x, y2: targetPos.y, kind: tower.kind });
-    const popupInterval = tower.kind === "heavy" || tower.kind === "missile" ? 2 : tower.kind === "cannon" ? 3.2 : 2.6;
-    if (damage > 0 && s.elapsed - (tower.lastPopup ?? 0) > popupInterval) {
-      const shown = Math.max(1, Math.round(damage * (tower.kind === "cannon" ? 14 : tower.kind === "air" || tower.kind === "ew" ? 9 : 6)));
-      s.popups.push({ id: s.nextId++, x: targetPos.x, y: targetPos.y, text: isCrit ? `✸−${shown}` : `−${shown}`, life: 1.1 }); tower.lastPopup = s.elapsed;
-    } else if (isCrit && damage > 0) {
-      const shown = Math.max(1, Math.round(damage * 10));
-      s.popups.push({ id: s.nextId++, x: targetPos.x, y: targetPos.y - 1.5, text: `✸−${shown}`, life: 1.2 });
+    let interval = specInterval(spec);
+    if (s.overdrive > 0) interval *= 0.5; // overdrive = fire rate ×2 at zero ammo cost (مهم-۳۰)
+    if ((distance(slot, s.hero) < 18 && s.hero.active === 0) || (s.hero2 && distance(slot, s.hero2) < 18 && s.hero2.active === 0)) interval /= 1.2; // catamaran aura = nearby fire rate ×1.2 (متوسط-۱۵)
+    const ammoCost = s.overdrive > 0 ? 0 : spec.ammoPerShot;
+    if (ammoCost > 0) {
+      if (s.ammo >= ammoCost) s.ammo -= ammoCost;
+      else interval *= 3; // dry stock at its turn: this shot still fires, its interval triples (checklist ۰٫۴)
     }
-    if (tower.kind === "heavy") {
-      const nearby = candidates.slice(1).filter(other => distance(targetPos, enemyPosition(other, s.layout)) < 9).slice(0, 4);
-      for (const other of nearby) other.hp -= damage * 0.35;
-      if (tower.tier === 4 && tower.branch === 0) for (const e of [target, ...nearby]) { e.burn = 3; e.burnDamage = Math.max(e.burnDamage ?? 0, 18); }
-      if (tower.tier === 4 && tower.branch === 1) target.stun = Math.max(target.stun, 2);
+    const crit = Math.random() < spec.critChance;
+    let damage = spec.damage * damageTech(s, tower) * stats.grid;
+    if (crit) damage *= 2;
+    const flightDur = flightTime(spec.modelKind, distance(slot, targetPos));
+    tower.cooldown = interval;
+    s.pendingImpacts.push({ targetId: target.id, eta: flightDur, damage, crit, slot: tower.slot, kind: tower.kind, modelKind: spec.modelKind, branch: tower.branch });
+    s.shots.push({ slot: tower.slot, kind: tower.kind, modelKind: spec.modelKind, targetId: target.id, flightDur, damage, crit, interval, x1: slot.x, y1: slot.y, x2: targetPos.x, y2: targetPos.y });
+  }
+  // Projectiles land: advance every in-flight shot by this tick's battle
+  // time and resolve the arrivals — damage exists only from this moment.
+  if (s.pendingImpacts.length) {
+    const stillFlying: PendingImpact[] = [];
+    for (const p of s.pendingImpacts) {
+      p.eta -= battleDt;
+      if (p.eta <= 0) resolveImpact(s, p);
+      else stillFlying.push(p);
     }
-    if (tower.tier === 4 && tower.kind === "missile" && tower.branch === 1) for (const other of candidates.slice(1, 4)) other.hp -= damage * 0.7;
-    if (tower.tier === 4 && tower.kind === "cannon" && tower.branch === 1) for (const other of candidates.slice(1, 5)) other.hp -= damage * 0.5;
-    if (tower.tier === 4 && tower.kind === "boat" && tower.branch === 1) target.hp -= 20 * battleDt;
+    s.pendingImpacts = stillFlying;
   }
   for (const enemy of s.enemies) {
     if (enemy.hp <= 0) {
@@ -704,12 +848,49 @@ function tick(s: GameState, delta: number, battlePaused = false) {
   }
 }
 
+/** Targeted clone for the tick action (fix program; one of the audit's two
+ *  heat roots was a full structuredClone of the entire state on every 125ms
+ *  tick). tick() writes only to the subtrees copied below — verified by
+ *  scripts/audit/test-tick-immutability.cjs, which deep-freezes the input
+ *  state and ticks it. Everything else is shared by reference and is
+ *  read-only for tick; all other actions still pay for a structuredClone. */
+export function cloneForTick(state: GameState): GameState {
+  const idle = state.idle;
+  return {
+    ...state,
+    idle: {
+      ...idle,
+      port: idle.port ? { ...idle.port, tanker: idle.port.tanker ? { ...idle.port.tanker } : null } : idle.port,
+      contract: idle.contract ? { ...idle.contract } : null,
+      stars: { ...idle.stars },
+      managerLevels: { ...idle.managerLevels },
+    },
+    buildings: { ...state.buildings },
+    towers: state.towers.map(t => ({ ...t })),
+    enemies: state.enemies.map(e => ({ ...e })),
+    pirates: state.pirates.map(p => ({ ...p })),
+    contraband: state.contraband.map(c => ({ ...c })),
+    merchants: state.merchants.map(m => ({ ...m })),
+    popups: state.popups.slice(),
+    cooldowns: { ...state.cooldowns },
+    hero: { ...state.hero, route: state.hero.route?.slice() },
+    hero2: state.hero2 ? { ...state.hero2, route: state.hero2.route?.slice() } : null,
+    towerStuns: { ...state.towerStuns },
+    pendingImpacts: state.pendingImpacts.map(p => ({ ...p })),
+    // shared by reference — tick never writes these: research, cards,
+    // islands, layout; shots is reassigned (s.shots = []) before any push.
+  };
+}
+
 export function gameReducer(state: GameState, action: Action): GameState {
   if (action.type === "hydrate") return action.game;
   if (action.type === "reset") { const fresh = initialGame(); fresh.layout = state.layout; fresh.idle.appliedDailyIds = state.idle.appliedDailyIds; fresh.idle.revision = state.idle.revision + 1; return fresh; }
+  if (action.type === "tick") { const s = cloneForTick(state); tick(s, action.dt, action.battlePaused); return s; }
   const s = structuredClone(state);
+  // Shot records are one-render FX events: a non-tick action must not let
+  // gamesync replay the previous tick's shots (and double-count telemetry).
+  s.shots = [];
   switch (action.type) {
-    case "tick": tick(s, action.dt, action.battlePaused); break;
     case "layout": if (s.layout !== action.layout) { s.layout = action.layout; const point = nearestWater(s.hero, action.layout); s.hero.x = point.x; s.hero.y = point.y; s.hero.route = undefined; s.hero.routeIndex = undefined; } break;
     case "split": s.oilSplit = Math.max(0, Math.min(100, action.value)); break;
     case "upgrade-building": {
@@ -864,6 +1045,6 @@ export function gameReducer(state: GameState, action: Action): GameState {
       break;
     }
   }
-  if (action.type !== "tick") s.idle.revision++;
+  s.idle.revision++; // tick returned early above; every other action bumps revision
   return s;
 }

@@ -251,6 +251,11 @@ export class GameSync3D {
   private prevHp = new Map<string, number>();
   private kenneyRev = false;
   private lastShots: unknown = null;
+  /* Shot/impact telemetry (fix program): window.__telemetry counts discrete
+   * shots and landed impacts per modelKind, fed by the shot records' own
+   * flightDur — QA's cadence probe reads it. reset() zeroes both maps. */
+  private telemetry: { shots: Record<string, number>; impacts: Record<string, number>; reset: () => void };
+  private telePending: { kind: string; t: number }[] = [];
   private state: GameState | null = null;
   private placing = new Set<string>();
   private reconciling = false;
@@ -286,6 +291,15 @@ export class GameSync3D {
         if (best) this.aim.set(sl.id, Math.atan2(best.x - sl.x, best.z - sl.z));
       }
     }
+    this.telemetry = {
+      shots: {}, impacts: {},
+      reset: () => {
+        for (const k of Object.keys(this.telemetry.shots)) delete this.telemetry.shots[k];
+        for (const k of Object.keys(this.telemetry.impacts)) delete this.telemetry.impacts[k];
+        this.telePending.length = 0;
+      },
+    };
+    (window as unknown as { __telemetry?: unknown }).__telemetry = this.telemetry;
     this.bindPointer();
     this.loop = this.loop.bind(this);
     this.raf = requestAnimationFrame(this.loop);
@@ -694,6 +708,16 @@ export class GameSync3D {
     this.updateAnims(dt, now);
     this.fx.update(dt);
     this.tuneResolution(dt, now);
+    // telemetry: in-flight shots land after flightDur battle-seconds
+    if (this.telePending.length && game.phase === 'battle') {
+      const advance = dt * game.speed, still: typeof this.telePending = [];
+      for (const p of this.telePending) {
+        p.t -= advance;
+        if (p.t <= 0) this.telemetry.impacts[p.kind] = (this.telemetry.impacts[p.kind] ?? 0) + 1;
+        else still.push(p);
+      }
+      this.telePending = still;
+    }
     // shots → the pack's real battle FX (projectiles/beams per weapon family)
     if (game.shots !== this.lastShots) {
       this.lastShots = game.shots;
@@ -701,14 +725,17 @@ export class GameSync3D {
         const [x1, z1] = pctTo3d(s.x1, s.y1); const [x2, z2] = pctTo3d(s.x2, s.y2);
         const dx = x2 - x1, dz = z2 - z1; const len = Math.hypot(dx, dz) || 1;
         let sx = x1 + (dx / len) * 2.4, sz = z1 + (dz / len) * 2.4; let sy = 3.1;
-        // fire event on the owning tower: aim target, recoil, charge-cycle, real muzzle position
-        let bestSlot: number | null = null; let bd = 49;
-        for (const sl of SLOTS) { const d = (sl.x - x1) ** 2 + (sl.z - z1) ** 2; if (d < bd) { bd = d; bestSlot = sl.id; } }
+        // fire event on the owning tower: the shot record names its tower —
+        // nearest-slot guessing used to misattribute hero shots (audit جدید-۱)
+        const bestSlot: number | null = typeof s.slot === 'number' && s.slot >= 0 ? s.slot : null;
         if (bestSlot !== null) {
           const ta = this.towerAnims.get(bestSlot);
           if (ta) {
             ta.targetPos = new THREE.Vector3(x2, 1.2, z2);
-            if (ta.lastShotAt > 0) { const inst = (now - ta.lastShotAt) / 1000; if (inst > 0.05 && inst < 6) ta.period = ta.period ? ta.period * 0.6 + inst * 0.4 : inst; }
+            // charge-cycle period comes from the shot record's real firing
+            // interval (converted to wall time) — no more tick-arrival EMA,
+            // so game speed scales the visual cadence (audit مهم-۳)
+            if (s.interval > 0) ta.period = s.interval / Math.max(1, game.speed);
             ta.lastShotAt = now;
             const idx = ta.mz.length ? ta.shotIdx % ta.mz.length : 0;
             if (ta.rc.length) { const r = ta.rc[idx % ta.rc.length]; r.obj.position.z = r.bz - ta.spec.recoil; }
@@ -716,6 +743,9 @@ export class GameSync3D {
             ta.shotIdx++;
           }
         }
+        this.telemetry.shots[s.modelKind] = (this.telemetry.shots[s.modelKind] ?? 0) + 1;
+        if (s.flightDur > 0) this.telePending.push({ kind: s.modelKind, t: s.flightDur });
+        else this.telemetry.impacts[s.modelKind] = (this.telemetry.impacts[s.modelKind] ?? 0) + 1;
         this.dispatchShotFx(bestSlot, s.kind, sx, sy, sz, x2, z2, game);
       }
     }
