@@ -16,8 +16,11 @@
  *    that quantized fast weapons to the tick grid (CIWS was 8/s at 1×).
  * 7) Ammo ruling (QA متوسط-۱): a shot the stock cannot pay for does NOT
  *    fire and consumes nothing; the tower retries after 3× interval.
- * 8) Destroyer point-defense intercepts Bavar too (QA متوسط-۲), keyed on
- *    modelKind; Swarm is NOT intercepted (checklist ۲٫۵).
+ * 8) Destroyer point-defense is keyed on modelKind (QA متوسط-۲); Swarm
+ *    is NOT intercepted (checklist ۲٫۵). Bavar's key stays in applyDamage
+ *    defensively, but per checklist ۱٫۴ Bavar is AIR-ONLY (MECH-B target
+ *    filter), so it never engages a destroyer — probe 8 now verifies the
+ *    air-only multi-lock instead of the old sea duel.
  * 9) pendingImpacts is cleared the moment a battle ends (QA جزئی-۱).
  * 10) fireStats live in the logic state (QA جزئی-۲): shots counted at fire
  *     time, hits/fizzled at impact resolution; pirate records never count.
@@ -174,7 +177,9 @@ const tick = (s, n = 1, dt = 0.125) => { for (let i = 0; i < n; i++) s = gameRed
     for (const [tier, branch] of [[1, null], [2, null], [3, null], [4, 0], [4, 1]]) {
       const spec = W.weaponSpec(kind, tier, branch);
       if (spec.mode === 'beam') continue;
-      const specRate = 1 / W.specInterval(spec);
+      // MECH-B: a salvo weapon's cadence expectation is its cycle-average
+      // rocket rate (salvoSize per salvoCycleSeconds), not the flat interval.
+      const specRate = spec.salvoSize ? spec.salvoSize / W.salvoCycleSeconds(spec) : 1 / W.specInterval(spec);
       const ek = kind === 'air' && tier === 4 && branch === 0 ? 'air' : 'speed';
       let chosen = -1, prog = -1;
       for (let si = 0; si < SLOTS.length && chosen < 0; si++) {
@@ -266,7 +271,7 @@ const tick = (s, n = 1, dt = 0.125) => { for (let i = 0; i < n; i++) s = gameRed
   console.log('7) ammo ruling: PASS (insufficient stock → no shot, no consumption, 3× retry; zero-ammo weapons and overdrive unaffected)');
 }
 
-/* ---- 8) point-defense: Bavar intercepted, Swarm not ---- */
+/* ---- 8) point-defense keys + Bavar air-only multi-lock ---- */
 {
   function duel(kind, tier, branch, ticks) {
     let slot = -1, prog = 0;
@@ -282,15 +287,39 @@ const tick = (s, n = 1, dt = 0.125) => { for (let i = 0; i < n; i++) s = gameRed
     for (let i = 0; i < ticks; i++) { s = gameReducer(s, { type: 'tick', dt: 0.125 }); shots.push(...s.shots.filter(sh => sh.interval > 0)); }
     return { s, shots };
   }
-  const bavar = duel('air', 4, 0, 24); // only the first shot can have landed by tick 24
-  assert.ok(bavar.shots.length >= 1, 'bavar must have fired');
-  assert.equal(bavar.s.enemies[0].hp, 100000, 'first Bavar shot must be nullified by destroyer point-defense (checklist ۲٫۵)');
-  assert.ok((bavar.s.enemies[0].intercept ?? 0) > 2, `intercept window must be running, got ${bavar.s.enemies[0].intercept}`);
+  // MECH-B (checklist ۱٫۴): Bavar engages AIR ONLY — the old version of
+  // this probe duelled a destroyer, which §۱٫۴'s target filter forbids.
+  // Bavar must multi-lock the air target (3 missiles, 1 cadence record
+  // per volley) and leave the destroyer completely untouched.
+  {
+    let s = battleBase();
+    let slot = -1, prog = 0;
+    for (let si = 0; si < SLOTS.length && slot < 0; si++) for (let p = 0; p <= 1; p += 0.005) {
+      if (distance(SLOTS[si], positionAt(p)) <= 15) { slot = si; prog = p; break; }
+    }
+    s.towers = [{ slot, kind: 'air', tier: 4, branch: 0, priority: 'air' }];
+    s.enemies = [
+      { id: 1, kind: 'air', boss: 0, hp: 100000, maxHp: 100000, progress: 0.45, stun: 9999, specialClock: 0 },
+      { id: 2, kind: 'destroyer', boss: 0, hp: 100000, maxHp: 100000, progress: prog, stun: 9999, specialClock: 0 },
+    ];
+    const dPos = positionAt(prog);
+    for (const c of [{ x: 1, y: 1 }, { x: 99, y: 1 }, { x: 1, y: 99 }, { x: 99, y: 99 }]) if (distance(c, SLOTS[slot]) > 20 && distance(c, dPos) > 40) { s.hero = { x: c.x, y: c.y, active: 0 }; break; }
+    const shots = [];
+    for (let i = 0; i < 40; i++) { s = gameReducer(s, { type: 'tick', dt: 0.125 }); shots.push(...s.shots); }
+    const bavarShots = shots.filter(sh => sh.modelKind === 'bavar');
+    assert.ok(bavarShots.length >= 3, `bavar must have launched its volley, got ${bavarShots.length} records`);
+    assert.ok(bavarShots.every(sh => sh.targetId === 1), 'every Bavar missile must lock an AIR target');
+    assert.equal(bavarShots.filter(sh => sh.interval > 0).length * 3, bavarShots.length, 'exactly one cadence record per 3-missile volley');
+    assert.equal(s.enemies[1].hp, 100000, 'destroyer must be untouched: Bavar never engages sea targets');
+    assert.equal(s.enemies[1].intercept ?? 0, 0, 'no point-defense window may start from Bavar fire');
+    assert.ok(s.enemies[0].hp < 100000, 'Bavar missiles must land on the air target');
+    console.log(`8a) bavar air-only multi-lock: PASS (${bavarShots.length} missiles on the air target only, destroyer untouched)`);
+  }
   const swarm = duel('missile', 4, 1, 40);
   assert.ok(swarm.shots.length >= 1, 'swarm must have fired');
   assert.ok(swarm.s.enemies[0].hp < 100000, 'Swarm missiles must NOT be intercepted — first impact deals full damage');
   assert.equal(swarm.s.enemies[0].intercept ?? 0, 0, 'no intercept window may start for Swarm');
-  console.log(`8) point-defense keys: PASS (bavar nullified + window ${(bavar.s.enemies[0].intercept ?? 0).toFixed(2)}s; swarm landed for ${100000 - swarm.s.enemies[0].hp} dmg, no window)`);
+  console.log(`8) point-defense keys: PASS (bavar air-only verified above; swarm landed for ${100000 - swarm.s.enemies[0].hp} dmg, no window)`);
 }
 
 /* ---- 9) pendingImpacts cleared when the battle ends ---- */

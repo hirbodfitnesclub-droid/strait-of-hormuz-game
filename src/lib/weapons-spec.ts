@@ -19,8 +19,12 @@
  *   (3 × 15 × 1.5 = 67.5 ≈ the pack's printed 68 DPS). Torpedo squadron:
  *   5 boats (5 × 120 × 0.9 = 540 = printed DPS).
  * - MLRS: the pack's ammoPerShot 12 is per 12-rocket salvo cycle → 1 per
- *   rocket (salvoSize records the cycle; the real salvo + reload pause is
- *   Wave-1 MECH-B work — ROOT fires rockets singly at the pack fire rate).
+ *   rocket. The salvo cycle itself (Wave-1 MECH-B, checklist ۱٫۲) is now
+ *   implemented in game.ts: salvoSize rockets leave at salvoGap (the pack's
+ *   burst rate 9/s), then the launcher reloads for reloadTime (3.2s).
+ * - Swarm / Bavar (MECH-B multi-lock): one fire cycle is a volley —
+ *   volleySize missiles distributed over distinct targets (game.ts).
+ *   Bavar is air-only (checklist ۱٫۴): airOnly filters its candidates.
  * - Hypersonic: permanent crit (checklist ۱٫۳) → critChance 1, crit = ×2.
  *
  * Crit chances are the checklist §۰٫۱۰ ladder: tiers 1-2 = 8%, tier 3 = 12%,
@@ -48,7 +52,11 @@ export interface WeaponSpec {
   critChance: number;      // per shot, 0..1; crit multiplies damage by 2
   units: number;           // independent firing units (garrison 3, torpedo 5, else 1)
   mode: "shot" | "beam";   // beam = continuous hitscan, no projectile (laser only)
-  salvoSize?: number;      // MLRS rockets per cycle (12) — for MECH-B's salvo
+  salvoSize?: number;      // MLRS rockets per cycle (12) — salvo state lives on the tower
+  salvoGap?: number;       // seconds between rockets inside a salvo (MLRS: 1/9)
+  reloadTime?: number;     // pause after a full salvo before the next cycle (MLRS: 3.2)
+  volleySize?: number;     // missiles launched together per cycle, one lock each (swarm 4, bavar 3)
+  airOnly?: boolean;       // target filter: air targets only (bavar)
 }
 
 const critFor = (tier: number) => (tier >= 4 ? 0.16 : tier === 3 ? 0.12 : 0.08);
@@ -73,19 +81,19 @@ export const WEAPON_SPECS: WeaponSpec[] = [
   entry("heavy", "howitzer", 1, null, 45, 0.5, 3, 4),
   entry("heavy", "howitzer", 2, null, 81, 0.55, 3, 7),
   entry("heavy", "howitzer", 3, null, 146, 0.6, 4, 12),
-  entry("heavy", "mlrs", 4, 0, 60, 1.1, 1, 18, { salvoSize: 12 }),
+  entry("heavy", "mlrs", 4, 0, 60, 1.1, 1, 18, { salvoSize: 12, salvoGap: 1 / 9, reloadTime: 3.2 }),
   entry("heavy", "thermobaric", 4, 1, 420, 0.32, 6, 22),
   // — سیلوی موشک / silo family —
   entry("missile", "silo", 1, null, 180, 0.2, 5, 10),
   entry("missile", "silo", 2, null, 324, 0.22, 5, 16),
   entry("missile", "silo", 3, null, 583, 0.25, 6, 26),
   entry("missile", "hypersonic", 4, 0, 1450, 0.16, 8, 40, { critChance: 1 }),
-  entry("missile", "swarm", 4, 1, 380, 0.3, 10, 34),
+  entry("missile", "swarm", 4, 1, 380, 0.3, 10, 34, { volleySize: 4 }),
   // — پدافند هوایی / aadefense family —
   entry("air", "aadefense", 1, null, 20, 2.0, 1, 12),
   entry("air", "aadefense", 2, null, 36, 2.4, 1, 20),
   entry("air", "aadefense", 3, null, 65, 3.0, 2, 34),
-  entry("air", "bavar", 4, 0, 520, 0.4, 6, 48),
+  entry("air", "bavar", 4, 0, 520, 0.4, 6, 48, { volleySize: 3, airOnly: true }),
   entry("air", "laser", 4, 1, 90, 0, 0, 80, { mode: "beam" }),
   // — جنگ الکترونیک / ew family —
   entry("ew", "ew", 1, null, 4, 1.0, 0, 15),
@@ -125,6 +133,17 @@ export function modelKindFor(kind: TowerKind, tier: number, branch: number | nul
 export function specInterval(spec: WeaponSpec): number {
   if (spec.mode === "beam" || spec.fireRate <= 0) return 0;
   return 1 / (spec.fireRate * spec.units);
+}
+
+/** Full MLRS salvo-cycle length in seconds: (salvoSize − 1) gaps between
+ *  the rockets of one salvo plus the reload pause that follows it. The
+ *  cycle-average rocket rate is salvoSize / salvoCycleSeconds — that is
+ *  what towerDps and the cadence probes must expect from a salvo weapon,
+ *  not 1 / specInterval (the pack's flat 1.1/s placeholder). 0 for
+ *  non-salvo specs. */
+export function salvoCycleSeconds(spec: WeaponSpec): number {
+  if (!spec.salvoSize || !spec.salvoGap || !spec.reloadTime) return 0;
+  return (spec.salvoSize - 1) * spec.salvoGap + spec.reloadTime;
 }
 
 /** The game logic measures distances in percent units (the map is 100 wide);
