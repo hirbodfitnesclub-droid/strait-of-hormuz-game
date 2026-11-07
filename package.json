@@ -6,7 +6,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint .",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test:audit": "python3 scripts/audit/runner.py"
   },
   "dependencies": {
     "@capacitor/android": "^7.6.10",
