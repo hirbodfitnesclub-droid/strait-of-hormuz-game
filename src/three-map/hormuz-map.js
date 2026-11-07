@@ -2177,6 +2177,10 @@ class HormuzMap {
   // PERF state: live-enemy count fed by gamesync (label density rule, §16.6),
   // label off-view culling cadence, calm-render frame cap, shadow-cam throttle.
   battleDensity = 0;
+  // Density-rule state WITH hysteresis: minor labels hide when density rises
+  // above 12 and only return at <=9 (dead band), so an enemy count oscillating
+  // around 12 mid-wave cannot flicker the whole minor-label set per spawn/kill.
+  heavyLabels = false;
   _labelCullAt = -1;
   _labelVec = null;
   _frameAcc = 0;
@@ -3186,6 +3190,13 @@ class HormuzMap {
     this.tick(dt);
     this.renderer.render(this.scene, this.camera);
     this.labelRenderer.render(this.scene, this.camera);
+    // PERF (§16): frame hook for the ?fpslog=1 evidence recorder — fired once
+    // per RENDERED frame (after both renderers), so frame-time statistics
+    // measure the real render cadence — including multi-second stalls and
+    // the 30fps calm cap — never a private rAF clock. Absent subscriber =
+    // one property read per frame.
+    const fh = window.__hormuzFrameHook;
+    if (typeof fh === 'function') { try { fh(performance.now()); } catch { /* a recorder must never break rendering */ } }
   };
   tick(dt) {
     const ctl = this.controls;
@@ -3442,9 +3453,13 @@ class HormuzMap {
     }
   }
   /** PERF (§16.6): gamesync reports the live enemy count; in heavy battles
-   *  (>12 enemies) minor map labels (tier 2/3) are hidden entirely. */
+   *  (>12 enemies) minor map labels (tier 2/3) are hidden entirely. The state
+   *  is a dead band (hide >12, show again <=9) so counts hovering at the
+   *  threshold do not flicker ~125 minor labels on every spawn/kill. */
   setBattleDensity(n) {
     this.battleDensity = n | 0;
+    if (this.battleDensity > 12) this.heavyLabels = true;
+    else if (this.battleDensity <= 9) this.heavyLabels = false;
   }
   /** PERF (§16.6): refresh which labels are outside the camera frustum (checked
    *  at ~250ms cadence from tick, not per frame). Off-view labels get
@@ -3460,7 +3475,7 @@ class HormuzMap {
   }
   updateLabels(dist) {
     if (this.labelRenderer && this.labelRenderer.domElement) this.labelRenderer.domElement.classList.toggle('labels-far', dist > 175);
-    const heavyBattle = this.battleDensity > 12;
+    const heavyBattle = this.heavyLabels;
     const showLabels = this.layerOn.labels;
     for (const l of this.labels) {
       let vis = true,

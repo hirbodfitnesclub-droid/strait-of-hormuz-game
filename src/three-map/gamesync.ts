@@ -259,6 +259,7 @@ export class GameSync3D {
   private lastSetStateAt = 0;
   private targetStep = 5;
   private emaMs = 16;
+  private dprSteps: number[] = DPR_STEPS;
   private dprIdx = 0;
   private dprEvalAt = 0;
   private towerAnims = new Map<number, TowerAnim>();
@@ -299,8 +300,12 @@ export class GameSync3D {
       return [n, { pts, tans }];
     })) as Record<LaneName, { pts: THREE.Vector3[]; tans: THREE.Vector3[] }>;
     // PERF (§16.3): dynamic resolution starts at the step matching the device
-    // cap (<=1.5 on mobile), not at the top step 2.0.
-    { const cap = this.dprCap(); const idx = DPR_STEPS.findIndex(s => s <= cap + 1e-6); this.dprIdx = idx >= 0 ? idx : DPR_STEPS.length - 1; }
+    // cap (<=1.5 on mobile), not at the top step 2.0. The ladder is built
+    // AROUND the cap — [cap, ...steps below it] — so dprIdx 0 is exactly the
+    // ratio the renderer starts with (1.5 on touch). Indexing the raw
+    // DPR_STEPS instead landed on 1.3 while the renderer actually ran at 1.5:
+    // the first step-up was then a no-op and the first step-down skipped 1.3.
+    { const cap = this.dprCap(); this.dprSteps = [cap, ...DPR_STEPS.filter(s => s < cap - 1e-6)]; this.dprIdx = 0; }
     // lane ribbons (subtle, only enemy + trade)
     for (const n of ['enemy', 'trade'] as LaneName[]) {
       const pts = LANES[n].map(([x, z]) => new THREE.Vector3(x, 0.3, z));
@@ -664,8 +669,11 @@ export class GameSync3D {
         (ent.bar.bg.material as THREE.Material).dispose();
       }
       if (ent.wake) {
-        const wm = ((ent.wake as unknown as THREE.Group).children[0] as THREE.Mesh | undefined)?.material as THREE.Material | undefined;
-        wm?.dispose();
+        // makeWake builds a fresh PlaneGeometry per entity — dispose it with
+        // its material (the wake texture is shared and stays).
+        const wmesh = (ent.wake as unknown as THREE.Group).children[0] as THREE.Mesh | undefined;
+        (wmesh?.material as THREE.Material | undefined)?.dispose();
+        wmesh?.geometry?.dispose();
       }
       this.ents.delete(key);
     }
@@ -822,7 +830,7 @@ export class GameSync3D {
     this.emaMs = this.emaMs * 0.96 + Math.min(dt, 0.1) * 1000 * 0.04;
     if (now < this.dprEvalAt) return;
     this.dprEvalAt = now + 3000;
-    const steps = DPR_STEPS;
+    const steps = this.dprSteps;
     const r = (this.map as unknown as { renderer?: THREE.WebGLRenderer }).renderer;
     if (!r) return;
     const fps = 1000 / Math.max(1, this.emaMs);
