@@ -247,6 +247,7 @@ export class GameSync3D {
   private animTmp2 = new THREE.Vector3();
   private targets = new Map<string, { pos: THREE.Vector3; heading: number; y: number }>();
   private dying: { ent: Ent; t: number }[] = [];
+  private pulseFx: { mesh: THREE.Mesh; t: number; maxR: number }[] = []; // MECH-A: EMP pulse rings
   private prevFlash = new Map<string, number>();
   private prevHp = new Map<string, number>();
   private kenneyRev = false;
@@ -673,6 +674,42 @@ export class GameSync3D {
       this.setTarget(key, 'trade', c.progress, 0.35, 'X');
       void this.ensureEnt(key, () => { const g = hull(0x59452c, 10, 3, 'cargo'); g.traverse(o => { o.userData.pick = { type: 'contraband', id: c.id }; }); return g; }, { bob: 0.09, wake: { len: 10, wid: 4.5, fwd: 'X' } });
     }
+    // ===== MECH-A: boat entities & minefield (rendered here, logic in game.ts) =====
+    // Boats sit on the enemy lane at their station progress plus a
+    // perpendicular offset — positions come from the logic entities, the
+    // meshes are simple hulls with HP bars (the pack models stay with the
+    // tower bases; VIS owns richer boat art).
+    for (const b of game.boats ?? []) {
+      if (b.state !== 'active') continue; // sunk: gone until the logic redeploys it
+      const key = `boat-${b.id}`; alive.add(key);
+      const u = Math.max(0, Math.min(1, b.progress));
+      const p3 = this.curves.enemy.getPointAt(u); const tan = this.curves.enemy.getTangentAt(u);
+      const nl = Math.hypot(tan.x, tan.z) || 1;
+      const x = p3.x + (-tan.z / nl) * b.offset * 6.58, z = p3.z + (tan.x / nl) * b.offset * 6.58;
+      const heading = Math.atan2(-tan.z, tan.x);
+      const y = b.role === 'ghadir' ? 0.12 : 0.35;
+      const t = this.targets.get(key);
+      if (t) { t.pos.set(x, y, z); t.heading = heading; t.y = y; }
+      else this.targets.set(key, { pos: new THREE.Vector3(x, y, z), heading, y });
+      void this.ensureEnt(key, () => hull(b.role === 'ghadir' ? 0x37424e : b.role === 'torpedo' ? 0x74553a : 0x546e4a, b.role === 'ghadir' ? 13 : 8, 2.8, 'patrol'),
+        { bar: 4, bob: 0.08, wake: b.role === 'ghadir' ? { len: 4, wid: 2.4, fwd: 'X' } : { len: 7, wid: 3.6, fwd: 'X' } });
+      const ent = this.ents.get(key);
+      if (ent?.bar) setBar(ent.bar, Math.max(0, b.hp) / b.maxHp);
+    }
+    for (const m of game.mines ?? []) {
+      const key = `mine-${m.id}`; alive.add(key);
+      const [x, z] = pctTo3d(m.x, m.y);
+      const t = this.targets.get(key);
+      if (t) { t.pos.set(x, 0.3, z); t.y = 0.3; }
+      else this.targets.set(key, { pos: new THREE.Vector3(x, 0.3, z), heading: 0, y: 0.3 });
+      void this.ensureEnt(key, () => {
+        const g = new THREE.Group();
+        const body = new THREE.Mesh(new THREE.SphereGeometry(0.85, 10, 8), new THREE.MeshStandardMaterial({ color: 0x2b2f36, roughness: 0.6, metalness: 0.4 }));
+        body.position.y = 0.2; g.add(body);
+        const lamp = glyphSprite('✸', '#ff4040', 1.8); lamp.position.y = 1.6; g.add(lamp);
+        return g;
+      }, { bob: 0.06 });
+    }
     // port tanker
     const tanker = game.idle.port?.tanker;
     if (tanker) {
@@ -731,12 +768,24 @@ export class GameSync3D {
     this.stepMotion(dt, now);
     this.updateAnims(dt, now);
     this.fx.update(dt);
+    this.stepPulseFx(dt);
     this.tuneResolution(dt, now);
     // shots → the pack's real battle FX (projectiles/beams per weapon family)
     if (game.shots !== this.lastShots) {
       this.lastShots = game.shots;
       for (const s of game.shots) {
         const [x1, z1] = pctTo3d(s.x1, s.y1); const [x2, z2] = pctTo3d(s.x2, s.y2);
+        // MECH-A: an EMP pulse record is an area ring at the tower, not a projectile
+        if (s.modelKind === 'emp' && s.targetId === -1) {
+          const tw = game.towers.find(t2 => t2.slot === s.slot);
+          this.spawnPulseRing(x1, z1, tw ? getRange(game, tw) * 6.58 : 120);
+          continue;
+        }
+        // MECH-A: a mine detonation record is an explosion at the mine, not a projectile
+        if (s.boatId === -1 && s.modelKind === 'mine') {
+          this.fx.explode(new THREE.Vector3(x1, 1, z1), '#7affc8', 2.4);
+          continue;
+        }
         const dx = x2 - x1, dz = z2 - z1; const len = Math.hypot(dx, dz) || 1;
         let sx = x1 + (dx / len) * 2.4, sz = z1 + (dz / len) * 2.4; let sy = 3.1;
         // fire event on the owning tower: the shot record names its tower —
@@ -751,10 +800,15 @@ export class GameSync3D {
             // so game speed scales the visual cadence (audit مهم-۳)
             if (s.interval > 0) ta.period = s.interval / Math.max(1, game.speed);
             ta.lastShotAt = now;
-            const idx = ta.mz.length ? ta.shotIdx % ta.mz.length : 0;
-            if (ta.rc.length) { const r = ta.rc[idx % ta.rc.length]; r.obj.position.z = r.bz - ta.spec.recoil; }
-            if (ta.mz.length) { const p = ta.mz[idx].getWorldPosition(new THREE.Vector3()); sx = p.x; sy = p.y; sz = p.z; }
-            ta.shotIdx++;
+            // MECH-A: boat-fired shots originate at the boat (x1/y1 of the
+            // record) — the tower model's muzzles must NOT override them,
+            // and its recoil/shot rotation belongs to its own shots only.
+            if (s.boatId == null) {
+              const idx = ta.mz.length ? ta.shotIdx % ta.mz.length : 0;
+              if (ta.rc.length) { const r = ta.rc[idx % ta.rc.length]; r.obj.position.z = r.bz - ta.spec.recoil; }
+              if (ta.mz.length) { const p = ta.mz[idx].getWorldPosition(new THREE.Vector3()); sx = p.x; sy = p.y; sz = p.z; }
+              ta.shotIdx++;
+            }
           }
         }
         this.dispatchShotFx(bestSlot, s.kind, sx, sy, sz, x2, z2, game);
@@ -784,6 +838,34 @@ export class GameSync3D {
     const r = (this.map as unknown as { renderer?: THREE.WebGLRenderer }).renderer;
     const info = r?.info?.render;
     return { calls: info?.calls ?? -1, tris: info?.triangles ?? -1, dpr: r?.getPixelRatio?.() ?? -1, fps: Math.round(1000 / Math.max(1, this.emaMs)) };
+  }
+
+  /* MECH-A: EMP pulse visual — an expanding violet shock ring at the
+   *  tower, grown to the tower's real range (checklist ۱٫۵). */
+  private spawnPulseRing(x: number, z: number, maxR: number) {
+    const mesh = new THREE.Mesh(
+      new THREE.RingGeometry(0.92, 1, 48),
+      new THREE.MeshBasicMaterial({ color: 0x8b5cf6, transparent: true, opacity: 0.85, side: THREE.DoubleSide, depthWrite: false }),
+    );
+    mesh.rotation.x = -Math.PI / 2;
+    mesh.position.set(x, 1.1, z);
+    this.dyn.add(mesh);
+    this.pulseFx.push({ mesh, t: 0, maxR });
+  }
+  private stepPulseFx(dt: number) {
+    for (let i = this.pulseFx.length - 1; i >= 0; i--) {
+      const p = this.pulseFx[i]; p.t += dt;
+      const k = p.t / 0.9;
+      const r = Math.max(1, p.maxR * Math.min(1, k));
+      p.mesh.scale.set(r, r, r);
+      (p.mesh.material as THREE.MeshBasicMaterial).opacity = 0.85 * Math.max(0, 1 - k);
+      if (k >= 1) {
+        this.dyn.remove(p.mesh);
+        p.mesh.geometry.dispose();
+        (p.mesh.material as THREE.Material).dispose();
+        this.pulseFx.splice(i, 1);
+      }
+    }
   }
 
   /* Per-family FX dispatch — projectile kind/color/arc/duration transcribed from the
