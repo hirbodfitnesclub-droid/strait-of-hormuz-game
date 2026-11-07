@@ -251,11 +251,17 @@ export class GameSync3D {
   private prevHp = new Map<string, number>();
   private kenneyRev = false;
   private lastShots: unknown = null;
-  /* Shot/impact telemetry (fix program): window.__telemetry counts discrete
-   * shots and landed impacts per modelKind, fed by the shot records' own
-   * flightDur — QA's cadence probe reads it. reset() zeroes both maps. */
-  private telemetry: { shots: Record<string, number>; impacts: Record<string, number>; reset: () => void };
-  private telePending: { kind: string; t: number }[] = [];
+  /* Shot/impact telemetry (fix program): window.__telemetry READS the
+   * logic-side counters (GameState.fireStats — shots counted at fire time,
+   * hits/fizzled resolved by the impact phase in game.ts) instead of
+   * reconstructing them from render records with a wall-clock simulation
+   * (QA جزئی-۲: the old simulation counted void shots as impacts, let
+   * pirate-engagement records inflate tower counters, and silently dropped
+   * whole ticks whenever the frame rate fell below the tick rate).
+   * reset() is offset-based: it snapshots the cumulative counters and the
+   * maps report deltas from that snapshot — logic state is never mutated. */
+  private telemetry: { shots: Record<string, number>; impacts: Record<string, number>; fizzled: Record<string, number>; reset: () => void };
+  private teleOffset: Record<string, { shots: number; hits: number; fizzled: number }> = {};
   private state: GameState | null = null;
   private placing = new Set<string>();
   private reconciling = false;
@@ -292,11 +298,12 @@ export class GameSync3D {
       }
     }
     this.telemetry = {
-      shots: {}, impacts: {},
+      shots: {}, impacts: {}, fizzled: {},
       reset: () => {
-        for (const k of Object.keys(this.telemetry.shots)) delete this.telemetry.shots[k];
-        for (const k of Object.keys(this.telemetry.impacts)) delete this.telemetry.impacts[k];
-        this.telePending.length = 0;
+        this.teleOffset = {};
+        const fs = this.state?.fireStats ?? {};
+        for (const k of Object.keys(fs)) { const v = fs[k]; this.teleOffset[k] = { shots: v?.shots ?? 0, hits: v?.hits ?? 0, fizzled: v?.fizzled ?? 0 }; }
+        for (const m of [this.telemetry.shots, this.telemetry.impacts, this.telemetry.fizzled]) for (const k of Object.keys(m)) delete m[k];
       },
     };
     (window as unknown as { __telemetry?: unknown }).__telemetry = this.telemetry;
@@ -311,8 +318,25 @@ export class GameSync3D {
     this.map.scene.remove(this.root);
   }
 
+  /** Refresh window.__telemetry from the logic counters (see the telemetry
+   *  field note): maps hold per-modelKind deltas since the last reset(). */
+  private syncTelemetry(game: GameState) {
+    const fs = game.fireStats ?? {};
+    const write = (map: Record<string, number>, field: "shots" | "hits" | "fizzled") => {
+      for (const k of Object.keys(fs)) {
+        const v = Math.max(0, (fs[k]?.[field] ?? 0) - (this.teleOffset[k]?.[field] ?? 0));
+        if (v > 0) map[k] = v; else delete map[k];
+      }
+      for (const k of Object.keys(map)) if (!(k in fs)) delete map[k];
+    };
+    write(this.telemetry.shots, "shots");
+    write(this.telemetry.impacts, "hits");
+    write(this.telemetry.fizzled, "fizzled");
+  }
+
   setState(game: GameState, opts: { selectedSlot: number | null; targeting: string | null; targetPreview: { x: number; y: number } }) {
     this.state = game; this.selectedSlot = opts.selectedSlot; this.targeting = opts.targeting;
+    this.syncTelemetry(game);
     // movement stability: cap how far a target may move per state update (~22 u/s) so a
     // hitched tick can no longer teleport ships — they sail fast instead of streaking.
     const nowS = performance.now();
@@ -708,16 +732,6 @@ export class GameSync3D {
     this.updateAnims(dt, now);
     this.fx.update(dt);
     this.tuneResolution(dt, now);
-    // telemetry: in-flight shots land after flightDur battle-seconds
-    if (this.telePending.length && game.phase === 'battle') {
-      const advance = dt * game.speed, still: typeof this.telePending = [];
-      for (const p of this.telePending) {
-        p.t -= advance;
-        if (p.t <= 0) this.telemetry.impacts[p.kind] = (this.telemetry.impacts[p.kind] ?? 0) + 1;
-        else still.push(p);
-      }
-      this.telePending = still;
-    }
     // shots → the pack's real battle FX (projectiles/beams per weapon family)
     if (game.shots !== this.lastShots) {
       this.lastShots = game.shots;
@@ -743,9 +757,6 @@ export class GameSync3D {
             ta.shotIdx++;
           }
         }
-        this.telemetry.shots[s.modelKind] = (this.telemetry.shots[s.modelKind] ?? 0) + 1;
-        if (s.flightDur > 0) this.telePending.push({ kind: s.modelKind, t: s.flightDur });
-        else this.telemetry.impacts[s.modelKind] = (this.telemetry.impacts[s.modelKind] ?? 0) + 1;
         this.dispatchShotFx(bestSlot, s.kind, sx, sy, sz, x2, z2, game);
       }
     }

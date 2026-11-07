@@ -10,6 +10,17 @@
  * 3) Destroyer point-defense nullifies the first missile shot at impact.
  * 4) Boss-3 (Titan) shield now applies to burn damage (audit متوسط-۸).
  * 5) Weapons-spec spot checks (R1 resolutions) + towerDps derivation.
+ * 6) FULL cadence matrix (QA round-2, بحرانی-۱): every shot-mode config ×
+ *    speeds 1/2/3 must land within ±10% of its spec rate — the cumulative
+ *    cooldown with remainder carry replaced the one-shot-per-tick loop
+ *    that quantized fast weapons to the tick grid (CIWS was 8/s at 1×).
+ * 7) Ammo ruling (QA متوسط-۱): a shot the stock cannot pay for does NOT
+ *    fire and consumes nothing; the tower retries after 3× interval.
+ * 8) Destroyer point-defense intercepts Bavar too (QA متوسط-۲), keyed on
+ *    modelKind; Swarm is NOT intercepted (checklist ۲٫۵).
+ * 9) pendingImpacts is cleared the moment a battle ends (QA جزئی-۱).
+ * 10) fireStats live in the logic state (QA جزئی-۲): shots counted at fire
+ *     time, hits/fizzled at impact resolution; pirate records never count.
  */
 const assert = require('node:assert/strict');
 const { load } = require('../load-game.cjs');
@@ -131,6 +142,210 @@ const tick = (s, n = 1, dt = 0.125) => { for (let i = 0; i < n; i++) s = gameRed
   const dps = towerDps(s, { slot: 0, kind: 'cannon', tier: 1, branch: null, priority: 'first' });
   assert.ok(Math.abs(dps - 12 * 1.08 / 0.25) < 0.01, `autocannon display DPS must be 51.84, got ${dps}`);
   console.log('5) weapons-spec + towerDps derivation: PASS');
+}
+
+/* ---- 6) full cadence matrix: all shot-mode configs × speeds 1/2/3 ---- */
+{
+  const { enemyPosition, getRange } = G;
+  function matrixBase(tower) {
+    const g = initialGame();
+    Object.assign(g, { cash: 1e9, ammo: 1e9, fuel: 1e9, phase: 'battle', wave: 3, speed: 1, spawnRemaining: 0, spawnClock: 0, hearts: 20 });
+    g.buildings.power = 10;
+    g.towers = [tower];
+    return g;
+  }
+  function findProgress(slotIdx, tower, enemyKind, frac = 0.75) {
+    const slot = SLOTS[slotIdx];
+    const range = getRange(matrixBase(tower), tower);
+    const mk = p => enemyKind === 'air'
+      ? enemyPosition({ id: 1, kind: 'air', boss: 0, hp: 1, maxHp: 1, progress: p, stun: 0, specialClock: 0 }, 'landscape')
+      : positionAt(p);
+    for (let p = 0; p <= 1; p += 0.002) if (distance(slot, mk(p)) <= range * frac) return p;
+    return -1;
+  }
+  function heroPark(g, slotIdx, ePos) {
+    const slot = SLOTS[slotIdx];
+    const corners = [{ x: 1, y: 1 }, { x: 99, y: 1 }, { x: 1, y: 99 }, { x: 99, y: 99 }, { x: 50, y: 1 }, { x: 50, y: 99 }];
+    for (const c of corners) if (distance(c, slot) > 20 && distance(c, ePos) > 40) { g.hero = { x: c.x, y: c.y, active: 0 }; return; }
+    throw new Error('hero park failed');
+  }
+  const rows = [];
+  for (const kind of ['cannon', 'heavy', 'missile', 'air', 'ew', 'boat']) {
+    for (const [tier, branch] of [[1, null], [2, null], [3, null], [4, 0], [4, 1]]) {
+      const spec = W.weaponSpec(kind, tier, branch);
+      if (spec.mode === 'beam') continue;
+      const specRate = 1 / W.specInterval(spec);
+      const ek = kind === 'air' && tier === 4 && branch === 0 ? 'air' : 'speed';
+      let chosen = -1, prog = -1;
+      for (let si = 0; si < SLOTS.length && chosen < 0; si++) {
+        const p = findProgress(si, { slot: si, kind, tier, branch, priority: 'first' }, ek);
+        if (p >= 0) { chosen = si; prog = p; }
+      }
+      assert.ok(chosen >= 0, `${spec.modelKind}: no slot/progress found for cadence matrix`);
+      const rates = [];
+      for (const speed of [1, 2, 3]) {
+        let s = matrixBase({ slot: chosen, kind, tier, branch, priority: kind === 'air' ? 'air' : 'first' });
+        s.speed = speed;
+        const ePos = ek === 'air' ? enemyPosition({ id: 1, kind: 'air', boss: 0, hp: 1, maxHp: 1, progress: prog, stun: 0, specialClock: 0 }, 'landscape') : positionAt(prog);
+        heroPark(s, chosen, ePos);
+        s.enemies = [{ id: 1, kind: ek, boss: 0, hp: 1e12, maxHp: 1e12, progress: prog, stun: 1e7, specialClock: 0 }];
+        let shots = 0; const TICKS = 480;
+        for (let i = 0; i < TICKS; i++) { s = gameReducer(s, { type: 'tick', dt: 0.125 }); shots += s.shots.filter(sh => sh.slot === chosen && sh.interval > 0).length; }
+        rates.push(shots / (TICKS * 0.125 * speed));
+      }
+      const devs = rates.map(r => (r / specRate - 1) * 100);
+      rows.push(`   ${spec.modelKind.padEnd(11)} T${tier} spec ${specRate.toFixed(2)}/s → 1× ${rates[0].toFixed(2)} (${devs[0].toFixed(1)}%) · 2× ${rates[1].toFixed(2)} (${devs[1].toFixed(1)}%) · 3× ${rates[2].toFixed(2)} (${devs[2].toFixed(1)}%)`);
+      for (let i = 0; i < 3; i++) assert.ok(Math.abs(devs[i]) <= 10, `${spec.modelKind} T${tier} @${i + 1}×: rate ${rates[i].toFixed(2)}/s deviates ${devs[i].toFixed(1)}% from spec ${specRate.toFixed(2)}/s (tolerance ±10%)`);
+      if (spec.modelKind === 'ciws') assert.ok(rates[0] >= 12.6, `CIWS @1× must be ≥ 12.6/s (QA gate), got ${rates[0].toFixed(2)}/s`);
+    }
+  }
+  console.log(`6) cadence matrix: PASS (29 configs × 3 speeds, all within ±10% of spec)`);
+  for (const r of rows) console.log(r);
+}
+
+/* ---- 7) ammo ruling: no free shots on insufficient stock ---- */
+{
+  const { getRange: rangeOf } = G;
+  function spotFor(tower, minD = 0, maxFrac = 0.8) {
+    for (let si = 0; si < SLOTS.length; si++) {
+      const t = { ...tower, slot: si };
+      const range = rangeOf(battleBase(), t);
+      for (let p = 0.02; p <= 0.98; p += 0.004) {
+        const d = distance(SLOTS[si], positionAt(p));
+        if (d <= range * maxFrac && d >= minD && distance(SLOTS[si], { x: 2, y: 95 }) > 18) return { slot: si, progress: p };
+      }
+    }
+    throw new Error('no spot');
+  }
+  const foeAt = p => ({ id: 1, kind: 'speed', boss: 0, hp: 1e12, maxHp: 1e12, progress: p, stun: 1e7, specialClock: 0 });
+  // silo with ammo 2 < cost 5: first tick arms the 3× retry timer, never fires
+  {
+    const spot = spotFor({ kind: 'missile', tier: 1, branch: null });
+    let s = battleBase(); s.ammo = 2;
+    s.towers = [{ slot: spot.slot, kind: 'missile', tier: 1, branch: null, priority: 'first' }];
+    s.enemies = [foeAt(spot.progress)];
+    s = gameReducer(s, { type: 'tick', dt: 0.125 });
+    assert.equal(s.shots.length, 0, 'silo with insufficient stock must not fire');
+    assert.ok(Math.abs((s.towers[0].cooldown ?? 0) - 15) < 1e-9, `retry timer must be 3× interval (15s), got ${s.towers[0].cooldown}`);
+    let total = 0;
+    for (let i = 0; i < 480; i++) { s = gameReducer(s, { type: 'tick', dt: 0.125 }); total += s.shots.filter(sh => sh.slot === spot.slot && sh.interval > 0).length; }
+    assert.equal(total, 0, 'starved silo must never fire a free shot');
+    assert.equal(s.ammo, 2, 'no ammo may be consumed by a shot that never fired');
+  }
+  // zero stock behaves the same (no shots at all now, not free shots at ⅓ rate)
+  {
+    const spot = spotFor({ kind: 'missile', tier: 1, branch: null });
+    let s = battleBase(); s.ammo = 0;
+    s.towers = [{ slot: spot.slot, kind: 'missile', tier: 1, branch: null, priority: 'first' }];
+    s.enemies = [foeAt(spot.progress)];
+    let total = 0;
+    for (let i = 0; i < 480; i++) { s = gameReducer(s, { type: 'tick', dt: 0.125 }); total += s.shots.filter(sh => sh.slot === spot.slot && sh.interval > 0).length; }
+    assert.equal(total, 0, 'silo at zero ammo must hold fire entirely');
+  }
+  // zero-ammo weapon (EW, ammoPerShot 0) is unaffected by an empty stock
+  {
+    const spot = spotFor({ kind: 'ew', tier: 1, branch: null });
+    let s = battleBase(); s.ammo = 0;
+    s.towers = [{ slot: spot.slot, kind: 'ew', tier: 1, branch: null, priority: 'first' }];
+    s.enemies = [foeAt(spot.progress)];
+    let total = 0;
+    for (let i = 0; i < 100; i++) { s = gameReducer(s, { type: 'tick', dt: 0.125 }); total += s.shots.filter(sh => sh.slot === spot.slot && sh.interval > 0).length; }
+    assert.ok(total >= 10, `EW (ammo-free) must keep firing at empty stock, got ${total} shots in 12.5s`);
+  }
+  // overdrive still fires at zero stock with zero cost
+  {
+    const spot = spotFor({ kind: 'missile', tier: 1, branch: null });
+    let s = battleBase(); s.ammo = 0; s.overdrive = 10000;
+    s.towers = [{ slot: spot.slot, kind: 'missile', tier: 1, branch: null, priority: 'first' }];
+    s.enemies = [foeAt(spot.progress)];
+    let total = 0;
+    for (let i = 0; i < 100; i++) { s = gameReducer(s, { type: 'tick', dt: 0.125 }); total += s.shots.filter(sh => sh.slot === spot.slot && sh.interval > 0).length; }
+    assert.ok(total >= 4, `overdrive silo must fire at empty stock, got ${total}`);
+    assert.equal(s.ammo, 0);
+  }
+  console.log('7) ammo ruling: PASS (insufficient stock → no shot, no consumption, 3× retry; zero-ammo weapons and overdrive unaffected)');
+}
+
+/* ---- 8) point-defense: Bavar intercepted, Swarm not ---- */
+{
+  function duel(kind, tier, branch, ticks) {
+    let slot = -1, prog = 0;
+    for (let si = 0; si < SLOTS.length && slot < 0; si++) for (let p = 0; p <= 1; p += 0.005) {
+      if (distance(SLOTS[si], positionAt(p)) <= 15) { slot = si; prog = p; break; }
+    }
+    let s = battleBase();
+    s.towers = [{ slot, kind, tier, branch, priority: 'strongest' }];
+    s.enemies = [{ id: 1, kind: 'destroyer', boss: 0, hp: 100000, maxHp: 100000, progress: prog, stun: 9999, specialClock: 0 }];
+    const dPos = positionAt(prog);
+    for (const c of [{ x: 1, y: 1 }, { x: 99, y: 1 }, { x: 1, y: 99 }, { x: 99, y: 99 }]) if (distance(c, SLOTS[slot]) > 20 && distance(c, dPos) > 40) { s.hero = { x: c.x, y: c.y, active: 0 }; break; }
+    const shots = [];
+    for (let i = 0; i < ticks; i++) { s = gameReducer(s, { type: 'tick', dt: 0.125 }); shots.push(...s.shots.filter(sh => sh.interval > 0)); }
+    return { s, shots };
+  }
+  const bavar = duel('air', 4, 0, 24); // only the first shot can have landed by tick 24
+  assert.ok(bavar.shots.length >= 1, 'bavar must have fired');
+  assert.equal(bavar.s.enemies[0].hp, 100000, 'first Bavar shot must be nullified by destroyer point-defense (checklist ۲٫۵)');
+  assert.ok((bavar.s.enemies[0].intercept ?? 0) > 2, `intercept window must be running, got ${bavar.s.enemies[0].intercept}`);
+  const swarm = duel('missile', 4, 1, 40);
+  assert.ok(swarm.shots.length >= 1, 'swarm must have fired');
+  assert.ok(swarm.s.enemies[0].hp < 100000, 'Swarm missiles must NOT be intercepted — first impact deals full damage');
+  assert.equal(swarm.s.enemies[0].intercept ?? 0, 0, 'no intercept window may start for Swarm');
+  console.log(`8) point-defense keys: PASS (bavar nullified + window ${(bavar.s.enemies[0].intercept ?? 0).toFixed(2)}s; swarm landed for ${100000 - swarm.s.enemies[0].hp} dmg, no window)`);
+}
+
+/* ---- 9) pendingImpacts cleared when the battle ends ---- */
+{
+  let slot = -1;
+  for (let si = 0; si < SLOTS.length; si++) { const d = distance(SLOTS[si], positionAt(0.98)); if (d >= 18 && d <= 25) { slot = si; break; } }
+  assert.ok(slot >= 0, 'need a silo slot 18–25 units from the lane end');
+  let s = battleBase();
+  s.towers = [{ slot, kind: 'missile', tier: 1, branch: null, priority: 'first' }];
+  s.enemies = [{ id: 1, kind: 'speed', boss: 0, hp: 100000, maxHp: 100000, progress: 0.98, stun: 0, specialClock: 0 }];
+  let sawFlight = false;
+  for (let i = 0; i < 30 && s.phase === 'battle'; i++) { s = gameReducer(s, { type: 'tick', dt: 0.125 }); if (s.pendingImpacts.length > 0) sawFlight = true; }
+  assert.ok(sawFlight, 'a missile must have been in flight when the last enemy leaked');
+  assert.notEqual(s.phase, 'battle', 'battle must have ended after the leak');
+  assert.equal(s.pendingImpacts.length, 0, 'no orphan impact records may survive the end of the battle');
+  console.log(`9) impact-queue hygiene: PASS (battle ended → phase ${s.phase}, queue empty)`);
+}
+
+/* ---- 10) fireStats: logic-side counters ---- */
+{
+  // shots counted at fire time; hits counted when the impacts resolve
+  let s = battleBase();
+  s.towers = [{ slot: 0, kind: 'cannon', tier: 1, branch: null, priority: 'first' }];
+  s.enemies = [{ id: 1, kind: 'speed', boss: 0, hp: 100000, maxHp: 100000, progress: progressNear(0, 12), stun: 9999, specialClock: 0 }];
+  let records = 0;
+  for (let i = 0; i < 16; i++) { s = gameReducer(s, { type: 'tick', dt: 0.125 }); records += s.shots.filter(sh => sh.interval > 0).length; }
+  assert.equal(s.fireStats.autocannon?.shots, records, 'fireStats shots must equal the emitted shot records');
+  s = tick({ ...s, towers: [] }, 8); // drain in-flight shots
+  assert.equal(s.fireStats.autocannon.hits, records, 'every landed shot must be counted as a hit at resolution');
+  assert.equal(s.fireStats.autocannon.fizzled, 0);
+  // fizzle: target teleports out of range mid-flight → counted as fizzled, not hit
+  let s2 = battleBase();
+  s2.towers = [{ slot: 9, kind: 'missile', tier: 1, branch: null, priority: 'first' }];
+  s2.enemies = [{ id: 1, kind: 'speed', boss: 0, hp: 100000, maxHp: 100000, progress: progressNear(9, 15), stun: 9999, specialClock: 0 }];
+  for (let i = 0; i < 10 && (s2.fireStats.silo?.shots ?? 0) === 0; i++) s2 = gameReducer(s2, { type: 'tick', dt: 0.125 });
+  assert.equal(s2.fireStats.silo?.shots, 1);
+  s2 = { ...s2, enemies: s2.enemies.map(e => ({ ...e, progress: 0.02 })) };
+  s2 = tick(s2, 40);
+  assert.equal(s2.fireStats.silo.fizzled, 1, 'out-of-range arrival must count as fizzled');
+  assert.equal(s2.fireStats.silo.hits, 0);
+  // pirate-engagement records are visual only: they must not inflate tower counters
+  const { piratePosition } = G;
+  let s3 = battleBase();
+  let pSlot = -1, pProg = 0;
+  for (let p = 0.02; p <= 0.98 && pSlot < 0; p += 0.01) for (let si = 0; si < SLOTS.length; si++) {
+    if (distance(SLOTS[si], piratePosition({ id: 50, progress: p, hp: 500 })) < 17) { pSlot = si; pProg = p; break; }
+  }
+  assert.ok(pSlot >= 0, 'need a slot covering the pirate lane');
+  s3.towers = [{ slot: pSlot, kind: 'cannon', tier: 1, branch: null, priority: 'first' }];
+  s3.pirates = [{ id: 50, progress: pProg, hp: 5000 }];
+  let pirateRecords = 0;
+  for (let i = 0; i < 8; i++) { s3 = gameReducer(s3, { type: 'tick', dt: 0.125 }); pirateRecords += s3.shots.filter(sh => sh.damage === 0 && sh.interval === 0).length; }
+  assert.ok(pirateRecords > 0, 'pirate engagement must still emit its FX records');
+  assert.equal(s3.fireStats.autocannon?.shots ?? 0, 0, 'pirate records must not count as tower shots');
+  console.log('10) fireStats: PASS (shots at fire time, hits/fizzled at resolution, pirate records excluded)');
 }
 
 console.log('\nALL ROOT PROBES PASSED');
