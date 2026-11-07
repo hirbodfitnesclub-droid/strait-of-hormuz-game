@@ -6,6 +6,7 @@ import { loadModel, TOWER_MODEL, BRANCH_MODEL, groundY } from './models3d';
 import { hull } from './ships3d';
 import { pctTo3d, point3dToPct } from './coords';
 import { getRange, type GameState } from '@/lib/game';
+import { BattleFX } from './battlefx';
 
 type LaneName = 'enemy' | 'trade' | 'pirate' | 'port';
 const LANES = lanesData as Record<LaneName, [number, number][]>;
@@ -65,7 +66,7 @@ interface GlowMat { mat: THREE.Material; base: THREE.Color; basic: boolean; base
 interface TowerAnim {
   kind: string; spec: { turn: number; loft?: number; maxUp?: number; recoil: number };
   yaw: THREE.Object3D[]; pitch: THREE.Object3D[]; mz: THREE.Object3D[]; rc: { obj: THREE.Object3D; bz: number }[];
-  spin: THREE.Object3D | null; erector: THREE.Object3D | null; missile: THREE.Object3D | null;
+  spin: THREE.Object3D | null; erector: THREE.Object3D | null; missile: THREE.Object3D | null; crystal: THREE.Object3D | null;
   doorsL: THREE.Object3D[]; doorsR: THREE.Object3D[]; cells: THREE.Object3D[];
   generic: AnimNode[]; glowMats: GlowMat[];
   targetPos: THREE.Vector3 | null; lastShotAt: number; period: number; shotIdx: number;
@@ -217,17 +218,6 @@ function makeWake(len: number, wid: number, fwd: 'X' | 'Z'): THREE.Mesh {
   grp.add(m);
   return grp as unknown as THREE.Mesh;
 }
-let _burstTex: THREE.Texture | null = null;
-function burstTexture(): THREE.Texture {
-  if (_burstTex) return _burstTex;
-  const c = document.createElement('canvas'); c.width = c.height = 128;
-  const ctx = c.getContext('2d')!;
-  const g = ctx.createRadialGradient(64, 64, 4, 64, 64, 62);
-  g.addColorStop(0, 'rgba(255,255,255,1)'); g.addColorStop(0.35, 'rgba(255,210,120,0.85)'); g.addColorStop(1, 'rgba(255,120,40,0)');
-  ctx.fillStyle = g; ctx.fillRect(0, 0, 128, 128);
-  _burstTex = new THREE.CanvasTexture(c);
-  return _burstTex;
-}
 function easeOutBack(x: number): number { const c1 = 1.70158, c3 = c1 + 1; return 1 + c3 * Math.pow(x - 1, 3) + c1 * Math.pow(x - 1, 2); }
 
 export class GameSync3D {
@@ -244,16 +234,14 @@ export class GameSync3D {
   private rangeRing: THREE.Mesh | null = null;
   private targetRing: THREE.Mesh | null = null;
   private ents = new Map<string, Ent>();
-  private shotLines: { line: THREE.Line; ttl: number }[] = [];
   private aim = new Map<number, number>();
+  private fx = new BattleFX();
   private towerAnims = new Map<number, TowerAnim>();
   private genericAnims = new Map<string, AnimNode[]>();
   private animTmp = new THREE.Vector3();
   private animTmp2 = new THREE.Vector3();
   private targets = new Map<string, { pos: THREE.Vector3; heading: number; y: number }>();
   private dying: { ent: Ent; t: number }[] = [];
-  private bursts: { parts: { s: THREE.Sprite; v: THREE.Vector3 }[]; t: number; life: number }[] = [];
-  private flashes: { s: THREE.Sprite; t: number }[] = [];
   private prevFlash = new Map<string, number>();
   private prevHp = new Map<string, number>();
   private kenneyRev = false;
@@ -273,7 +261,7 @@ export class GameSync3D {
     this.map = map; this.cb = cb;
     for (const n of ['enemy', 'trade', 'slots', 'ships', 'zones'] as const) { try { map.setLayer(n, false); } catch { /* layer may not exist */ } }
     this.root.name = 'gamesync-root'; this.statics.name = 'gamesync-statics'; this.dyn.name = 'gamesync-dyn';
-    map.scene.add(this.root); this.root.add(this.statics); this.root.add(this.dyn);
+    map.scene.add(this.root); this.root.add(this.statics); this.root.add(this.dyn); this.dyn.add(this.fx.group);
     this.curves = Object.fromEntries((Object.keys(LANES) as LaneName[]).map(n => [n, new THREE.CatmullRomCurve3(LANES[n].map(([x, z]) => new THREE.Vector3(x, 0.35, z)), false, 'centripetal')])) as Record<LaneName, THREE.CatmullRomCurve3>;
     // lane ribbons (subtle, only enemy + trade)
     for (const n of ['enemy', 'trade'] as LaneName[]) {
@@ -500,28 +488,6 @@ export class GameSync3D {
     else this.targets.set(key, { pos: new THREE.Vector3(pos.x, y, pos.z), heading, y });
   }
 
-  private spawnBurst(pos: THREE.Vector3, n = 12, scale = 1) {
-    const parts: { s: THREE.Sprite; v: THREE.Vector3 }[] = [];
-    for (let i = 0; i < n; i++) {
-      const m = new THREE.SpriteMaterial({ map: burstTexture(), color: i % 3 === 0 ? 0xffe9b0 : 0xff8a3c, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending });
-      const sp = new THREE.Sprite(m);
-      const a = Math.random() * Math.PI * 2; const spd = (2 + Math.random() * 5) * scale;
-      sp.position.set(pos.x, pos.y + 1.3, pos.z);
-      sp.scale.setScalar((1 + Math.random() * 1.7) * scale);
-      this.dyn.add(sp);
-      parts.push({ s: sp, v: new THREE.Vector3(Math.cos(a) * spd, (2.5 + Math.random() * 3.5) * scale, Math.sin(a) * spd) });
-    }
-    this.bursts.push({ parts, t: 0, life: 0.55 });
-  }
-
-  private spawnFlash(pos: THREE.Vector3, color: number) {
-    const m = new THREE.SpriteMaterial({ map: burstTexture(), color, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending });
-    const sp = new THREE.Sprite(m);
-    sp.position.copy(pos); sp.scale.setScalar(2.2); sp.renderOrder = 28;
-    this.dyn.add(sp);
-    this.flashes.push({ s: sp, t: 0 });
-  }
-
   private stepMotion(dt: number, now: number) {
     const kp = 1 - Math.exp(-dt * 5.5); const kh = 1 - Math.exp(-dt * 6.5);
     for (const [key, ent] of this.ents) {
@@ -553,21 +519,6 @@ export class GameSync3D {
       o.position.y -= dt * 2.4; o.rotation.z += dt * 0.85;
       d.ent.mats?.forEach(m => { m.opacity = Math.max(0, 1 - k); });
       if (k >= 1) { this.dyn.remove(o); this.dying.splice(i, 1); }
-    }
-    for (let i = this.bursts.length - 1; i >= 0; i--) {
-      const b = this.bursts[i]; b.t += dt; const f = Math.max(0, 1 - b.t / b.life);
-      for (const p of b.parts) {
-        p.s.position.addScaledVector(p.v, dt); p.v.y -= 5.5 * dt;
-        (p.s.material as THREE.SpriteMaterial).opacity = f;
-        p.s.scale.multiplyScalar(1 + dt * 1.6);
-      }
-      if (b.t >= b.life) { b.parts.forEach(p => { this.dyn.remove(p.s); (p.s.material as THREE.Material).dispose(); }); this.bursts.splice(i, 1); }
-    }
-    for (let i = this.flashes.length - 1; i >= 0; i--) {
-      const fl = this.flashes[i]; fl.t += dt; const k = fl.t / 0.09;
-      fl.s.scale.setScalar(2.2 + k * 3.2);
-      (fl.s.material as THREE.SpriteMaterial).opacity = Math.max(0, 1 - k);
-      if (k >= 1) { this.dyn.remove(fl.s); (fl.s.material as THREE.Material).dispose(); this.flashes.splice(i, 1); }
     }
     for (const [, rec] of this.towers) {
       const age = (now - rec.born) / 380;
@@ -620,7 +571,7 @@ export class GameSync3D {
         if (ent.bar) setBar(ent.bar, e.hp / e.maxHp);
         if (e.hitFlash && e.hitFlash > 0) {
           ent.obj.scale.setScalar(1.07);
-          if ((this.prevFlash.get(key) ?? 0) <= 0) { const t = this.targets.get(key); if (t) this.spawnBurst(t.pos, 6, 0.8); }
+          if ((this.prevFlash.get(key) ?? 0) <= 0) { const t = this.targets.get(key); if (t) this.fx.spark(t.pos, '#ffa040', 6); }
         } else ent.obj.scale.setScalar(1);
       }
       this.prevFlash.set(key, e.hitFlash ?? 0);
@@ -700,7 +651,7 @@ export class GameSync3D {
       const ent = this.ents.get(key)!;
       const killed = (key.startsWith('enemy-') || key.startsWith('pirate-')) && ent.init && (this.prevHp.get(key) ?? 1) <= 0;
       if (killed) {
-        this.spawnBurst(ent.obj.position, key.includes('enemy-') && this.prevHp.get(key) !== undefined ? 14 : 12, 1.15);
+        this.fx.explode(ent.obj.position, '#ff7a30', 1.6);
         const mats: THREE.Material[] = [];
         ent.obj.traverse(o => { const mm = (o as THREE.Mesh).material as THREE.Material | undefined; if (mm) { const c = mm.clone(); c.transparent = true; (o as THREE.Mesh).material = c; mats.push(c); } });
         ent.mats = mats;
@@ -711,7 +662,8 @@ export class GameSync3D {
     }
     this.stepMotion(dt, now);
     this.updateAnims(dt, now);
-    // shots → tracers with short TTL + muzzle flash at the tower
+    this.fx.update(dt);
+    // shots → the pack's real battle FX (projectiles/beams per weapon family)
     if (game.shots !== this.lastShots) {
       this.lastShots = game.shots;
       for (const s of game.shots) {
@@ -733,16 +685,59 @@ export class GameSync3D {
             ta.shotIdx++;
           }
         }
-        const geo = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(sx, sy, sz), new THREE.Vector3(x2, 1.2, z2)]);
-        const line = new THREE.Line(geo, new THREE.LineBasicMaterial({ color: KIND_COLOR[s.kind] ?? 0xffffff, transparent: true, opacity: 0.9 }));
-        this.dyn.add(line); this.shotLines.push({ line, ttl: 0.13 });
-        this.spawnFlash(new THREE.Vector3(sx, sy, sz), KIND_COLOR[s.kind] ?? 0xffffff);
+        this.dispatchShotFx(bestSlot, s.kind, sx, sy, sz, x2, z2, game);
       }
     }
-    for (let i = this.shotLines.length - 1; i >= 0; i--) {
-      const s = this.shotLines[i]; s.ttl -= dt;
-      (s.line.material as THREE.LineBasicMaterial).opacity = Math.max(0, s.ttl / 0.13) * 0.9;
-      if (s.ttl <= 0) { this.dyn.remove(s.line); s.line.geometry.dispose(); this.shotLines.splice(i, 1); }
+  }
+
+  /* Per-family FX dispatch — projectile kind/color/arc/duration transcribed from the
+     pack's own fire() callbacks (towers.tsx), re-timed for game-world distances. */
+  private dispatchShotFx(slot: number | null, baseKind: string, sx: number, sy: number, sz: number, x2: number, z2: number, game: GameState) {
+    const F = this.fx;
+    const ta = slot !== null ? this.towerAnims.get(slot) : undefined;
+    const from = new THREE.Vector3(sx, sy, sz);
+    // homing: nearest enemy ent to the impact point becomes the tracked target
+    let trackKey: string | null = null; let isAir = false; let ty = 1.2; let bpd = 64;
+    for (const e of game.enemies) {
+      const t = this.targets.get(`enemy-${e.id}`); if (!t) continue;
+      const d = (t.pos.x - x2) ** 2 + (t.pos.z - z2) ** 2;
+      if (d < bpd) { bpd = d; trackKey = `enemy-${e.id}`; isAir = e.kind === 'air'; ty = t.pos.y; }
+    }
+    const key = trackKey;
+    const track = key ? () => this.targets.get(key)?.pos ?? null : undefined;
+    const to = new THREE.Vector3(x2, ty, z2);
+    const dist = from.distanceTo(to);
+    const kind = ta?.kind ?? '';
+    const color = PACK_GLOW[kind] ?? ('#' + (KIND_COLOR[baseKind] ?? 0xffffff).toString(16).padStart(6, '0'));
+    const dir = to.clone().sub(from).normalize();
+    const clamp = (v: number, a: number, b: number) => Math.max(a, Math.min(b, v));
+    switch (kind) {
+      case 'railgun': F.rail(from, to, color); F.explode(to, color, 1.5); F.flashAt(from, dir, color, 2.4); break;
+      case 'laser': {
+        const cry = ta?.crystal ? ta.crystal.getWorldPosition(new THREE.Vector3()) : from;
+        F.rail(cry, to, color, 0.22); F.spark(to, color, 4); F.flashAt(cry, dir, color, 1.1);
+        break;
+      }
+      case 'howitzer': F.shoot({ from, to, kind: 'shell', color: '#ffb347', dur: clamp(dist / 95, 0.5, 1.5), arc: dist * 0.09, track }); F.smoke(from, 0.7, false); F.flashAt(from, dir, '#ffb347', 1.8); break;
+      case 'mlrs':
+        for (let i = 0; i < 4; i++) F.schedule(i * 0.07, () => { F.shoot({ from, to, kind: 'rocket', color, dur: clamp(dist / 85, 0.6, 1.6), arc: dist * 0.13, jitter: 2.4, track }); F.smoke(from, 0.55, false); });
+        F.flashAt(from, dir, color, 1.6); break;
+      case 'silo': F.shoot({ from, to, kind: 'missile', color, dur: clamp(dist / 60, 0.9, 2.2), arc: dist * 0.32, track }); for (let i = 0; i < 6; i++) F.smoke(from, 0.8, false); F.flashAt(from, dir, color, 1.8); break;
+      case 'hypersonic': F.shoot({ from, to, kind: 'hyper', color, dur: clamp(dist / 220, 0.35, 0.8), arc: dist * 0.22, size: 1.4, track }); for (let i = 0; i < 8; i++) F.smoke(from, 0.9, false); F.flashAt(from, dir, color, 2); break;
+      case 'swarm':
+        for (let i = 0; i < 3; i++) F.schedule(i * 0.09, () => { F.shoot({ from, to, kind: 'missile', color, dur: clamp(dist / 70, 0.7, 1.8), arc: dist * (0.12 + (i % 3) * 0.04), size: 0.8, jitter: 1.2, track }); F.smoke(from, 0.5, false); });
+        F.flashAt(from, dir, color, 1.4); break;
+      case 'bavar': F.shoot({ from, to, kind: 'missile', color, dur: clamp(dist / 65, 0.8, 1.8), arc: dist * 0.2, air: true, track }); for (let i = 0; i < 5; i++) F.smoke(from, 0.7, false); F.flashAt(from, dir, color, 1.6); break;
+      case 'thermobaric': F.shoot({ from, to, kind: 'plasma', color, dur: clamp(dist / 80, 0.6, 1.4), arc: dist * 0.05, size: 1.2, track }); F.flashAt(from, dir, color, 2.2); break;
+      case 'emp': F.shoot({ from, to, kind: 'plasma', color, dur: clamp(dist / 110, 0.4, 1.1), size: 1.1, track }); F.flashAt(from, dir, color, 1.6); break;
+      case 'sonar': F.shoot({ from, to, kind: 'rocket', color, dur: clamp(dist / 80, 0.6, 1.5), arc: dist * 0.06, size: 1.2, track }); F.flashAt(from, dir, color, 1.5); break;
+      case 'ciws': F.shoot({ from, to, kind: 'tracer', color, dur: Math.max(0.08, dist / 360), jitter: 0.7, air: isAir, track }); F.flashAt(from, dir, color, 1.2); break;
+      case 'aadefense': F.shoot({ from, to, kind: 'tracer', color, dur: Math.max(0.08, dist / 320), jitter: 0.4, air: isAir, track }); F.flashAt(from, dir, color, 1.1); break;
+      case 'torpedo': F.shoot({ from, to, kind: 'torpedo', color, dur: clamp(dist / 34, 1, 2.6), track }); F.flashAt(from, dir, color, 0.9); break;
+      case 'mine': F.shoot({ from, to, kind: 'torpedo', color, dur: clamp(dist / 34, 1, 2.6), size: 1.3, track }); break;
+      case 'ew': F.shoot({ from, to, kind: 'plasma', color, dur: clamp(dist / 120, 0.35, 1), size: 0.7, track }); F.flashAt(from, dir, color, 1.2); break;
+      case 'garrison': F.shoot({ from, to, kind: 'tracer', color, dur: Math.max(0.08, dist / 300), jitter: 0.3, track }); F.flashAt(from, dir, color, 0.9); break;
+      default: F.shoot({ from, to, kind: 'tracer', color, dur: Math.max(0.08, dist / 300), jitter: 0.3, air: isAir, track }); F.flashAt(from, dir, color, 1.3); break;
     }
   }
 
@@ -761,6 +756,7 @@ export class GameSync3D {
       erector: (byName.get('anim:erector') ?? [])[0] ?? null,
       missile: (byName.get('anim:missile') ?? [])[0] ?? null,
       doorsL: byName.get('anim:doorL') ?? [], doorsR: byName.get('anim:doorR') ?? [], cells: byName.get('anim:cell') ?? [],
+      crystal: (byName.get('anim:crystal') ?? [])[0] ?? null,
       generic, glowMats: GLOW_PULSE_KINDS.has(kind) ? collectGlowMats(model, kind) : [],
       targetPos: null, lastShotAt: 0, period: 0, shotIdx: 0,
     };
@@ -800,6 +796,16 @@ export class GameSync3D {
         case 'anim:door':
           if (n.mat && n.baseColor) (n.mat as THREE.MeshBasicMaterial).color.copy(n.baseColor).multiplyScalar(3 + Math.sin(t * 2 + ph) * 1.2);
           break;
+        case 'anim:smoke': {
+          if (t >= (o.userData.fxNext ?? 0)) {
+            o.userData.fxNext = t + 0.55 + Math.random() * 0.35;
+            const wp = o.getWorldPosition(this.animTmp);
+            const ws = o.getWorldScale(this.animTmp2);
+            wp.y += 2.1 * ws.y;
+            this.fx.smoke(wp, 0.85, true);
+          }
+          break;
+        }
         case 'anim:scan': o.position.x = n.bx + Math.sin(t * 0.5 + ph) * 2.4; break;
         case 'anim:holo': o.rotation.y += dt * 0.5; o.position.y = n.by + Math.sin(t * 1.2 + ph) * 0.08; break;
         case 'anim:flag': o.rotation.y = Math.sin(t * 3 + ph) * 0.3; break;
