@@ -35,6 +35,106 @@ interface MapLike {
 
 const KIND_COLOR: Record<string, number> = { cannon: 0xffd27a, heavy: 0xff9a5c, missile: 0xff6a5c, air: 0x7ac8ff, ew: 0xc07aff, boat: 0x7affc8 };
 
+/* ===== Pack animation system (Phase 0) — the pack's own motions, revived =====
+   Models carry named nodes (anim:*) from the pack source; GLB export preserved them.
+   Behaviors below replicate the pack's useWeapon/useFrame math (kit.tsx, towers.tsx, buildings.tsx). */
+const PACK_GLOW: Record<string, string> = {
+  autocannon: '#ffb020', ciws: '#ff6b78', railgun: '#38e1c6', howitzer: '#ff9a3c', mlrs: '#ff8a00',
+  thermobaric: '#ff5c39', silo: '#ff4d5e', hypersonic: '#ff2d78', swarm: '#7dd3fc', aadefense: '#38bdf8',
+  bavar: '#4ade80', laser: '#c026d3', emp: '#8b5cf6', sonar: '#22ff88',
+};
+// turn = yaw/pitch tracking speed, loft = pitch bias, recoil in model units — from pack useWeapon opts
+const WEAPON_SPEC: Record<string, { turn: number; loft?: number; maxUp?: number; recoil: number }> = {
+  autocannon: { turn: 5, recoil: 0.16 }, ciws: { turn: 8, recoil: 0.2 }, railgun: { turn: 2.5, recoil: 0.45 },
+  howitzer: { turn: 2, loft: 0.45, recoil: 0.5 }, mlrs: { turn: 2, loft: 0.55, recoil: 0.2 },
+  thermobaric: { turn: 2, loft: 0.3, recoil: 0.5 }, silo: { turn: 5, recoil: 0.2 },
+  hypersonic: { turn: 5, recoil: 0.2 }, swarm: { turn: 3, loft: 0.6, recoil: 0.2 },
+  aadefense: { turn: 6, maxUp: 1.4, recoil: 0.14 }, bavar: { turn: 5, recoil: 0.2 },
+  laser: { turn: 5, recoil: 0.2 }, sonar: { turn: 2, recoil: 0.2 },
+};
+const GLOW_PULSE_KINDS = new Set(['railgun', 'thermobaric', 'hypersonic']);
+
+interface AnimNode {
+  obj: THREE.Object3D; name: string; phase: number;
+  bx: number; by: number; bz: number; bry: number; brz: number;
+  mat?: THREE.Material; baseColor?: THREE.Color;
+  hook?: THREE.Object3D | null; hookBaseY?: number;
+  childBaseY?: number[]; boatCx?: number; boatCz?: number; boatR?: number; boatA0?: number;
+}
+interface GlowMat { mat: THREE.Material; base: THREE.Color; basic: boolean; baseIntensity: number }
+interface TowerAnim {
+  kind: string; spec: { turn: number; loft?: number; maxUp?: number; recoil: number };
+  yaw: THREE.Object3D[]; pitch: THREE.Object3D[]; mz: THREE.Object3D[]; rc: { obj: THREE.Object3D; bz: number }[];
+  spin: THREE.Object3D | null; erector: THREE.Object3D | null; missile: THREE.Object3D | null;
+  doorsL: THREE.Object3D[]; doorsR: THREE.Object3D[]; cells: THREE.Object3D[];
+  generic: AnimNode[]; glowMats: GlowMat[];
+  targetPos: THREE.Vector3 | null; lastShotAt: number; period: number; shotIdx: number;
+}
+const MAT_CLONE_NAMES = new Set(['anim:ping', 'anim:door', 'anim:shell']);
+
+function collectAnims(root: THREE.Object3D, seedKey: string): { byName: Map<string, THREE.Object3D[]>; generic: AnimNode[] } {
+  const byName = new Map<string, THREE.Object3D[]>();
+  root.traverse(o => {
+    if (o.name && o.name.startsWith('anim:')) {
+      const arr = byName.get(o.name) ?? []; arr.push(o); byName.set(o.name, arr);
+    }
+  });
+  const generic: AnimNode[] = [];
+  let gi = 0;
+  for (const [name, nodes] of byName) {
+    if (['anim:yaw', 'anim:pitch', 'anim:mz', 'anim:rc', 'anim:spin', 'anim:erector', 'anim:missile', 'anim:doorL', 'anim:doorR', 'anim:cell'].includes(name)) continue;
+    for (const obj of nodes) {
+      const n: AnimNode = {
+        obj, name, phase: ((seedKey.length * 7 + gi * 2.39) % 6.28),
+        bx: obj.position.x, by: obj.position.y, bz: obj.position.z, bry: obj.rotation.y, brz: obj.rotation.z,
+      };
+      gi++;
+      if (MAT_CLONE_NAMES.has(name) && (obj as THREE.Mesh).material) {
+        const mesh = obj as THREE.Mesh;
+        mesh.material = (mesh.material as THREE.Material).clone();
+        n.mat = mesh.material;
+        const c = (mesh.material as THREE.MeshBasicMaterial).color;
+        if (c) n.baseColor = c.clone();
+        if (name === 'anim:ping') { (mesh.material as THREE.MeshBasicMaterial).transparent = true; }
+      }
+      if (name === 'anim:trolley') { n.hook = obj.children[1] ?? null; n.hookBaseY = n.hook ? n.hook.position.y : 0; }
+      if (name === 'anim:flameLight') { const li = obj as unknown as THREE.PointLight; if (li.isPointLight) obj.userData.baseI = li.intensity; }
+      if (name === 'anim:mines') { n.childBaseY = obj.children.map(ch => ch.position.y); }
+      generic.push(n);
+    }
+  }
+  // boats orbit their shared centroid (pack GunBoat: ellipse 1 x 0.7 around a center)
+  const boats = generic.filter(n => n.name === 'anim:boat');
+  if (boats.length) {
+    let cx = 0, cz = 0; for (const b of boats) { cx += b.bx; cz += b.bz; } cx /= boats.length; cz /= boats.length;
+    for (const b of boats) { b.boatCx = cx; b.boatCz = cz; b.boatR = Math.max(0.5, Math.hypot(b.bx - cx, (b.bz - cz) / 0.7)); b.boatA0 = Math.atan2((b.bz - cz) / 0.7, b.bx - cx); }
+  }
+  return { byName, generic };
+}
+
+function collectGlowMats(root: THREE.Object3D, kind: string): GlowMat[] {
+  const glowHex = PACK_GLOW[kind]; if (!glowHex) return [];
+  const glow = new THREE.Color(glowHex);
+  const out: GlowMat[] = []; const cloned = new Map<THREE.Material, THREE.Material>();
+  root.traverse(o => {
+    const mesh = o as THREE.Mesh; if (!mesh.isMesh) return;
+    const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+    const replaced = mats.map(m => {
+      if (!m) return m;
+      const basic = (m as THREE.MeshBasicMaterial).isMeshBasicMaterial;
+      const std = m as THREE.MeshStandardMaterial;
+      const col = basic ? (m as THREE.MeshBasicMaterial).color : std.emissive;
+      if (!col || col.getHex() === 0) return m;
+      const dist = Math.abs(col.r - glow.r) + Math.abs(col.g - glow.g) + Math.abs(col.b - glow.b);
+      if (dist > 0.45) return m;
+      if (!cloned.has(m)) { const c = m.clone(); cloned.set(m, c); out.push({ mat: c, base: col.clone(), basic, baseIntensity: basic ? 1 : (std.emissiveIntensity ?? 1) }); }
+      return cloned.get(m)!;
+    });
+    mesh.material = Array.isArray(mesh.material) ? replaced : replaced[0];
+  });
+  return out;
+}
+
 function barSprites(scale: number): { group: THREE.Group; fg: THREE.Sprite; bg: THREE.Sprite } {
   const group = new THREE.Group();
   const mk = (color: number, opacity: number) => {
@@ -146,6 +246,10 @@ export class GameSync3D {
   private ents = new Map<string, Ent>();
   private shotLines: { line: THREE.Line; ttl: number }[] = [];
   private aim = new Map<number, number>();
+  private towerAnims = new Map<number, TowerAnim>();
+  private genericAnims = new Map<string, AnimNode[]>();
+  private animTmp = new THREE.Vector3();
+  private animTmp2 = new THREE.Vector3();
   private targets = new Map<string, { pos: THREE.Vector3; heading: number; y: number }>();
   private dying: { ent: Ent; t: number }[] = [];
   private bursts: { parts: { s: THREE.Sprite; v: THREE.Vector3 }[]; t: number; life: number }[] = [];
@@ -230,7 +334,7 @@ export class GameSync3D {
       if (this.placing.has('tower-' + t.slot)) return;
       this.placing.add('tower-' + t.slot);
       try {
-        if (cur) { this.statics.remove(cur.obj); this.towers.delete(t.slot); }
+        if (cur) { this.statics.remove(cur.obj); this.towers.delete(t.slot); this.towerAnims.delete(t.slot); }
         const slot = SLOTS.find(s => s.id === t.slot); if (!slot) return;
         const model = await loadModel(url);
         model.traverse(o => { o.userData.pick = { type: 'slot', id: t.slot }; });
@@ -242,10 +346,11 @@ export class GameSync3D {
         model.rotation.y = this.aim.get(t.slot) ?? Math.PI;
         this.statics.add(model);
         this.towers.set(t.slot, { url, obj: model, born: performance.now(), base: baseScale });
+        this.bindTowerAnim(t.slot, url, model);
         this.removePad(t.slot);
       } finally { this.placing.delete('tower-' + t.slot); }
     }));
-    for (const [slotId, rec] of [...this.towers]) if (!seen.has(slotId)) { this.statics.remove(rec.obj); this.towers.delete(slotId); }
+    for (const [slotId, rec] of [...this.towers]) if (!seen.has(slotId)) { this.statics.remove(rec.obj); this.towers.delete(slotId); this.towerAnims.delete(slotId); }
     // slot pads
     for (const slot of SLOTS) {
       if (this.towers.has(slot.id)) { this.removePad(slot.id); continue; }
@@ -281,9 +386,9 @@ export class GameSync3D {
           model.scale.setScalar((b.glb === 'platform' ? 13 : 9.5) / Math.max(size.x, size.z, 0.001));
           const fit2 = new THREE.Box3().setFromObject(model);
           model.position.set(b.x, (b.water ? 0 : groundY(this.map, b.x, b.z)) - fit2.min.y, b.z);
-          this.statics.add(model); this.buildings.set(id, model);
+          this.statics.add(model); this.buildings.set(id, model); this.genericAnims.set('bld-' + id, collectAnims(model, id).generic);
         } finally { this.placing.delete('bld-' + id); }
-      } else if (level <= 0 && has) { this.statics.remove(this.buildings.get(id)!); this.buildings.delete(id); }
+      } else if (level <= 0 && has) { this.statics.remove(this.buildings.get(id)!); this.buildings.delete(id); this.genericAnims.delete('bld-' + id); }
     }));
     // platforms (parallel loads)
     const built = new Set(game.idle.platforms ?? []);
@@ -298,7 +403,7 @@ export class GameSync3D {
           model.scale.setScalar(12 / Math.max(size.x, size.z, 0.001));
           const fit2 = new THREE.Box3().setFromObject(model);
           model.position.set(p.x, -fit2.min.y, p.z);
-          this.statics.add(model); this.platforms.set(p.id, model);
+          this.statics.add(model); this.platforms.set(p.id, model); this.genericAnims.set('plat-' + p.id, collectAnims(model, 'plat' + p.id).generic);
         } finally { this.placing.delete('plat-' + p.id); }
         if (this.pads.has(-100 - p.id)) { this.statics.remove(this.pads.get(-100 - p.id)!); this.pads.delete(-100 - p.id); }
       } else if (!built.has(p.id) && !has && !this.pads.has(-100 - p.id)) {
@@ -605,17 +710,33 @@ export class GameSync3D {
       this.targets.delete(key); this.prevFlash.delete(key); this.prevHp.delete(key);
     }
     this.stepMotion(dt, now);
+    this.updateAnims(dt, now);
     // shots → tracers with short TTL + muzzle flash at the tower
     if (game.shots !== this.lastShots) {
       this.lastShots = game.shots;
       for (const s of game.shots) {
         const [x1, z1] = pctTo3d(s.x1, s.y1); const [x2, z2] = pctTo3d(s.x2, s.y2);
         const dx = x2 - x1, dz = z2 - z1; const len = Math.hypot(dx, dz) || 1;
-        const sx = x1 + (dx / len) * 2.4, sz = z1 + (dz / len) * 2.4;
-        const geo = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(sx, 3.1, sz), new THREE.Vector3(x2, 1.2, z2)]);
+        let sx = x1 + (dx / len) * 2.4, sz = z1 + (dz / len) * 2.4; let sy = 3.1;
+        // fire event on the owning tower: aim target, recoil, charge-cycle, real muzzle position
+        let bestSlot: number | null = null; let bd = 49;
+        for (const sl of SLOTS) { const d = (sl.x - x1) ** 2 + (sl.z - z1) ** 2; if (d < bd) { bd = d; bestSlot = sl.id; } }
+        if (bestSlot !== null) {
+          const ta = this.towerAnims.get(bestSlot);
+          if (ta) {
+            ta.targetPos = new THREE.Vector3(x2, 1.2, z2);
+            if (ta.lastShotAt > 0) { const inst = (now - ta.lastShotAt) / 1000; if (inst > 0.05 && inst < 6) ta.period = ta.period ? ta.period * 0.6 + inst * 0.4 : inst; }
+            ta.lastShotAt = now;
+            const idx = ta.mz.length ? ta.shotIdx % ta.mz.length : 0;
+            if (ta.rc.length) { const r = ta.rc[idx % ta.rc.length]; r.obj.position.z = r.bz - ta.spec.recoil; }
+            if (ta.mz.length) { const p = ta.mz[idx].getWorldPosition(new THREE.Vector3()); sx = p.x; sy = p.y; sz = p.z; }
+            ta.shotIdx++;
+          }
+        }
+        const geo = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(sx, sy, sz), new THREE.Vector3(x2, 1.2, z2)]);
         const line = new THREE.Line(geo, new THREE.LineBasicMaterial({ color: KIND_COLOR[s.kind] ?? 0xffffff, transparent: true, opacity: 0.9 }));
         this.dyn.add(line); this.shotLines.push({ line, ttl: 0.13 });
-        this.spawnFlash(new THREE.Vector3(sx, 3.1, sz), KIND_COLOR[s.kind] ?? 0xffffff);
+        this.spawnFlash(new THREE.Vector3(sx, sy, sz), KIND_COLOR[s.kind] ?? 0xffffff);
       }
     }
     for (let i = this.shotLines.length - 1; i >= 0; i--) {
@@ -624,4 +745,175 @@ export class GameSync3D {
       if (s.ttl <= 0) { this.dyn.remove(s.line); s.line.geometry.dispose(); this.shotLines.splice(i, 1); }
     }
   }
+
+  /* ================= pack animation runtime ================= */
+  private bindTowerAnim(slot: number, url: string, model: THREE.Object3D) {
+    const kind = (url.split('/').pop() ?? '').replace(/-L\d+\.glb$/, '').replace('.glb', '');
+    const { byName, generic } = collectAnims(model, 't' + slot);
+    const beam = byName.get('anim:beam') ?? []; const outer = byName.get('anim:outer') ?? [];
+    for (const b of [...beam, ...outer]) b.visible = false; // laser beam is driven by the Phase-1 battle FX
+    const ta: TowerAnim = {
+      kind, spec: WEAPON_SPEC[kind] ?? { turn: 5, recoil: 0.2 },
+      yaw: byName.get('anim:yaw') ?? [], pitch: byName.get('anim:pitch') ?? [],
+      mz: byName.get('anim:mz') ?? [],
+      rc: (byName.get('anim:rc') ?? []).map(obj => ({ obj, bz: obj.position.z })),
+      spin: (byName.get('anim:spin') ?? [])[0] ?? null,
+      erector: (byName.get('anim:erector') ?? [])[0] ?? null,
+      missile: (byName.get('anim:missile') ?? [])[0] ?? null,
+      doorsL: byName.get('anim:doorL') ?? [], doorsR: byName.get('anim:doorR') ?? [], cells: byName.get('anim:cell') ?? [],
+      generic, glowMats: GLOW_PULSE_KINDS.has(kind) ? collectGlowMats(model, kind) : [],
+      targetPos: null, lastShotAt: 0, period: 0, shotIdx: 0,
+    };
+    this.towerAnims.set(slot, ta);
+  }
+
+  private applyGeneric(nodes: AnimNode[], t: number, dt: number) {
+    for (const n of nodes) {
+      const o = n.obj; const ph = n.phase;
+      switch (n.name) {
+        case 'anim:rot': o.rotation.y += dt * 1.0; break;
+        case 'anim:rotZ': o.rotation.z += dt * 2.2; break;
+        case 'anim:sweep': o.rotation.y = Math.sin(t * 0.6 + ph) * 1.2; break;
+        case 'anim:ping': {
+          const p = ((t / 2.6) + ph) % 1; const sc = 0.5 + p * 7;
+          o.scale.set(sc, sc, sc);
+          if (n.mat) (n.mat as THREE.MeshBasicMaterial).opacity = Math.max(0, 1 - p);
+          break;
+        }
+        case 'anim:bob': o.position.y = n.by + Math.sin(t * 1.4 + ph) * 0.05; o.rotation.z = Math.sin(t * 0.98 + ph) * 0.02; break;
+        case 'anim:swing': o.rotation.z = n.brz + Math.sin(t * 1.6 + ph) * 0.28; break;
+        case 'anim:trolley':
+          o.position.x = n.bx + Math.sin(t * 0.35 + ph) * 1.1;
+          if (n.hook) n.hook.position.y = (n.hookBaseY ?? 0) + Math.sin(t * 0.5 + ph) * 0.5;
+          break;
+        case 'anim:flame': {
+          const f = 0.85 + Math.sin(t * 11 + ph) * 0.15 + Math.sin(t * 23 + ph + 1) * 0.1;
+          o.scale.set(f, f * (1.1 + Math.sin(t * 7 + ph) * 0.2), f);
+          break;
+        }
+        case 'anim:flameLight': {
+          const l = o as unknown as THREE.PointLight;
+          const f = 0.85 + Math.sin(t * 11 + ph) * 0.15 + Math.sin(t * 23 + ph + 1) * 0.1;
+          if (l.isPointLight) l.intensity = Math.max(6, (l.userData.baseI ?? 20)) * f;
+          break;
+        }
+        case 'anim:door':
+          if (n.mat && n.baseColor) (n.mat as THREE.MeshBasicMaterial).color.copy(n.baseColor).multiplyScalar(3 + Math.sin(t * 2 + ph) * 1.2);
+          break;
+        case 'anim:scan': o.position.x = n.bx + Math.sin(t * 0.5 + ph) * 2.4; break;
+        case 'anim:holo': o.rotation.y += dt * 0.5; o.position.y = n.by + Math.sin(t * 1.2 + ph) * 0.08; break;
+        case 'anim:flag': o.rotation.y = Math.sin(t * 3 + ph) * 0.3; break;
+        case 'anim:rings': o.rotation.y += dt * 1.0; o.rotation.x += dt * 0.4; break;
+        case 'anim:crane': o.rotation.y = Math.sin(t * 0.3 + ph) * 0.8; break;
+        case 'anim:sub': o.position.y = n.by + Math.sin(t * 0.4 + ph) * 0.22; o.position.z = n.bz + Math.sin(t * 0.25 + ph) * 0.6; break;
+        case 'anim:mines':
+          o.children.forEach((ch, i) => { ch.position.y = (n.childBaseY?.[i] ?? 0) + Math.sin(t * 1.5 + i * 1.7 + ph) * 0.06; ch.rotation.y += dt * 0.3; });
+          break;
+        case 'anim:boat': {
+          const bcx = n.boatCx, bcz = n.boatCz, brad = n.boatR, ba0 = n.boatA0;
+          if (bcx === undefined || bcz === undefined || brad === undefined || ba0 === undefined) break;
+          const ang = ba0 + t * 0.55;
+          o.position.set(bcx + Math.cos(ang) * brad, 0.02 + Math.sin(t * 3 + ph) * 0.03, bcz + Math.sin(ang) * brad * 0.7);
+          const vx = -Math.sin(ang), vz = Math.cos(ang) * 0.7;
+          o.rotation.set(Math.sin(t * 2 + ph) * 0.04, Math.atan2(vx, vz), -0.12);
+          break;
+        }
+        case 'anim:crystal': o.rotation.y += dt * 1.5; o.position.y = n.by + Math.sin(t * 2 + ph) * 0.1; break;
+        case 'anim:orb': o.position.y = n.by + Math.sin(t * 2 + ph) * 0.08; break;
+        case 'anim:shell': {
+          const p = ((t / 3) + ph) % 1; const sc = 0.3 + p * 9;
+          o.scale.set(sc, sc, sc);
+          if (n.mat) (n.mat as THREE.MeshBasicMaterial).opacity = Math.max(0, 1 - p * 1.4);
+          break;
+        }
+        default: break;
+      }
+    }
+  }
+
+  private updateAnims(dt: number, nowMs: number) {
+    const t = nowMs / 1000;
+    const camPos = this.map.camera.position;
+    // buildings + platforms: ambient motion only
+    for (const [, nodes] of this.genericAnims) {
+      if (!nodes.length) continue;
+      const p = nodes[0].obj.getWorldPosition(this.animTmp);
+      if (p.distanceToSquared(camPos) > 320 * 320) continue;
+      this.applyGeneric(nodes, t, dt);
+    }
+    // towers: ambient + weapon articulation
+    for (const [slot, ta] of this.towerAnims) {
+      const rec = this.towers.get(slot); if (!rec) continue;
+      const dist2 = rec.obj.position.distanceToSquared(camPos);
+      if (dist2 > 500 * 500) continue;
+      this.applyGeneric(ta.generic, t, dt);
+      const cool = ta.lastShotAt && ta.period ? Math.max(0, Math.min(1, 1 - (nowMs - ta.lastShotAt) / 1000 / ta.period)) : 0;
+      const hasTarget = ta.lastShotAt > 0 && nowMs - ta.lastShotAt < 1600;
+      if (ta.spin) ta.spin.rotation.z += dt * (hasTarget ? 40 : 3);
+      // recoil spring recovery (pack: exponential approach, rate 9)
+      for (const r of ta.rc) r.obj.position.z += (r.bz - r.obj.position.z) * Math.min(1, dt * 9);
+      // glow charge pulse (railgun coils / thermobaric rings / hypersonic rings)
+      if (ta.glowMats.length) {
+        const ch = 1 - cool;
+        const mult = ta.kind === 'railgun' ? 1 + ch * ch * 9 + Math.sin(t * 40) * ch * 0.6
+          : ta.kind === 'thermobaric' ? 2 + ch * 6 + Math.sin(t * 8)
+          : 2 + (cool < 0.32 ? (0.32 - cool) * 25 : 0) + Math.sin(t * 5) * 0.8;
+        for (const g of ta.glowMats) {
+          if (g.basic) (g.mat as THREE.MeshBasicMaterial).color.copy(g.base).multiplyScalar(Math.max(0.4, mult));
+          else (g.mat as THREE.MeshStandardMaterial).emissiveIntensity = g.baseIntensity * Math.max(0.4, mult * 0.6);
+        }
+      }
+      // silo cells: hatch doors + next-missile visibility follow the firing cycle
+      if (ta.cells.length) {
+        const nCells = ta.cells.length;
+        const next = ((ta.shotIdx % nCells) + nCells) % nCells;
+        const prev = ((ta.shotIdx - 1) % nCells + nCells) % nCells;
+        for (let j = 0; j < nCells; j++) {
+          const open = (j === next && cool < 0.22) || (j === prev && cool > 0.8);
+          const tgt = open ? 1.9 : 0; const k = Math.min(1, dt * 9);
+          const dl = ta.doorsL[j], dr = ta.doorsR[j];
+          if (dl) dl.rotation.z += (tgt - dl.rotation.z) * k;
+          if (dr) dr.rotation.z += (-tgt - dr.rotation.z) * k;
+          ta.cells[j].visible = !(j === prev && cool > 0.35);
+        }
+      }
+      // hypersonic erector: raise/lower curve follows the charge cycle
+      if (ta.erector) {
+        let ang = 0;
+        if (cool > 0.72) ang = ((1 - cool) / 0.28) * 1.45;
+        else if (cool > 0.32) ang = 1.45;
+        else ang = Math.max(0, (cool - 0.05) / 0.27) * 1.45;
+        ta.erector.rotation.x += (ang - ta.erector.rotation.x) * Math.min(1, dt * 8);
+        if (ta.missile) ta.missile.visible = cool < 0.72;
+      }
+      // aiming: yaw/pitch track the tower's real shot target; idle = face the lane
+      if (ta.yaw.length) {
+        const yaw = ta.yaw[0];
+        let tp: THREE.Vector3;
+        if (hasTarget && ta.targetPos) tp = ta.targetPos;
+        else {
+          const aimA = this.aim.get(slot) ?? Math.PI;
+          tp = this.animTmp2.set(rec.obj.position.x + Math.sin(aimA) * 14, rec.obj.position.y + 1, rec.obj.position.z + Math.cos(aimA) * 14).clone();
+        }
+        if (yaw.parent) {
+          yaw.parent.updateWorldMatrix(true, false);
+          const local = yaw.parent.worldToLocal(this.animTmp.copy(tp));
+          const want = Math.atan2(local.x - yaw.position.x, local.z - yaw.position.z);
+          let diff = want - yaw.rotation.y;
+          diff = Math.atan2(Math.sin(diff), Math.cos(diff));
+          yaw.rotation.y += diff * Math.min(1, dt * ta.spec.turn * 2.2);
+          const pitch = ta.pitch[0];
+          if (pitch && pitch.parent) {
+            pitch.parent.updateWorldMatrix(true, false);
+            const lp = pitch.parent.worldToLocal(this.animTmp.copy(tp));
+            const dist = Math.hypot(lp.x - pitch.position.x, lp.z - pitch.position.z);
+            let w = -Math.atan2(lp.y - pitch.position.y, dist) - (ta.spec.loft ?? 0);
+            w = Math.max(-(ta.spec.maxUp ?? 1.3), Math.min(0.12, w));
+            pitch.rotation.x += (w - pitch.rotation.x) * Math.min(1, dt * ta.spec.turn * 2.2);
+          }
+        }
+      }
+    }
+  }
 }
+
