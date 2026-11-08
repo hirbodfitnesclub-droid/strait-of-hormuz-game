@@ -1,6 +1,6 @@
 import { initialIdle, MISSIONS, MANAGERS, CONTRACTS, currentMission, missionProgress, managerCost, operationInfo, previewChest, advanceLootSeed, type IdleState, type ManagerId, type ContractId, type UpgradeQuantity, type Reward } from "./progression";
 import { findWaterRoute, getLane, nearestWater, sampleLane, type MapLayout, type Point } from "./navigation";
-import { weaponSpec, modelKindFor, specInterval, flightTime, type ModelKind } from "./weapons-spec";
+import { weaponSpec, modelKindFor, specInterval, flightTime, salvoCycleSeconds, type ModelKind } from "./weapons-spec";
 
 export type BuildingId = "oil" | "tank" | "dock" | "refinery" | "steel" | "arms" | "power" | "water" | "city" | "welfare" | "optical";
 export type TowerKind = "cannon" | "heavy" | "missile" | "air" | "ew" | "boat";
@@ -24,6 +24,21 @@ export interface Tower {
   /** MECH-A: battle-second accumulator for branch abilities that are not
    *  ordinary shots — EMP pulse period, sonar hack cycle, mine planting. */
   abilityClock?: number;
+
+  /** MLRS salvo cycle state (MECH-B): rockets remaining in the current
+   *  salvo, including the next one to fire. Absent = a full salvo is
+   *  loaded. The renderer reads this + cooldown to show the reload. */
+  salvoLeft?: number;
+  /** CIWS point-defense budget (MECH-B; checklist ۱٫۱): recharge timers
+   *  of the SPENT interception slots — one entry per interception used,
+   *  each counting down from 5s in battle time. Per-slot recharge (QA
+   *  round 2): a slot returns only once its own timer runs out, and the
+   *  timer must cross below zero, so two uses of the same slot are
+   *  always MORE than 5s apart — at most 3 interceptions land in ANY
+   *  5-second span, under closed and half-open readings alike (the old
+   *  shared window let a refill burst put 5–6 into one sliding span).
+   *  Absent = all 3 slots ready. */
+  interceptCharges?: number[];
 }
 export interface Enemy {
   id: number;
@@ -56,6 +71,18 @@ export interface Enemy {
   hackTimer?: number;
   /** Killed without bounty/combo/kill credit (hacked drone detonation). */
   noReward?: boolean;
+
+  /** Destroyer offensive-fire clock (MECH-B; checklist ۲٫۶): battle-time
+   *  accumulated at the enemy's effective rate (frozen by stun/slow). */
+  fireClock?: number;
+  /** Spawned by a boss ability (MECH-B): worth 25% of its class bounty
+   *  and never feeds the combo — closing the infinite boss-add farm
+   *  (audit جدید-۱۶). */
+  isAdd?: boolean;
+  /** Boss only: total reinforcements this boss has spawned (cap 40). */
+  addsSpawned?: number;
+  /** Boss 3 only: last observed Titan shield state, for up/down events. */
+  shieldUp?: boolean;
 }
 export interface Pirate { id: number; progress: number; hp: number; }
 export interface Contraband { id: number; progress: number; }
@@ -117,6 +144,39 @@ export interface BoatUnit {
 /** MECH-A: one planted sea mine of a mine-branch tower. */
 export interface MineUnit { id: number; slot: number; x: number; y: number; }
 export interface Popup { id: number; x: number; y: number; text: string; life: number; }
+/** An enemy projectile in flight (MECH-B; checklist ۲٫۶): launched by a
+ *  destroyer or by the Leviathan (boss 2) at one of the player's towers.
+ *  eta counts down in battle time; on arrival the target tower is disabled
+ *  for ENEMY_MISSILE_STUN seconds — unless a CIWS intercepts it first.
+ *  gamesync renders these from state (its own section); the launch /
+ *  intercept / impact moments are reported through BattleEvent records. */
+export interface EnemyMissile {
+  id: number;
+  sourceId: number;            // firing enemy (destroyer or boss 2)
+  source: "destroyer" | "boss";
+  targetSlot: number;
+  eta: number;                 // battle-seconds until arrival
+  total: number;               // flight time at launch (position interpolation)
+  x1: number; y1: number;      // launch position (percent units)
+  x2: number; y2: number;      // target tower slot position (percent units)
+}
+/** Current position of an enemy missile, interpolated in percent units. */
+export function enemyMissilePosition(m: EnemyMissile): { x: number; y: number } {
+  const t = m.total > 0 ? Math.max(0, Math.min(1, 1 - m.eta / m.total)) : 1;
+  return { x: m.x1 + (m.x2 - m.x1) * t, y: m.y1 + (m.y2 - m.y1) * t };
+}
+/** One momentary battle event for the FX layer (MECH-B) — the enemy-side
+ *  counterpart of Shot records: reset every tick, consumed by renderers.
+ *  x/y is the primary position (percent units); x2/y2 an optional second
+ *  point (e.g. the target of a boss's stun missile). */
+export interface BattleEvent {
+  type: "boss-spawn" | "boss-stun" | "shield-up" | "shield-down" | "enemy-missile" | "intercept" | "tower-disabled" | "missile-impact";
+  x: number; y: number;
+  x2?: number; y2?: number;
+  slot?: number;               // affected tower slot, when relevant
+  enemyId?: number;            // boss / shooter the event belongs to
+  count?: number;              // reinforcements spawned (boss-spawn)
+}
 /** Cumulative combat counters kept in the logic state (QA جزئی-۲): shots are
  *  counted at the moment of fire, hits/fizzled when the impact resolves —
  *  the renderer only reads these, it never reconstructs them. Keyed by
@@ -138,6 +198,8 @@ export interface GameState {
   enemies: Enemy[]; pirates: Pirate[]; contraband: Contraband[]; merchants: Merchant[]; shots: Shot[]; popups: Popup[];
   pendingImpacts: PendingImpact[];
   boats: BoatUnit[]; mines: MineUnit[];
+  enemyMissiles: EnemyMissile[];
+  events: BattleEvent[];
   fireStats: Record<string, FireStat>;
   spawnRemaining: number; spawnClock: number; spawnIndex: number; nextId: number; earlyBonus: boolean;
   countdown: number; trafficClock: number; trafficCount: number; destroyed: number;
@@ -268,10 +330,10 @@ export function initialGame(): GameState {
     research: [],
     cards: { cannon: { count: 0, level: 1 }, heavy: { count: 0, level: 1 }, missile: { count: 0, level: 1 }, air: { count: 0, level: 1 }, ew: { count: 0, level: 1 }, boat: { count: 0, level: 1 } },
     islands: ["main", "qeshm"], security: 70, hearts: 20, wave: 1, highestWave: 0,
-    phase: "peace", mode: "campaign", speed: 1, layout: "landscape", enemies: [], pirates: [], contraband: [], merchants: [{ id: 1, progress: .24, kind: "bulk", reward: 120, paid: false }, { id: 2, progress: .63, kind: "container", reward: 500, paid: false }], shots: [], popups: [], pendingImpacts: [], boats: [], mines: [], fireStats: {},
+    phase: "peace", mode: "campaign", speed: 1, layout: "landscape", enemies: [], pirates: [], contraband: [], merchants: [{ id: 1, progress: .24, kind: "bulk", reward: 120, paid: false }, { id: 2, progress: .63, kind: "container", reward: 500, paid: false }], shots: [], popups: [], pendingImpacts: [], boats: [], mines: [], enemyMissiles: [], events: [], battleTime: 0, fireStats: {},
     spawnRemaining: 0, spawnClock: 0, spawnIndex: 0, nextId: 3, earlyBonus: false, countdown: 15, trafficClock: 0, trafficCount: 0,
     destroyed: 0, elapsed: 0, cooldowns: { strike: 0, emp: 0, overdrive: 0 }, overdrive: 0,
-    hero: { ...sampleLane(getLane("landscape", "enemy"), .45), active: 0 }, hero2: null, towerStuns: {}, battleTime: 0, challengeRule: 0, chests: 0, prestige: 0, event: null, eventClock: 0,
+    hero: { ...sampleLane(getLane("landscape", "enemy"), .45), active: 0 }, hero2: null, towerStuns: {}, challengeRule: 0, chests: 0, prestige: 0, event: null, eventClock: 0,
     manualNight: false, lastSavedAt: Date.now(),
   };
 }
@@ -349,7 +411,10 @@ export function damageTech(s: GameState, tower: Tower) {
  *  spec damage already IS its base DPS (beam ramp not included). */
 export function towerDps(s: GameState, tower: Tower) {
   const spec = weaponSpec(tower.kind, tower.tier, tower.branch);
-  const base = spec.mode === "beam" ? spec.damage : (spec.damage * (1 + spec.critChance)) / specInterval(spec);
+  const cycle = spec.salvoSize ? salvoCycleSeconds(spec) : 0;
+  const base = spec.mode === "beam" ? spec.damage
+    : cycle > 0 ? spec.damage * (1 + spec.critChance) * spec.salvoSize! / cycle // salvo: cycle-average rocket rate (MECH-B)
+    : (spec.damage * (1 + spec.critChance)) / specInterval(spec);
   return base * damageTech(s, tower) * getStats(s).grid;
 }
 export function getRange(s: GameState, tower: Tower) {
@@ -375,6 +440,7 @@ export function hydrateGame(raw: unknown): { game: GameState; offline: number } 
   const saved = raw as GameState;
   if (saved.version !== 1 || !saved.buildings || !Array.isArray(saved.towers) || !saved.cards) return null;
   const base = initialGame();
+
   // Tamper hardening: a corrupted or hand-edited save must never crash the game.
   // Every nested structure is type-checked field by field below; anything
   // invalid is dropped or replaced with the safe default from a fresh game.
@@ -532,19 +598,25 @@ export function hydrateGame(raw: unknown): { game: GameState; offline: number } 
   // Buildings are rebuilt from the known ids only: spreading the saved
   // record would carry arbitrary keys (including "__proto__") into the
   // state, the same prototype-chain hole the contract check had.
-  const game: GameState = { ...base, ...saved, buildings: { ...base.buildings }, cards: sanitizeCards(saved.cards), cooldowns: { ...base.cooldowns, ...saved.cooldowns }, idle: sanitizeIdle(saved.idle), shots: [], popups: [], pendingImpacts: [], boats: [], mines: [] };
+  const game: GameState = { ...base, ...saved, buildings: { ...base.buildings }, cards: sanitizeCards(saved.cards), cooldowns: { ...base.cooldowns, ...saved.cooldowns }, idle: sanitizeIdle(saved.idle), shots: [], popups: [], pendingImpacts: [], boats: [], mines: [], enemyMissiles: [], events: [] };
   game.cash = Math.max(0, num(game.cash, base.cash)); game.oil = num(game.oil, base.oil); game.fuel = num(game.fuel, base.fuel); game.steel = num(game.steel, base.steel); game.ammo = num(game.ammo, base.ammo);
   game.hearts = Math.max(0, Math.min(20, num(game.hearts, 20))); game.wave = Math.max(1, Math.floor(num(game.wave, 1))); game.highestWave = Math.max(0, Math.floor(num(game.highestWave, 0)));
   game.security = Math.max(0, Math.min(100, num(game.security, 70))); game.prestige = Math.max(0, Math.floor(num(game.prestige, 0))); game.oilSplit = Math.max(0, Math.min(100, num(game.oilSplit, 40)));
   (Object.keys(game.buildings) as BuildingId[]).forEach(k => { game.buildings[k] = Math.max(0, Math.floor(num(saved.buildings[k], base.buildings[k]))); });
   game.towers = (Array.isArray(game.towers) ? game.towers : []).filter(t => t && typeof t === "object" && (TOWER_KINDS as string[]).includes(t.kind) && Number.isInteger(t.slot) && t.slot >= 0 && t.slot < SLOTS.length).map(t => {
     const tier = Math.max(1, Math.min(4, Math.floor(num(t.tier, 1))));
+    // CIWS recharge timers survive a mid-battle save (MECH-B QA round 2);
+    // anything malformed degrades to "slot ready". The legacy shared-window
+    // fields (interceptLeft/interceptWindow) are dropped — nothing reads them.
+    const rawCharges = (t as Tower).interceptCharges;
+    const charges = Array.isArray(rawCharges) ? rawCharges.filter(c => typeof c === "number" && Number.isFinite(c) && c >= 0).map(c => Math.min(CIWS_INTERCEPT_WINDOW, c)).slice(0, CIWS_INTERCEPT_BUDGET) : [];
     return {
       ...t, tier,
       branch: tier === 4 && (t.branch === 0 || t.branch === 1) ? t.branch : null,
       priority: (["first", "strongest", "weakest", "air"] as string[]).includes(t.priority) ? t.priority : "first" as Priority,
       cooldown: Math.max(0, num((t as Tower).cooldown, 0)),
       focusId: optNum(t.focusId), focusTime: optNum(t.focusTime), lastPopup: optNum(t.lastPopup),
+      interceptLeft: undefined, interceptWindow: undefined, interceptCharges: charges.length ? charges : undefined,
     };
   });
   game.battleTime = Math.max(0, num(game.battleTime, 0));
@@ -725,7 +797,8 @@ function startWave(s: GameState, early: boolean) {
   if (s.mode === "challenge") { s.challengeRule = (s.idle.challengeRuns ?? 0) % 3; s.idle.challengeRuns = (s.idle.challengeRuns ?? 0) + 1; }
   s.phase = "battle";
   s.pendingImpacts = []; // no projectiles carry over between waves
-  for (const t of s.towers) t.cooldown = 0; // every tower opens fire ready
+  s.enemyMissiles = []; // enemy projectiles don't carry over either (MECH-B)
+  for (const t of s.towers) { t.cooldown = 0; t.salvoLeft = undefined; } // every tower opens fire ready, MLRS with a full salvo loaded
   s.idle.waveStartedAt = s.elapsed; s.idle.waveStartKills = s.destroyed; s.idle.lastBattle = null;
   s.combo = 0; s.comboTimer = 0; s.waveLeaked = false; s.slowmo = 0;
   s.spawnRemaining = 5 + Math.min(s.wave, 15) + (s.wave % 5 === 0 ? 1 : 0);
@@ -920,9 +993,8 @@ function resolveImpact(s: GameState, p: PendingImpact) {
     if (tower.tier === 4 && tower.branch === 0) for (const e of [target, ...nearby]) { e.burn = 3; e.burnDamage = Math.max(e.burnDamage ?? 0, 18); }
     if (tower.tier === 4 && tower.branch === 1) target.stun = Math.max(target.stun, 2);
   }
-  if (tower.tier === 4 && tower.kind === "missile" && tower.branch === 1) {
-    for (const other of towerCandidates(s, tower).filter(e => e.id !== target.id).slice(0, 3)) applyDamage(s, other, p.damage * 0.7, splashSource);
-  }
+  // (Swarm's old +70% splash to 3 extra targets is gone — MECH-B replaced
+  //  it with a real 4-missile multi-lock volley at fire time, checklist ۱٫۳.)
   if (tower.tier === 4 && tower.kind === "cannon" && tower.branch === 1) {
     for (const other of towerCandidates(s, tower).filter(e => e.id !== target.id).slice(0, 4)) applyDamage(s, other, p.damage * 0.5, splashSource);
   }
@@ -1205,6 +1277,58 @@ export function bossEnemy(s: GameState): Enemy | null {
  *  ~11; 32 leaves generous headroom while bounding pathological bursts. */
 const MAX_SHOTS_PER_TICK = 32;
 
+/* — MECH-B: enemy missiles, CIWS interception, boss rules —
+ * Destroyer offensive cadence: checklist §۲ gives the destroyer a 5s
+ * weapon tempo (§۲٫۵ point-defense) and no separate offensive interval
+ * in §۲٫۶, so its missiles fly on the same 5s beat. Boss 2 keeps its
+ * checklist §۲٫۲ tempo (15s ability clock → one missile). */
+const DESTROYER_MISSILE_INTERVAL = 5;
+const ENEMY_MISSILE_RANGE = 26;      // percent units: a destroyer engages towers this close
+const ENEMY_MISSILE_STUN = 4;        // seconds a tower hit by an enemy missile stays down (§۲٫۲)
+const CIWS_INTERCEPT_BUDGET = 3;     // interception slots per CIWS (checklist ۱٫۱, pack data)
+const CIWS_INTERCEPT_WINDOW = 5;     // seconds for one spent slot to recharge
+const BOSS_ADD_CAP = 40;             // max reinforcements one boss may spawn (studio ruling)
+const BOSS_ADD_BOUNTY_MULT = 0.25;   // boss adds pay 25% of class bounty, no combo (studio ruling)
+const BOSS_ADD_SPREAD = 0.012;       // progress spacing between adds of one spawn group
+
+/** MECH-A (wave 1) owns the EMP pulse that stamps weaponDownUntil /
+ *  radarDownUntil onto enemies — absolute timestamps on the battle clock
+ *  (state.battleTime). Read structurally so this branch is correct both
+ *  before and after that merge: no stamp = weapons up. */
+function enemyWeaponDown(s: GameState, e: Enemy): boolean {
+  const until = (e as { weaponDownUntil?: number }).weaponDownUntil;
+  return typeof until === "number" && s.battleTime < until;
+}
+
+/** Launch one enemy missile at a tower slot (shared by destroyers and by
+ *  the Leviathan's ability — boss 2's tower stun now arrives BY MISSILE,
+ *  checklist ۲٫۲/۲٫۶, instead of being applied directly). */
+function launchEnemyMissile(s: GameState, shooter: Enemy, source: EnemyMissile["source"], targetSlot: number) {
+  const slotPos = getSlots(s.layout)[targetSlot];
+  if (!slotPos) return;
+  const from = enemyPosition(shooter, s.layout);
+  const total = flightTime("bavar", distance(from, slotPos));
+  s.enemyMissiles.push({ id: s.nextId++, sourceId: shooter.id, source, targetSlot, eta: total, total, x1: from.x, y1: from.y, x2: slotPos.x, y2: slotPos.y });
+}
+
+/** The CIWS that would intercept a missile at pos: nearest standing
+ *  Phalanx (cannon tier 4, branch 0) whose range covers the point and
+ *  which still has a charged interception slot (3 slots, each recharging
+ *  5s after its own use). A disabled CIWS defends nothing. */
+function pickInterceptor(s: GameState, pos: { x: number; y: number }): Tower | null {
+  let best: Tower | null = null; let bd = Infinity;
+  for (const t of s.towers) {
+    if (t.kind !== "cannon" || t.tier !== 4 || t.branch !== 0) continue;
+    if ((s.towerStuns?.[t.slot] ?? 0) > 0) continue;
+    if ((t.interceptCharges?.length ?? 0) >= CIWS_INTERCEPT_BUDGET) continue;
+    const sp = getSlots(s.layout)[t.slot];
+    if (!sp) continue;
+    const d = distance(sp, pos);
+    if (d <= getRange(s, t) && d < bd) { bd = d; best = t; }
+  }
+  return best;
+}
+
 function tick(s: GameState, delta: number, battlePaused = false) {
   const dt = Math.max(0, Math.min(1, delta));
   s.elapsed += dt; s.eventClock += dt;
@@ -1250,6 +1374,7 @@ function tick(s: GameState, delta: number, battlePaused = false) {
   const ammoBatches = Math.min(s.fuel / 5, s.steel / 5, stats.output("arms") / 10 * dt * (s.research.includes("ammo") ? 1.4 : 1), Math.max(0, 5000 - s.ammo) / 10);
   s.fuel -= ammoBatches * 5; s.steel -= ammoBatches * 5; s.ammo += ammoBatches * 10;
   s.shots = [];
+  s.events = []; // momentary battle events follow the same one-tick lifecycle (MECH-B)
   s.popups = s.popups.map(p => ({ ...p, life: p.life - dt })).filter(p => p.life > 0);
   s.trafficClock += dt;
   const interval = 15 - 0.1 * s.security;
@@ -1314,6 +1439,7 @@ function tick(s: GameState, delta: number, battlePaused = false) {
     if (hero.route && (hero.routeIndex ?? 1) >= hero.route.length) { hero.route = undefined; hero.routeIndex = undefined; }
   }
   const battleDt = dt * s.speed;
+  s.battleTime += battleDt; // EMP weapon-down timestamps are measured on this clock (MECH-A contract)
   (Object.keys(s.cooldowns) as Spell[]).forEach(k => { s.cooldowns[k] = Math.max(0, s.cooldowns[k] - battleDt); });
   s.overdrive = Math.max(0, s.overdrive - battleDt);
   s.slowmo = Math.max(0, (s.slowmo ?? 0) - dt);
@@ -1340,13 +1466,31 @@ function tick(s: GameState, delta: number, battlePaused = false) {
   for (const key of Object.keys(s.towerStuns ?? {})) { const left = (s.towerStuns[Number(key)] ?? 0) - battleDt; if (left <= 0) delete s.towerStuns[Number(key)]; else s.towerStuns[Number(key)] = left; }
   // MECH-A pre-phase: boats deploy, EMP pulses land and sonar hacks are
   // assigned BEFORE movement, so their effects apply from this same tick.
-  // The shared battle clock advances first, so stamps set this tick are
-  // measured against the already-advanced time.
-  s.battleTime = (s.battleTime ?? 0) + battleDt;
+  // (The shared battle clock advanced ONCE at the top of the battle block —
+  // MECH-B's increment; MECH-A's own duplicate increment was removed at the
+  // Wave-2 merge, where it had doubled the clock to 2× battle time.)
   syncBoats(s, battleDt);
   empSonarPhase(s, battleDt, stats);
   minesPhase(s, battleDt, stats);
   const reinforcements: Enemy[] = [];
+  /** Boss reinforcement spawn (MECH-B): adds are flagged (25% bounty, no
+   *  combo), capped per boss, and fanned out around the boss instead of
+   *  stacked on one progress point (audit جدید-۱۶/۱۷). */
+  const spawnAdds = (boss: Enemy, kinds: Enemy["kind"][]) => {
+    const room = Math.max(0, BOSS_ADD_CAP - (boss.addsSpawned ?? 0));
+    const list = kinds.slice(0, room);
+    list.forEach((kind, i) => {
+      const progress = Math.max(0.001, Math.min(0.97, boss.progress + (i - (list.length - 1) / 2) * BOSS_ADD_SPREAD));
+      const add = makeEnemy(s, kind, progress);
+      add.isAdd = true;
+      reinforcements.push(add);
+    });
+    if (list.length) {
+      boss.addsSpawned = (boss.addsSpawned ?? 0) + list.length;
+      const bp = enemyPosition(boss, s.layout);
+      s.events.push({ type: "boss-spawn", x: bp.x, y: bp.y, enemyId: boss.id, count: list.length });
+    }
+  };
   for (const enemy of s.enemies) {
     const pos = enemyPosition(enemy, s.layout);
     if ((enemy.burn ?? 0) > 0) { applyDamage(s, enemy, (enemy.burnDamage ?? 0) * battleDt, { kind: "burn" }); enemy.burn = Math.max(0, (enemy.burn ?? 0) - battleDt); }
@@ -1409,18 +1553,101 @@ function tick(s: GameState, delta: number, battlePaused = false) {
     if (enemy.stun > 0) { enemy.stun = Math.max(0, enemy.stun - battleDt); slow = 0; }
     const velocity = enemy.kind === "speed" ? 0.033 : enemy.kind === "air" ? 0.045 : enemy.kind === "boss" ? 0.011 : enemy.kind === "destroyer" ? 0.018 : 0.024;
     enemy.progress += velocity * slow * battleDt * (s.mode === "challenge" && s.challengeRule === 2 ? 1.3 : 1);
+    // Effective time (MECH-B; audit جدید-۱۵): ability and weapon clocks run
+    // on the enemy's own slowed/stunned timescale, exactly like its
+    // movement — a pinned boss no longer spawns adds, launches stun
+    // missiles or cycles its shield at full rate.
+    const effDt = battleDt * slow;
+    if (enemy.kind === "destroyer") {
+      enemy.fireClock = Math.min(DESTROYER_MISSILE_INTERVAL, (enemy.fireClock ?? 0) + effDt);
+      if (enemy.fireClock >= DESTROYER_MISSILE_INTERVAL && !enemyWeaponDown(s, enemy)) {
+        // nearest standing tower in range (already-disabled ones only as a fallback)
+        let targetSlot = -1; let bd = Infinity;
+        for (const preferUp of [true, false]) {
+          bd = Infinity;
+          for (const t of s.towers) {
+            if (preferUp && (s.towerStuns?.[t.slot] ?? 0) > 0) continue;
+            const sp = getSlots(s.layout)[t.slot];
+            if (!sp) continue;
+            const d = distance(sp, pos);
+            if (d <= ENEMY_MISSILE_RANGE && d < bd) { bd = d; targetSlot = t.slot; }
+          }
+          if (targetSlot >= 0) break;
+        }
+        if (targetSlot >= 0) {
+          enemy.fireClock = 0;
+          launchEnemyMissile(s, enemy, "destroyer", targetSlot);
+          s.events.push({ type: "enemy-missile", x: pos.x, y: pos.y, slot: targetSlot, enemyId: enemy.id });
+        }
+      }
+    }
     if (enemy.kind === "boss") {
-      enemy.specialClock += battleDt;
+      enemy.specialClock += effDt;
+      // Titan shield transitions ride the same effective-time clock that
+      // applyDamage reads (specialClock < 10 of every 15) — report flips.
+      if (enemy.boss === 3) {
+        const up = enemy.specialClock % 15 < 10;
+        if (enemy.shieldUp === undefined) enemy.shieldUp = up;
+        else if (enemy.shieldUp !== up) { enemy.shieldUp = up; s.events.push({ type: up ? "shield-up" : "shield-down", x: pos.x, y: pos.y, enemyId: enemy.id }); }
+      }
       if (enemy.specialClock >= (enemy.boss === 1 ? 10 : 15)) {
-        enemy.specialClock = 0;
-        if (enemy.boss === 1) { for (let i = 0; i < 4; i++) reinforcements.push(makeEnemy(s, "speed", enemy.progress)); for (let i = 0; i < 2; i++) reinforcements.push(makeEnemy(s, "air", enemy.progress)); }
-        if (enemy.boss === 2 && s.towers.length) { const victim = s.towers[Math.floor(Math.random() * s.towers.length)], vslot = getSlots(s.layout)[victim.slot]; s.towerStuns[victim.slot] = 4; if (vslot) s.popups.push({ id: s.nextId++, x: vslot.x, y: vslot.y, text: "برجک از کار افتاد!", life: 1.6 }); }
-        if (enemy.boss === 4) { reinforcements.push(makeEnemy(s, "air", enemy.progress), makeEnemy(s, "air", enemy.progress)); }
-        if (enemy.boss === 5) { reinforcements.push(makeEnemy(s, "speed", enemy.progress), makeEnemy(s, "speed", enemy.progress), makeEnemy(s, "corvette", enemy.progress), makeEnemy(s, "air", enemy.progress), makeEnemy(s, "air", enemy.progress)); }
+        // The Leviathan's stun is a weapon launch: an EMP weapon shutdown
+        // holds the ability at its threshold instead of wasting it.
+        const heldByEmp = enemy.boss === 2 && enemyWeaponDown(s, enemy);
+        if (!heldByEmp) {
+          enemy.specialClock = 0;
+          if (enemy.boss === 1) spawnAdds(enemy, ["speed", "speed", "speed", "speed", "air", "air"]);
+          if (enemy.boss === 2 && s.towers.length) {
+            const victim = s.towers[Math.floor(Math.random() * s.towers.length)], vslot = getSlots(s.layout)[victim.slot];
+            launchEnemyMissile(s, enemy, "boss", victim.slot);
+            s.events.push({ type: "boss-stun", x: pos.x, y: pos.y, x2: vslot?.x, y2: vslot?.y, slot: victim.slot, enemyId: enemy.id });
+          }
+          if (enemy.boss === 4) spawnAdds(enemy, ["air", "air"]);
+          if (enemy.boss === 5) spawnAdds(enemy, ["speed", "speed", "corvette", "air", "air"]);
+        }
       }
     }
   }
   s.enemies.push(...reinforcements);
+  // — Enemy missiles in flight (MECH-B; checklist ۲٫۶ + CIWS §۱٫۱) —
+  // CIWS slots recharge individually in battle time: each spent slot's
+  // timer ticks down and the slot returns only once the timer crosses
+  // below zero — two uses of one slot are always >5s apart, so no
+  // sliding 5s span (closed or half-open) ever holds more than 3
+  // interceptions per CIWS (QA round 2: the old shared window refilled
+  // all 3 slots at once and a queued burst slipped 5–6 into one span).
+  for (const t of s.towers) {
+    const charges = t.interceptCharges;
+    if (!charges?.length) continue;
+    let w = 0;
+    for (let i = 0; i < charges.length; i++) { const c = charges[i] - battleDt; if (c >= 0) charges[w++] = c; }
+    charges.length = w;
+    if (!w) t.interceptCharges = undefined;
+  }
+  if (s.enemyMissiles.length) {
+    const stillFlying: EnemyMissile[] = [];
+    for (const m of s.enemyMissiles) {
+      const mpos = enemyMissilePosition(m);
+      const ciws = pickInterceptor(s, mpos);
+      if (ciws) {
+        (ciws.interceptCharges ??= []).push(CIWS_INTERCEPT_WINDOW); // this slot recharges 5s from now
+        s.events.push({ type: "intercept", x: mpos.x, y: mpos.y, slot: ciws.slot, enemyId: m.sourceId });
+        s.popups.push({ id: s.nextId++, x: mpos.x, y: mpos.y - 1, text: "✦ موشک رهگیری شد", life: 1 });
+        continue; // destroyed mid-air: no arrival, no stun
+      }
+      m.eta -= battleDt;
+      if (m.eta > 0) { stillFlying.push(m); continue; }
+      const slotPos = getSlots(s.layout)[m.targetSlot];
+      if (slotPos && s.towers.some(t => t.slot === m.targetSlot)) {
+        s.towerStuns[m.targetSlot] = Math.max(s.towerStuns[m.targetSlot] ?? 0, ENEMY_MISSILE_STUN);
+        s.popups.push({ id: s.nextId++, x: slotPos.x, y: slotPos.y, text: "برجک از کار افتاد!", life: 1.6 });
+        s.events.push({ type: "tower-disabled", x: slotPos.x, y: slotPos.y, slot: m.targetSlot, enemyId: m.sourceId });
+      } else if (slotPos) {
+        s.events.push({ type: "missile-impact", x: slotPos.x, y: slotPos.y, enemyId: m.sourceId }); // tower sold mid-flight: harmless splash
+      }
+    }
+    s.enemyMissiles = stillFlying;
+  }
   // Each hero has a distinct attack cadence in addition to the catamaran's tower aura.
   const heroAttack = (hero: NonNullable<GameState["hero2"]>) => {
     hero.attackClock = (hero.attackClock ?? 0) + battleDt;
@@ -1488,6 +1715,10 @@ function tick(s: GameState, delta: number, battlePaused = false) {
     for (let shotNo = 0; tower.cooldown <= 0; shotNo++) {
       if (shotNo >= MAX_SHOTS_PER_TICK) { tower.cooldown = lastInterval; break; } // safety cap: drop the remaining debt rather than burst forever
       const cands = towerCandidates(s, tower); // target re-evaluated for every shot in the tick
+      if (spec.airOnly) { // Bavar engages air only (MECH-B; checklist ۱٫۴)
+        const air = cands.filter(e => enemyTarget(e) === "air");
+        cands.length = 0; cands.push(...air);
+      }
       if (ghadir) {
         // Ghadir hunts submarines first (MECH-A), then bosses, then the lead ship
         cands.sort((a, b) => Number(enemyTarget(b) === "sub") - Number(enemyTarget(a) === "sub") || Number(b.kind === "boss") - Number(a.kind === "boss") || b.progress - a.progress);
@@ -1496,9 +1727,18 @@ function tick(s: GameState, delta: number, battlePaused = false) {
       if (!target) { tower.focusId = undefined; tower.focusTime = 0; tower.cooldown = 0; break; } // no target: no cooldown debt accrues
       const targetPos = enemyPosition(target, s.layout);
       const origin = ghadir ? boatPosition(ghadir, s.layout) : slot;
-      let interval = specInterval(spec);
-      if (s.overdrive > 0) interval *= 0.5; // overdrive = fire rate ×2 at zero ammo cost (مهم-۳۰)
-      if ((distance(slot, s.hero) < 18 && s.hero.active === 0) || (s.hero2 && distance(slot, s.hero2) < 18 && s.hero2.active === 0)) interval /= 1.2; // catamaran aura = nearby fire rate ×1.2 (متوسط-۱۵)
+      let mul = 1;
+      if (s.overdrive > 0) mul *= 0.5; // overdrive = fire rate ×2 at zero ammo cost (مهم-۳۰)
+      if ((distance(slot, s.hero) < 18 && s.hero.active === 0) || (s.hero2 && distance(slot, s.hero2) < 18 && s.hero2.active === 0)) mul /= 1.2; // catamaran aura = nearby fire rate ×1.2 (متوسط-۱۵)
+      let interval = specInterval(spec) * mul;
+      if (spec.salvoSize) {
+        // MLRS salvo cycle (MECH-B; checklist ۱٫۲): rockets inside a salvo
+        // leave at the salvo gap; after the last rocket the launcher
+        // reloads for the full pause. salvoLeft on the tower is the cycle
+        // state the renderer reads for the reload pose.
+        const left = tower.salvoLeft ?? spec.salvoSize;
+        interval = (left > 1 ? (spec.salvoGap ?? specInterval(spec)) : (spec.reloadTime ?? specInterval(spec))) * mul;
+      }
       lastInterval = interval;
       const ammoCost = s.overdrive > 0 ? 0 : spec.ammoPerShot;
       if (ammoCost > 0 && s.ammo < ammoCost) {
@@ -1511,6 +1751,33 @@ function tick(s: GameState, delta: number, battlePaused = false) {
         break;
       }
       if (ammoCost > 0) s.ammo -= ammoCost;
+      if (spec.volleySize) {
+        // Multi-lock volley (MECH-B; checklist ۱٫۳ Swarm, ۱٫۴ Bavar): one
+        // cycle launches volleySize missiles, each locked on a different
+        // target in priority order; extra missiles wrap onto the same
+        // targets when fewer are in range. Ammo is charged once per
+        // cycle (above). The first record carries the cycle interval —
+        // the rest are volley members, not separate cadence events.
+        bumpFireStat(s, spec.modelKind, "shots");
+        const locks = cands.slice(0, spec.volleySize);
+        if (!locks.length) { tower.cooldown = 0; break; } // every candidate left range mid-cycle: stop without charging cooldown
+        for (let i = 0; i < spec.volleySize; i++) {
+          const lock = locks[i % locks.length];
+          const lockPos = enemyPosition(lock, s.layout);
+          const crit = Math.random() < spec.critChance;
+          let damage = spec.damage * damageTech(s, tower) * stats.grid;
+          if (crit) damage *= 2;
+          const flightDur = flightTime(spec.modelKind, distance(slot, lockPos));
+          s.pendingImpacts.push({ targetId: lock.id, eta: flightDur, damage, crit, slot: tower.slot, kind: tower.kind, modelKind: spec.modelKind, branch: tower.branch });
+          s.shots.push({ slot: tower.slot, kind: tower.kind, modelKind: spec.modelKind, targetId: lock.id, flightDur, damage, crit, interval: i === 0 ? interval : 0, x1: slot.x, y1: slot.y, x2: lockPos.x, y2: lockPos.y });
+        }
+        tower.cooldown += interval; // one cycle = one interval (ROOT's charge; the volley's missiles share it)
+        continue;
+      }
+      if (spec.salvoSize) {
+        const left = tower.salvoLeft ?? spec.salvoSize;
+        tower.salvoLeft = left <= 1 ? spec.salvoSize : left - 1;
+      }
       const crit = Math.random() < spec.critChance;
       let damage = spec.damage * damageTech(s, tower) * stats.grid;
       if (crit) damage *= 2;
@@ -1540,6 +1807,16 @@ function tick(s: GameState, delta: number, battlePaused = false) {
   for (const enemy of s.enemies) {
     if (enemy.hp <= 0) {
       if (enemy.noReward) continue; // MECH-A: a hacked drone's detonation pays no bounty
+      const pos = enemyPosition(enemy, s.layout);
+      if (enemy.isAdd) {
+        // Boss reinforcements (MECH-B studio ruling; audit جدید-۱۶): 25% of
+        // the class bounty and NO combo increment or combo bonus — a boss
+        // kept alive on purpose stops being an infinite money pump.
+        const cash = Math.round(bounty(s, enemy) * BOSS_ADD_BOUNTY_MULT);
+        s.cash += cash; s.destroyed++;
+        s.popups.push({ id: s.nextId++, x: pos.x, y: pos.y, text: `+${cash}`, life: 1.4 });
+        continue;
+      }
       const cash = bounty(s, enemy);
       s.combo = (s.comboTimer ?? 0) > 0 ? (s.combo ?? 0) + 1 : 1;
       s.comboTimer = 3.5;
@@ -1547,7 +1824,6 @@ function tick(s: GameState, delta: number, battlePaused = false) {
       const comboBonus = Math.min(120, (s.combo - 1) * 6);
       const total = cash + comboBonus;
       s.cash += total; s.destroyed++;
-      const pos = enemyPosition(enemy, s.layout);
       s.popups.push({ id: s.nextId++, x: pos.x, y: pos.y, text: `+${total}`, life: 1.4 });
       if (s.combo >= 5 && s.combo % 5 === 0) {
         s.popups.push({ id: s.nextId++, x: pos.x, y: pos.y - 3, text: `🔥×${s.combo}`, life: 1.6 });
@@ -1566,7 +1842,7 @@ function tick(s: GameState, delta: number, battlePaused = false) {
   s.enemies = s.enemies.filter(e => e.hp > 0 && e.progress < 1);
   if (s.hearts <= 0) {
     s.idle.lastBattle = { id:`battle-${s.nextId++}`, wave:s.wave, title:operationInfo(s.wave).title, victory:false, stars:0, cash:0, xp:0, chests:0, destroyed:s.destroyed-s.idle.waveStartKills, seconds:s.elapsed-s.idle.waveStartedAt, hearts:0, claimed:false };
-    s.idle.revision++; s.phase = "defeat"; s.enemies = []; s.spawnRemaining = 0; s.pendingImpacts = []; return;
+    s.idle.revision++; s.phase = "defeat"; s.enemies = []; s.spawnRemaining = 0; s.pendingImpacts = []; s.enemyMissiles = []; return;
   }
   if (s.spawnRemaining === 0 && s.enemies.every(e => (e.hackTimer ?? 0) > 0)) {
     // Studio ruling (QA round-2 متوسط-۳): hacked units are the player's
@@ -1575,6 +1851,7 @@ function tick(s: GameState, delta: number, battlePaused = false) {
     // hangs open, and no post-"cleanup" leak when the hack expires).
     s.enemies = [];
     s.pendingImpacts = []; // battle over (QA جزئی-۱): no orphan in-flight records freeze into the intermission
+    s.enemyMissiles = []; // enemy projectiles die with the battle too (MECH-B)
     const info = operationInfo(s.wave), stars = s.hearts >= 19 ? 3 : s.hearts >= 14 ? 2 : 1;
     s.idle.stars[String(s.wave)] = Math.max(s.idle.stars[String(s.wave)] ?? 0, stars);
     const perfect = !s.waveLeaked;
@@ -1607,7 +1884,7 @@ export function cloneForTick(state: GameState): GameState {
       managerLevels: { ...idle.managerLevels },
     },
     buildings: { ...state.buildings },
-    towers: state.towers.map(t => ({ ...t })),
+    towers: state.towers.map(t => ({ ...t, interceptCharges: t.interceptCharges?.slice() })),
     enemies: state.enemies.map(e => ({ ...e })),
     boats: (state.boats ?? []).map(b => ({ ...b })),
     mines: (state.mines ?? []).map(m => ({ ...m })),
@@ -1620,6 +1897,7 @@ export function cloneForTick(state: GameState): GameState {
     hero2: state.hero2 ? { ...state.hero2, route: state.hero2.route?.slice() } : null,
     towerStuns: { ...state.towerStuns },
     pendingImpacts: state.pendingImpacts.map(p => ({ ...p })),
+    enemyMissiles: (state.enemyMissiles ?? []).map(m => ({ ...m })),
     fireStats,
     // shared by reference — tick never writes these: research, cards,
     // islands, layout; shots is reassigned (s.shots = []) before any push.
@@ -1634,6 +1912,7 @@ export function gameReducer(state: GameState, action: Action): GameState {
   // Shot records are one-render FX events: a non-tick action must not let
   // gamesync replay the previous tick's shots (and double-count telemetry).
   s.shots = [];
+  s.events = []; // same one-tick lifecycle for battle events (MECH-B)
   switch (action.type) {
     case "layout": if (s.layout !== action.layout) { s.layout = action.layout; const point = nearestWater(s.hero, action.layout); s.hero.x = point.x; s.hero.y = point.y; s.hero.route = undefined; s.hero.routeIndex = undefined; } break;
     case "split": s.oilSplit = Math.max(0, Math.min(100, action.value)); break;
@@ -1737,9 +2016,9 @@ export function gameReducer(state: GameState, action: Action): GameState {
     case "start": startWave(s, !!action.early); break;
     case "select-operation": {
       if(!Number.isInteger(action.wave)||action.wave<1||action.wave>Math.min(25,s.highestWave+1))break;
-      s.mode="campaign";s.wave=action.wave;s.hearts=20;s.phase="peace";s.enemies=[];s.spawnRemaining=0;s.idle.lastBattle=null;break;
+      s.mode="campaign";s.wave=action.wave;s.hearts=20;s.phase="peace";s.enemies=[];s.enemyMissiles=[];s.spawnRemaining=0;s.idle.lastBattle=null;break;
     }
-    case "mode": s.mode = action.mode; s.wave = action.mode === "campaign" ? Math.min(25,s.highestWave+1) : 1; s.hearts = 20; s.phase = "peace"; s.enemies = []; s.spawnRemaining = 0; s.idle.lastBattle=null; break;
+    case "mode": s.mode = action.mode; s.wave = action.mode === "campaign" ? Math.min(25,s.highestWave+1) : 1; s.hearts = 20; s.phase = "peace"; s.enemies = []; s.enemyMissiles = []; s.spawnRemaining = 0; s.idle.lastBattle=null; break;
     case "spell": {
       if (s.cooldowns[action.spell] > 0 || s.phase !== "battle") break;
       if (action.spell === "strike") {

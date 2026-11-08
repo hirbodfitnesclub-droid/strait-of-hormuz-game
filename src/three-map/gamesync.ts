@@ -5,7 +5,7 @@ import buildingsData from './buildings-3d.json';
 import { loadModel, TOWER_MODEL, BRANCH_MODEL, groundY } from './models3d';
 import { hull } from './ships3d';
 import { pctTo3d, point3dToPct } from './coords';
-import { getRange, type GameState, type Shot } from '@/lib/game';
+import { getRange, enemyMissilePosition, type GameState, type Shot } from '@/lib/game';
 import type { BattleSound } from '@/lib/battle-audio';
 import { BattleFX } from './battlefx';
 
@@ -242,6 +242,30 @@ function makeWake(len: number, wid: number, fwd: 'X' | 'Z'): THREE.Mesh {
 }
 function easeOutBack(x: number): number { const c1 = 1.70158, c3 = c1 + 1; return 1 + c3 * Math.pow(x - 1, 3) + c1 * Math.pow(x - 1, 2); }
 
+/* ===== MECH-B: enemy missile visuals (destroyer / Leviathan projectiles) =====
+   Geometry is built along +X (the ship forward convention); materials and
+   geometries are shared module-wide — the per-missile cost is one Group. */
+const EM_BODY_GEO = new THREE.CylinderGeometry(0.3, 0.34, 2.6, 8); EM_BODY_GEO.rotateZ(Math.PI / 2);
+const EM_NOSE_GEO = new THREE.ConeGeometry(0.3, 0.95, 8); EM_NOSE_GEO.rotateZ(-Math.PI / 2);
+const EM_FLAME_GEO = new THREE.ConeGeometry(0.22, 0.85, 8); EM_FLAME_GEO.rotateZ(Math.PI / 2);
+const EM_BODY_MAT = new THREE.MeshStandardMaterial({ color: 0x7e2d24, roughness: 0.45, metalness: 0.35, emissive: 0x2a0803 });
+const EM_NOSE_MAT = new THREE.MeshStandardMaterial({ color: 0xd8dde2, roughness: 0.35, metalness: 0.5 });
+const EM_FLAME_MAT = new THREE.MeshBasicMaterial({ color: 0xffa040 });
+/* The warning beacon's material is shared too (QA round 2): a fresh
+   SpriteMaterial per missile was never disposed on removal — a small
+   but unbounded leak in long battles. Sharing means all beacons blink
+   in unison; syncEnemyMissiles drives the blink on this one material. */
+const EM_BEACON_MAT = new THREE.SpriteMaterial({ color: 0xff4030, transparent: true, opacity: 0.9, depthTest: false });
+function enemyMissileMesh(): THREE.Group {
+  const g = new THREE.Group();
+  const body = new THREE.Mesh(EM_BODY_GEO, EM_BODY_MAT); g.add(body);
+  const nose = new THREE.Mesh(EM_NOSE_GEO, EM_NOSE_MAT); nose.position.x = 1.75; g.add(nose);
+  const flame = new THREE.Mesh(EM_FLAME_GEO, EM_FLAME_MAT); flame.position.x = -1.7; flame.name = 'em-flame'; g.add(flame);
+  const beacon = new THREE.Sprite(EM_BEACON_MAT);
+  beacon.scale.set(0.9, 0.9, 1); beacon.position.set(0, 0.55, 0); beacon.name = 'em-beacon'; g.add(beacon);
+  return g;
+}
+
 export class GameSync3D {
   private map: MapLike; private cb: SyncCallbacks;
   private root = new THREE.Group();
@@ -298,6 +322,10 @@ export class GameSync3D {
   private prevCooldowns: Record<string, number> | null = null;
   private prevHearts: number | null = null;
   private entKinds = new Map<string, string>();
+  /* MECH-B: enemy-missile render section state (own pool, own event cursor) */
+  private eMissiles = new Map<number, THREE.Group>();
+  private eMissileTrailAt = new Map<number, number>();
+  private lastEvents: unknown = null;
   /* Shot/impact telemetry (fix program): window.__telemetry READS the
    * logic-side counters (GameState.fireStats — shots counted at fire time,
    * hits/fizzled resolved by the impact phase in game.ts) instead of
@@ -1005,6 +1033,8 @@ export class GameSync3D {
       if (prev) { const dx = x - prev.pos.x, dz = z - prev.pos.z; if (dx * dx + dz * dz > 0.04) heading = Math.atan2(-dz, dx); }
       this.targets.set(key, { pos: new THREE.Vector3(x, 0.35, z), heading, y: 0.35 });
     }
+    // enemy missiles — MECH-B's own render section (state-driven, see below)
+    this.syncEnemyMissiles(game, now);
     // prune dead entities (killed enemies sink with an explosion; others just leave)
     for (const key of [...this.ents.keys()]) if (!alive.has(key)) {
       const ent = this.ents.get(key)!;
@@ -1084,6 +1114,54 @@ export class GameSync3D {
     if (typeof this.map.dprCap === 'number') return this.map.dprCap;
     const coarse = typeof window !== 'undefined' && !!window.matchMedia?.('(pointer: coarse)').matches;
     return coarse ? 1.5 : 2;
+  }
+
+  /* ===== MECH-B: enemy missile rendering (separate section) =====
+     Draws state.enemyMissiles (destroyer + Leviathan projectiles) as
+     physical missiles flying their launch→target arc, with a smoke trail,
+     and plays the one-shot FX for the two arrival-class battle events
+     (CIWS interception, tower disabled). Everything else about enemy
+     projectiles — flight, interception, the 4s tower stun — is logic in
+     game.ts; this section only reads state. */
+  private syncEnemyMissiles(game: GameState, now: number) {
+    EM_BEACON_MAT.opacity = (now / 260) % 1 < 0.55 ? 0.95 : 0.25; // warning blink, shared by every beacon
+    const seen = new Set<number>();
+    for (const m of game.enemyMissiles ?? []) {
+      seen.add(m.id);
+      let g = this.eMissiles.get(m.id);
+      if (!g) { g = enemyMissileMesh(); this.dyn.add(g); this.eMissiles.set(m.id, g); }
+      const p = enemyMissilePosition(m);
+      const [x, z] = pctTo3d(p.x, p.y);
+      const [tx, tz] = pctTo3d(m.x2, m.y2);
+      const t = m.total > 0 ? Math.max(0, Math.min(1, 1 - m.eta / m.total)) : 1;
+      const y = 2.3 + Math.sin(t * Math.PI) * 2.4; // low arc: rises off the launcher, dives onto the tower
+      g.position.set(x, y, z);
+      g.rotation.y = Math.atan2(-(tz - z), tx - x);
+      const flame = g.getObjectByName('em-flame');
+      if (flame) { const f = 0.8 + Math.sin(now / 31 + m.id) * 0.25; flame.scale.set(f, 1, 1); }
+      if (now - (this.eMissileTrailAt.get(m.id) ?? 0) > 90) {
+        this.eMissileTrailAt.set(m.id, now);
+        this.fx.smoke(new THREE.Vector3(x, y, z), 0.38, false);
+      }
+    }
+    // Removal needs no dispose: every geometry/material a missile mesh
+    // uses is a shared module-level asset (see EM_* above), so dropping
+    // the Group from the scene graph frees the whole per-missile cost.
+    for (const [id, g] of [...this.eMissiles]) if (!seen.has(id)) { this.dyn.remove(g); this.eMissiles.delete(id); this.eMissileTrailAt.delete(id); }
+    if (game.events !== this.lastEvents) {
+      this.lastEvents = game.events;
+      for (const ev of game.events ?? []) {
+        if (ev.type === 'intercept') {
+          const [x, z] = pctTo3d(ev.x, ev.y);
+          const p = new THREE.Vector3(x, 3.4, z);
+          this.fx.explode(p, '#7dd3fc', 1.1, false);
+          this.fx.spark(p, '#bfe9ff', 8);
+        } else if (ev.type === 'tower-disabled') {
+          const [x, z] = pctTo3d(ev.x, ev.y);
+          this.fx.explode(new THREE.Vector3(x, 3, z), '#ff6a5c', 1.5, false);
+        }
+      }
+    }
   }
 
   /** Dynamic resolution: hold frame time near 60fps by stepping the pixel ratio. */
