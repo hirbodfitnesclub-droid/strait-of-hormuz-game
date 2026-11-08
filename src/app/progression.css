@@ -6,8 +6,13 @@
 .commander-progress h1{font-size:20px;letter-spacing:-.6px;font-weight:800;margin-top:5px;color:#fff3d5;text-shadow:0 2px 8px #15392e}
 .commander-xp{height:4px;width:195px;margin-top:9px;background:#d2dec121;border-radius:9px;overflow:hidden}.commander-xp>i{display:block;height:100%;background:linear-gradient(90deg,#96c99e,#edce86);border-radius:9px;transition:width .65s var(--ease)}
 .commander-progress>div>small{display:flex;gap:10px;font-size:9px;color:#c1d0af;margin-top:5px}.commander-progress>div>small>span{color:#8db199}
-.game-shell .world-status{display:none}
-.daily-manager-shortcuts{position:absolute;z-index:12;top:132px;left:31px;display:flex;gap:8px;align-items:flex-start;flex-direction:column}
+/* world-status cluster REVIVED at Wave-2 integration (manager ruling): the
+   display:none dated from the initial commit and had silently killed the
+   security pill, the only day/night toggle and the HUD oil-valve shortcut
+   (born dead in v0.4.0). The cluster renders again; layout collision with
+   the daily-shortcuts column (same left edge, world-status top 119px vs
+   shortcuts top 132px) is resolved by moving the shortcuts column down. */
+.daily-manager-shortcuts{position:absolute;z-index:12;top:172px;left:31px;display:flex;gap:8px;align-items:flex-start;flex-direction:column}
 .daily-shortcut,.manager-shortcut,.contract-shortcut{position:relative;min-height:50px;display:flex;align-items:center;gap:9px;padding:4px 11px 4px 6px;background:#143532dc;border:1px solid #cbd4b32e;border-radius:13px;color:#dce8cb;font-size:10px;min-width:131px;text-align:right;box-shadow:0 5px 18px #092b2c1c}
 .daily-shortcut img{width:42px;height:42px;object-fit:contain;scale:1.4}.daily-shortcut.available{border-color:#ebcf8b61}.daily-shortcut.available img{animation:reward-nudge 4s ease-in-out infinite}.daily-shortcut>i{position:absolute;top:5px;right:7px;width:6px;height:6px;border-radius:50%;background:#f0c878;border:1px solid #244538;box-shadow:0 0 7px #ebc57672}
 .manager-shortcut img{width:33px;height:39px;object-fit:cover;border-radius:8px;border:1px solid #d0c38a5c}.manager-shortcut>svg{color:#b8dbad;width:12px}.contract-shortcut{min-height:40px;padding:5px 10px;color:#e6ce96}.contract-shortcut svg{color:#b4dec1}

@@ -145,13 +145,18 @@ function deepFreeze(o, seen = new Set()) {
   assert.ok(farProg >= 0, 'need a lane point far from the sonar tower and the drone');
   s.enemies = [foe(1, 'air', setup.pa), foe(99, 'speed', farProg, { stun: 9999 })];
   let hackTick = -1;
-  for (let i = 1; i <= 80 && hackTick < 0; i++) { s = gameReducer(s, { type: 'tick', dt: 0.125 }); if ((s.enemies[0].hackTimer ?? 0) > 0) hackTick = i; }
-  assert.ok(hackTick >= 60 && hackTick <= 68, `hack must land at ~8s (tick 64), landed at tick ${hackTick}`);
-  // segment A (hub still active): the hacked drone freezes and no tower
-  // may target it — its HP must not move while it sits inside sonar range
+  for (let i = 1; i <= 120 && hackTick < 0; i++) { s = gameReducer(s, { type: 'tick', dt: 0.125 }); if ((s.enemies[0].hackTimer ?? 0) > 0) hackTick = i; }
+  assert.ok(hackTick >= 92 && hackTick <= 100, `hack must land at ~12s (tick 96; checklist §۱٫۵ — manager ruling over the brief's 8s), landed at tick ${hackTick}`);
+  // segment A (hub still active): no tower may target the hacked drone —
+  // its HP must not move while it sits inside sonar range. (Its PROGRESS
+  // may move toward its target since the Wave-2 جزئی-۷ fix: it flies to
+  // engage its former fleet instead of hovering — the old freeze
+  // assertion predates that ruling. The no-leak guarantee is asserted
+  // below via hearts, and the approach itself is bounded: it must move
+  // TOWARD the far ship, never backward down the lane.)
   const frozenProgress = s.enemies[0].progress, frozenHp = s.enemies[0].hp;
   s = tick(s, 16); // 2s of hacked service under an active hub
-  assert.equal(s.enemies[0].progress, frozenProgress, 'hacked drone must not advance');
+  assert.ok(Math.sign(s.enemies[0].progress - frozenProgress) === Math.sign(farProg - frozenProgress) || s.enemies[0].progress === frozenProgress, 'hacked drone may only move toward its fleet target (جزئی-۷ approach), never advance down its own lane');
   assert.equal(s.enemies[0].hp, frozenHp, 'hacked drone must not be targeted while hacked');
   assert.equal(s.hearts, 20, 'hacked drone never leaks');
   // segment B: knock the hub out (no re-hack, no tower fire to confuse the

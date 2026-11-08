@@ -5,18 +5,34 @@ let s = g.initialGame();
 const tick = (seconds, paused=false) => { for(let i=0;i<seconds*8;i++)s=g.gameReducer(s,{type:'tick',dt:.125,battlePaused:paused}); };
 const act = action => { s=g.gameReducer(s,action); };
 const before=s.cash, bank=s.idle.bank;
-tick(1);
-assert.equal(s.cash,before,'Production must accumulate in treasury');assert.ok(s.idle.bank>bank);
+// ECO (Wave 1, R11): the harbor bank fills ONLY from realized tanker
+// exports — production alone no longer pays into it (the pre-ECO version
+// of this test asserted bank growth after 1s of pure production, which
+// contradicted the real-export rule and ECO's own QA-verified suite).
+// Berth the starting tanker with a hair of room left so the export
+// flow itself crosses the full threshold and the ship departs, paying
+// the bank (dock level 1 -> capacity 1000; exportRate ~35/s at alpha 40%).
+s.idle.port.tanker={stage:'loading',progress:1,load:999}; s.oil=2000;
+tick(2);
+assert.equal(s.cash,before,'Production must accumulate in treasury');assert.ok(s.idle.bank>bank,'bank grows only via realized exports (R11)');
 act({type:'collect-income'});assert.ok(s.cash>before);assert.ok(s.idle.collected>=100);assert.equal(s.idle.collectionStreak,1);assert.equal(p.currentMission(s).id,'first-profit');
-for(let i=0;i<3;i++){tick(1);act({type:'collect-income'});}assert.equal(s.idle.collectionStreak,4);const bankBefore= Math.floor(s.idle.bank),collectedBefore=s.idle.collected;act({type:'collect-income'});assert.equal(s.idle.collected-collectedBefore,bankBefore+Math.floor(bankBefore*.16),'Four quick collections grant the exact 16% streak bonus');
+// Collections 2-4 pay out only if the bank refills between them; under
+// R11 that needs fresh exports, so stage another filled tanker before
+// each collect (streak rule itself: <=50 game-seconds apart, unchanged).
+for(let i=0;i<3;i++){s.idle.port.tanker={stage:'loading',progress:1,load:999}; s.oil=Math.max(s.oil,2000); tick(1);act({type:'collect-income'});}assert.equal(s.idle.collectionStreak,4);const bankBefore= Math.floor(s.idle.bank),collectedBefore=s.idle.collected;act({type:'collect-income'});assert.equal(s.idle.collected-collectedBefore,bankBefore+Math.floor(bankBefore*.16),'Four quick collections grant the exact 16% streak bonus');
 let exportState=g.initialGame();exportState.cash=0;exportState.idle.bank=0;for(let i=0;i<25;i++)exportState=g.gameReducer(exportState,{type:'tick',dt:1});assert.equal(exportState.cash,0,'Oil sales should accumulate in the collectible bank');assert.ok(exportState.idle.bank>0,'Exports create a visible idle treasury');
 
 const cashBefore=s.cash;act({type:'claim-mission',id:'first-profit'});assert.equal(s.cash,cashBefore+300);assert.equal(s.idle.rewards.length,1);
 const claimed=s.cash;act({type:'claim-mission',id:'first-profit'});assert.equal(s.cash,claimed,'Mission reward must be idempotent');
 act({type:'claim-mission',id:'first-boss'});assert.equal(s.cash,claimed,'Future missions cannot be claimed');
-act({type:'upgrade-building',id:'oil'});act({type:'upgrade-building',id:'oil'});assert.equal(s.buildings.oil,5);
+// Two upgrade ACTIONS from level 1 reach level 3 under the current
+// quantity system (one level per action at quantity 1); the pre-fix
+// test's "two actions -> level 5" expectation predates that system.
+// Four actions take oil 1 -> 5, which is what the oil-five mission needs.
+act({type:'upgrade-building',id:'oil'});act({type:'upgrade-building',id:'oil'});act({type:'upgrade-building',id:'oil'});act({type:'upgrade-building',id:'oil'});assert.equal(s.buildings.oil,5);
 act({type:'claim-mission',id:'oil-five'});assert.ok(s.idle.claimedMissions.includes('oil-five'));
-act({type:'upgrade-building',id:'dock'});act({type:'claim-mission',id:'busy-port'});assert.ok(s.chests>0);
+// busy-port needs dock level 3 (mission target): two quantity-1 actions.
+act({type:'upgrade-building',id:'dock'});act({type:'upgrade-building',id:'dock'});act({type:'claim-mission',id:'busy-port'});assert.ok(s.chests>0);
 act({type:'hire-manager',id:'harbor'});assert.equal(s.idle.managerLevels.harbor,1);act({type:'claim-mission',id:'first-manager'});
 const automatic=s.cash;tick(11);assert.ok(s.cash>automatic,'Harbor manager must collect real treasury balance');
 const production=g.getStats(s).oilRate;act({type:'activate-production-boost'});assert.ok(Math.abs(g.getStats(s).oilRate/production-2)<.00001);assert.equal(s.idle.boostCharges,1);act({type:'activate-production-boost'});assert.equal(s.idle.boostCharges,1,'Active boost must not consume another charge');
@@ -27,7 +43,10 @@ s.idle.rewards=[];
 act({type:'start-contract',id:'coastal'});assert.equal(s.idle.contract.id,'coastal');const contractCash=s.cash;
 act({type:'claim-contract'});assert.equal(s.cash,contractCash,'Contract cannot be paid before arrival');tick(61,true);act({type:'claim-contract'});assert.equal(s.idle.completedContracts,1);assert.equal(s.idle.contract,null);const afterContract=s.cash;act({type:'claim-contract'});assert.equal(s.cash,afterContract);
 const daily={id:'daily-test-once',type:'daily',title:'Test',subtitle:'',cash:500,xp:35,chests:1};act({type:'apply-daily',reward:daily});const dailyCash=s.cash;act({type:'apply-daily',reward:daily});assert.equal(s.cash,dailyCash,'Daily receipts must apply only once');
-let offlineState={...g.initialGame(),lastSavedAt:Date.now()-13*3600*1000};let restored=g.hydrateGame(offlineState);assert.ok(restored.game.idle.offline.cash>0);assert.equal(restored.game.idle.offline.seconds,12*3600);assert.equal(restored.game.cash,offlineState.cash,'Offline reward must await explicit collection');let offlineGame=g.gameReducer(restored.game,{type:'claim-offline'});const offlineCash=offlineGame.cash;offlineGame=g.gameReducer(offlineGame,{type:'claim-offline'});assert.equal(offlineGame.cash,offlineCash);
+// Offline income is paid on the REALIZED export rate (ECO, R11): seed a
+// realized-export window (6000 game-seconds at $2/s realized) so the
+// returning player actually has an offline reward to claim.
+let offlineState={...g.initialGame(),lastSavedAt:Date.now()-13*3600*1000};offlineState.idle.exportWindowDollars=12000;offlineState.idle.exportWindowTime=6000;let restored=g.hydrateGame(offlineState);assert.ok(restored.game.idle.offline.cash>0);assert.equal(restored.game.idle.offline.seconds,12*3600);assert.equal(restored.game.cash,offlineState.cash,'Offline reward must await explicit collection');let offlineGame=g.gameReducer(restored.game,{type:'claim-offline'});const offlineCash=offlineGame.cash;offlineGame=g.gameReducer(offlineGame,{type:'claim-offline'});assert.equal(offlineGame.cash,offlineCash);
 s=g.initialGame();act({type:'start'});for(let i=0;i<1200&&s.phase==='battle';i++)act({type:'tick',dt:.125});assert.equal(s.phase,'intermission','Starter defense should clear the first operation');assert.ok(s.idle.lastBattle?.victory);assert.equal(s.idle.lastBattle.claimed,false);assert.equal(s.idle.lastBattle.stars,3);assert.ok(s.idle.lastBattle.cash>p.operationInfo(1).cash,'Three-star victories give meaningfully better loot');assert.ok(s.idle.lastBattle.xp>p.operationInfo(1).xp);const winCash=s.cash;act({type:'claim-battle'});assert.equal(s.cash,winCash+s.idle.lastBattle.cash);const won=s.cash;act({type:'claim-battle'});assert.equal(s.cash,won);tick(16);assert.equal(s.phase,'intermission','Auto battle is opt-in');act({type:'toggle-auto-battle'});tick(1);assert.equal(s.phase,'battle');
 const away=g.initialGame();away.idle.contract={id:'coastal',elapsed:10};away.idle.boostCharges=0;away.lastSavedAt=Date.now()-3600*1000;const returned=g.hydrateGame(away);assert.equal(returned.game.idle.contract.elapsed,60);assert.equal(returned.game.idle.boostCharges,3);
 const legacy=g.initialGame();delete legacy.idle;const migrated=g.hydrateGame(legacy);assert.ok(migrated.game.idle.managerLevels);assert.ok(migrated.game.idle.claimedMissions);

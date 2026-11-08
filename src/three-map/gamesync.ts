@@ -374,6 +374,7 @@ export class GameSync3D {
   // setState (8x/s) built a new RingGeometry + MeshBasicMaterial and dropped
   // the old ones undisposed — a steady GPU-memory/GC leak.
   private rangeRingMesh: THREE.Mesh | null = null;
+  private padRingMats = { open: new THREE.MeshBasicMaterial({ color: 0x53d769, transparent: true, opacity: 0.8, side: THREE.DoubleSide }), locked: new THREE.MeshBasicMaterial({ color: 0x8a8f96, transparent: true, opacity: 0.35, side: THREE.DoubleSide }) };
   private targetRingMesh: THREE.Mesh | null = null;
   private ringGeoCache = new Map<string, THREE.BufferGeometry>();
   private ringMatRange = new THREE.MeshBasicMaterial({ color: 0x7ac8ff, transparent: true, opacity: 0.35, side: THREE.DoubleSide, depthWrite: false });
@@ -786,7 +787,7 @@ export class GameSync3D {
       this.removePad(slot.id);
       const pad = new THREE.Group(); pad.userData.key = key;
       const y = groundY(this.map, slot.x, slot.z);
-      const ring = new THREE.Mesh(new THREE.RingGeometry(2.4, 3.1, 40), new THREE.MeshBasicMaterial({ color: locked ? 0x8a8f96 : 0x53d769, transparent: true, opacity: locked ? 0.35 : 0.8, side: THREE.DoubleSide }));
+      const ring = new THREE.Mesh(this.ringGeometry(2.4, 3.1, 40), locked ? this.padRingMats.locked : this.padRingMats.open);
       ring.rotation.x = -Math.PI / 2; ring.position.set(slot.x, y + 0.15, slot.z);
       pad.add(ring);
       const glyph = glyphSprite(locked ? '🔒' : '+', locked ? '#9aa3ad' : '#53d769');
@@ -1242,6 +1243,45 @@ export class GameSync3D {
         const lamp = glyphSprite('✸', '#ff4040', 1.8); lamp.position.y = 1.6; g.add(lamp);
         return g;
       }, { bob: 0.06 });
+    }
+    // ===== SCEN objective entities (Wave-2 integration): the escort
+    // caravan and the stranded rescue ship ride the trade lane; enemy sea
+    // mines sit on it too. Positions come from the logic's own helpers
+    // (objectiveShipPosition / enemyMinePosition sample the trade lane);
+    // setTarget maps lane progress to the render curve. Objective ships
+    // carry HP bars — a structure objective shows its HP in the HUD. =====
+    const battleCtx = game.battle;
+    if (battleCtx?.escort) {
+      alive.add('obj-escort');
+      this.setTarget('obj-escort', 'trade', battleCtx.escort.progress, 0.3, 'Z');
+      void this.ensureEnt('obj-escort', async () => {
+        const g = await loadModel('/models/kenney/ship-cargo-a.glb');
+        const fit = new THREE.Box3().setFromObject(g); const size = new THREE.Vector3(); fit.getSize(size);
+        g.scale.setScalar(13 / Math.max(size.x, size.z, 0.001));
+        const fit2 = new THREE.Box3().setFromObject(g); g.position.y = -fit2.min.y;
+        g.userData.baseY = g.position.y;
+        return g;
+      }, { bar: 5, bob: 0.1, wake: { len: 10, wid: 5, fwd: 'Z' } });
+      const ent = this.ents.get('obj-escort');
+      if (ent?.bar) setBar(ent.bar, Math.max(0, battleCtx.escort.hp) / Math.max(1, battleCtx.escort.maxHp));
+    }
+    if (battleCtx?.stranded) {
+      alive.add('obj-stranded');
+      this.setTarget('obj-stranded', 'trade', battleCtx.stranded.progress, 0.3, 'Z');
+      void this.ensureEnt('obj-stranded', () => hull(0x8a4b3a, 11, 3.2, 'cargo'), { bar: 5, bob: 0.05, wake: { len: 0, wid: 0, fwd: 'X' } });
+      const ent = this.ents.get('obj-stranded');
+      if (ent?.bar) setBar(ent.bar, Math.max(0, battleCtx.stranded.hp) / Math.max(1, battleCtx.stranded.maxHp));
+    }
+    for (const m of battleCtx?.mines ?? []) {
+      const key = `emine-${m.id}`; alive.add(key);
+      this.setTarget(key, 'trade', m.progress, 0.25, 'X');
+      void this.ensureEnt(key, () => {
+        const g = new THREE.Group();
+        const body = new THREE.Mesh(new THREE.SphereGeometry(0.8, 10, 8), new THREE.MeshStandardMaterial({ color: 0x4a2020, roughness: 0.55, metalness: 0.4 }));
+        body.position.y = 0.15; g.add(body);
+        const lamp = glyphSprite('✸', '#ff9040', 1.6); lamp.position.y = 1.5; g.add(lamp);
+        return g;
+      }, { bob: 0.05 });
     }
     // port tanker
     const tanker = game.idle.port?.tanker;

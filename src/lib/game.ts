@@ -1002,13 +1002,14 @@ function canSeeSub(s: GameState, pos: { x: number; y: number }) {
  * come from weapons-spec.ts (R1); the rest are checklist ۱٫۵/۱٫۶ values. */
 export const EMP_SLOW_FACTOR = 0.4;        // pulse slow: −60% movement
 export const EMP_EFFECT_SECONDS = 4;       // slow + weapon/radar shutdown per pulse
-export const SONAR_HACK_INTERVAL = 8;      // seconds between hack attempts
+export const SONAR_HACK_INTERVAL = 12;     // seconds between hack attempts (checklist §۱٫۵; manager ruling at MECH-A QA — the fix-program brief's 8s lost to the checklist)
 export const SONAR_HACK_DURATION = 10;     // seconds a hacked drone serves the player
 export const HACK_DPS = 25;                // hacked drone's fire vs its former fleet
 export const HACK_DETONATE_DAMAGE = 150;   // checklist ۱٫۵: kamikaze dive damage
 export const HACK_DETONATE_DIST = 2;       // dive triggers at this range (% units)
 export const HACK_BLAST_RADIUS = 3.5;
 export const HACK_ENGAGE_RADIUS = 12;
+export const HACK_APPROACH_SPEED = 6;      // % units/s a hacked drone closes on its target (جزئی-۷)
 export const BOAT_RESPAWN_SECONDS = 6;     // redeployment delay after a boat is sunk
 export const ANTI_BOAT_WAVE_GROWTH = 1.05; // return fire vs boats grows ×1.05^(wave−1) (QA round-2 متوسط-۴)
 export const ANTI_BOAT_ROTATE_SECONDS = 4; // a blocked enemy rotates its return fire between the boats holding it
@@ -1122,12 +1123,13 @@ export function applyDamage(s: GameState, target: Enemy, raw: number, source: Da
 
 /** Enemies a tower may engage right now, in its priority order. Shared by
  *  the firing pass and by impact-time multi-target branch effects. */
-function towerCandidates(s: GameState, tower: Tower) {
+function towerCandidates(s: GameState, tower: Tower, origin?: { x: number; y: number }) {
   const slot = getSlots(s.layout)[tower.slot];
+  const from = origin ?? slot; // جزئی-۸: the Ghadir sub measures range from its OWN position
   const def = TOWERS[tower.kind], range = getRange(s, tower);
   const candidates = s.enemies.filter(e => {
     const pos = enemyPosition(e, s.layout), target = enemyTarget(e);
-    return e.hp > 0 && e.progress < 1 && (e.hackTimer ?? 0) <= 0 && def.targets.includes(target) && distance(slot, pos) <= range && (target !== "sub" || canSeeSub(s, pos));
+    return e.hp > 0 && e.progress < 1 && (e.hackTimer ?? 0) <= 0 && def.targets.includes(target) && distance(from, pos) <= range && (target !== "sub" || canSeeSub(s, pos));
   });
   candidates.sort((a, b) => tower.priority === "strongest" ? b.hp - a.hp : tower.priority === "weakest" ? a.hp - b.hp : tower.priority === "air" ? Number(b.kind === "air") - Number(a.kind === "air") || b.progress - a.progress : b.progress - a.progress);
   return candidates;
@@ -1194,7 +1196,15 @@ function syncBoats(s: GameState, battleDt: number) {
         s.boats.push({ id: s.nextId++, slot: tower.slot, role, index: i, hp: maxHp, maxHp, progress: station, offset: boatOffset(role, i), state: "active", respawnClock: 0, cooldown: (i * perBoatInterval) / count });
       } else {
         if (boat.maxHp !== maxHp) { boat.hp = Math.max(1, Math.round(boat.hp * maxHp / boat.maxHp)); boat.maxHp = maxHp; }
-        boat.progress = station;
+        if (boat.role === "ghadir" && boat.state === "active") {
+          // Ghadir patrol (MECH-A QA deferred جزئی-۸): the hunter sub does
+          // not sit frozen at its station — it paces a ±0.04 lane window
+          // around the station (period ~27 battle-seconds), so it meets
+          // traffic instead of waiting for it. Garrison/torpedo boats keep
+          // their fixed stations (blocking geometry depends on it).
+          const pace = Math.sin((s.battleTime ?? 0) * (Math.PI * 2 / 27) + boat.index * 2.1) * 0.04;
+          boat.progress = Math.max(0.01, Math.min(0.99, station + pace));
+        } else boat.progress = station;
         if (boat.state === "respawn") {
           // Torpedo squadrons do not launch replacements into an active
           // pin engagement (QA round-2 مهم-۱): while a heavy ship sits
@@ -1227,6 +1237,20 @@ function hackBehavior(s: GameState, enemy: Enemy, battleDt: number) {
     if (d < bd) { bd = d; best = other; }
   }
   if (!best) return;
+  if (bd > HACK_DETONATE_DIST) {
+    // Close the distance first (MECH-A QA deferred جزئی-۷): a hacked drone
+    // that spawned beyond engage range used to hover in place for its
+    // whole 10s and waste the hack. Air units fly the lane's straight
+    // chord (enemyPosition's own model), so steering = progress toward
+    // the target's chord parameter. Sea-hacked units share the lane
+    // polyline; their progress delta is a first-order approach (exact for
+    // the air drones the sonar actually hacks).
+    const tp = best.rev ? 1 - best.progress : best.progress;
+    const cp = enemy.rev ? 1 - enemy.progress : enemy.progress;
+    const step = (HACK_APPROACH_SPEED * battleDt) / 100; // % units → lane fraction
+    const np = Math.abs(tp - cp) <= step ? tp : cp + Math.sign(tp - cp) * step;
+    if (enemy.rev) enemy.progress = 1 - np; else enemy.progress = np;
+  }
   if (bd <= HACK_DETONATE_DIST) {
     for (const other of s.enemies) {
       if (other === enemy || other.hp <= 0 || (other.hackTimer ?? 0) > 0) continue;
@@ -1242,7 +1266,7 @@ function hackBehavior(s: GameState, enemy: Enemy, battleDt: number) {
  *  every spec period (2s) it emits one area pulse — spec damage to every
  *  enemy in range, 60% slow, and 4s of weapon + radar shutdown (the
  *  weaponDownUntil / radarDownUntil fields MECH-B consumes). The sonar
- *  branch keeps its spec shots; every 8s it additionally hacks the
+ *  branch keeps its spec shots; every 12s it additionally hacks the
  *  nearest air enemy in range for 10s. */
 function empSonarPhase(s: GameState, battleDt: number, stats: ReturnType<typeof getStats>) {
   for (const tower of s.towers) {
@@ -2100,7 +2124,7 @@ function tick(s: GameState, delta: number, battlePaused = false) {
     let lastInterval = specInterval(spec);
     for (let shotNo = 0; tower.cooldown <= 0; shotNo++) {
       if (shotNo >= MAX_SHOTS_PER_TICK) { tower.cooldown = lastInterval; break; } // safety cap: drop the remaining debt rather than burst forever
-      const cands = towerCandidates(s, tower); // target re-evaluated for every shot in the tick
+      const cands = towerCandidates(s, tower, ghadir ? boatPosition(ghadir, s.layout) : undefined); // target re-evaluated for every shot in the tick
       if (spec.airOnly) { // Bavar engages air only (MECH-B; checklist ۱٫۴)
         const air = cands.filter(e => enemyTarget(e) === "air");
         cands.length = 0; cands.push(...air);
