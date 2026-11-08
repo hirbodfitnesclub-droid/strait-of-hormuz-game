@@ -2174,6 +2174,19 @@ class HormuzMap {
   };
   disposed = false;
   lastZoomLevel = -1;
+  // PERF state: live-enemy count fed by gamesync (label density rule, §16.6),
+  // label off-view culling cadence, calm-render frame cap, shadow-cam throttle.
+  battleDensity = 0;
+  // Density-rule state WITH hysteresis: minor labels hide when density rises
+  // above 12 and only return at <=9 (dead band), so an enemy count oscillating
+  // around 12 mid-wave cannot flicker the whole minor-label set per spawn/kill.
+  heavyLabels = false;
+  _labelCullAt = -1;
+  _labelVec = null;
+  _frameAcc = 0;
+  _camPrev = null;
+  _camStillSince = 0;
+  _shadowCamAt = -1;
   constructor(container, cb = {}) {
     this.container = container;
     this.cb = cb;
@@ -2183,7 +2196,11 @@ class HormuzMap {
       antialias: true,
       powerPreference: 'high-performance'
     });
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    // PERF (§16.3): DPR cap 1.5 on touch/Android devices — rendering at 2.0 from the
+    // top step was a primary phone-heat source. Desktop keeps the 2.0 ceiling.
+    this.isTouchDevice = !!(window.matchMedia && window.matchMedia('(pointer: coarse)').matches) || /Android|iPhone|iPad|Mobile/i.test(navigator.userAgent || '');
+    this.dprCap = this.isTouchDevice ? 1.5 : 2;
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, this.dprCap));
     this.renderer.setSize(w, h);
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 1.05;
@@ -2335,7 +2352,7 @@ class HormuzMap {
     // lights
     this.scene.add(this.hemi, this.sun, this.sun.target, this.moon);
     this.sun.castShadow = true;
-    this.sun.shadow.mapSize.set(2048, 2048);
+    this.sun.shadow.mapSize.set(1024, 1024); // PERF (§16.5): 1024² shadow map is enough at game scale; 2048² doubled the shadow pass cost
     this.sun.shadow.bias = -0.0004;
     this.sun.shadow.normalBias = 0.02;
 
@@ -3144,11 +3161,42 @@ class HormuzMap {
   loop = () => {
     if (this.disposed) return;
     requestAnimationFrame(this.loop);
-    const dt = Math.min(this.clock.getDelta(), 0.05);
+    const rawDt = Math.min(this.clock.getDelta(), 0.05);
+    // PERF (§16.8): calm mode — no active battle, or a panel/sheet is open
+    // (flags set by Game.tsx / WorldView3D.tsx) — AND the camera has been still
+    // for >0.3s: render at 30fps instead of full rate. Environment animations
+    // keep running on accumulated dt, just at half the frame rate; any camera
+    // movement immediately restores full-rate rendering.
+    this._frameAcc += rawDt;
+    const calm = window.__hormuzCalmUi === true || window.__hormuzCalmPhase === true;
+    if (calm) {
+      const nowS = performance.now() / 1000;
+      const cp = this.camera.position,
+        ct = this.controls.target;
+      if (!this._camPrev) {
+        this._camPrev = { p: cp.clone(), t: ct.clone() };
+        this._camStillSince = nowS;
+      }
+      if (cp.distanceToSquared(this._camPrev.p) > 0.0009 || ct.distanceToSquared(this._camPrev.t) > 0.0009) {
+        this._camPrev.p.copy(cp);
+        this._camPrev.t.copy(ct);
+        this._camStillSince = nowS;
+      }
+      if (nowS - this._camStillSince > 0.3 && this._frameAcc < 1 / 30) return;
+    }
+    const dt = Math.min(this._frameAcc, 0.05);
+    this._frameAcc = 0;
     this.time += dt;
     this.tick(dt);
     this.renderer.render(this.scene, this.camera);
     this.labelRenderer.render(this.scene, this.camera);
+    // PERF (§16): frame hook for the ?fpslog=1 evidence recorder — fired once
+    // per RENDERED frame (after both renderers), so frame-time statistics
+    // measure the real render cadence — including multi-second stalls and
+    // the 30fps calm cap — never a private rAF clock. Absent subscriber =
+    // one property read per frame.
+    const fh = window.__hormuzFrameHook;
+    if (typeof fh === 'function') { try { fh(performance.now()); } catch { /* a recorder must never break rendering */ } }
   };
   tick(dt) {
     const ctl = this.controls;
@@ -3203,6 +3251,10 @@ class HormuzMap {
     this.laneScale.value = clamp(dist / 40, 0.45, 3.4);
     this.updateEnvironment(dt, dist);
     this.updateAnimations(dt, dist);
+    if (this.time - this._labelCullAt > 0.25) {
+      this._labelCullAt = this.time;
+      this.updateLabelViewCulling();
+    }
     this.updateLabels(dist);
     if (this.selected) {
       const v = new THREE.Vector3(this.selected.x, this.selected.y + 0.4, this.selected.z).project(this.camera);
@@ -3231,11 +3283,15 @@ class HormuzMap {
     this.hemi.intensity = lerp(1.0, 0.4, night) * (1 - storm * 0.3) + this.flash * 2.5;
     this.hemi.color.set(night > 0.5 ? '#5a74b5' : '#bfe3ff');
 
-    // shadows follow the camera target; disabled when far
-    const S = clamp(dist * 0.7, 3, 45);
+    // shadows follow the camera target; disabled when far.
+    // PERF: the frustum is already limited to the current view; quantize its size
+    // to 0.5 steps and re-apply at most every 150ms so smooth zooms don't churn
+    // the shadow camera (and its projection) every single frame.
+    const S = Math.round(clamp(dist * 0.7, 3, 45) * 2) / 2;
     const sc = this.sun.shadow.camera;
     this.sun.castShadow = dist < 80 && night < 0.9;
-    if (sc.right !== S) {
+    if (sc.right !== S && this.time - this._shadowCamAt > 0.15) {
+      this._shadowCamAt = this.time;
       sc.left = -S;
       sc.right = S;
       sc.top = S;
@@ -3396,8 +3452,30 @@ class HormuzMap {
       m.obj.rotation.z = Math.sin(tm * 1.5 + m.t * 30) * 0.03 * (1 + this.storm * 3);
     }
   }
+  /** PERF (§16.6): gamesync reports the live enemy count; in heavy battles
+   *  (>12 enemies) minor map labels (tier 2/3) are hidden entirely. The state
+   *  is a dead band (hide >12, show again <=9) so counts hovering at the
+   *  threshold do not flicker ~125 minor labels on every spawn/kill. */
+  setBattleDensity(n) {
+    this.battleDensity = n | 0;
+    if (this.battleDensity > 12) this.heavyLabels = true;
+    else if (this.battleDensity <= 9) this.heavyLabels = false;
+  }
+  /** PERF (§16.6): refresh which labels are outside the camera frustum (checked
+   *  at ~250ms cadence from tick, not per frame). Off-view labels get
+   *  visible=false, so the CSS2D renderer skips their per-frame transform
+   *  writes entirely instead of projecting 72 elements every frame. */
+  updateLabelViewCulling() {
+    const v = this._labelVec ?? (this._labelVec = new THREE.Vector3());
+    for (const l of this.labels) {
+      l.obj.getWorldPosition(v);
+      v.project(this.camera);
+      l.offView = !(v.z < 1 && Math.abs(v.x) < 1.08 && Math.abs(v.y) < 1.08);
+    }
+  }
   updateLabels(dist) {
     if (this.labelRenderer && this.labelRenderer.domElement) this.labelRenderer.domElement.classList.toggle('labels-far', dist > 175);
+    const heavyBattle = this.heavyLabels;
     const showLabels = this.layerOn.labels;
     for (const l of this.labels) {
       let vis = true,
@@ -3420,6 +3498,8 @@ class HormuzMap {
           op = 1 - smoothstep(28, 40, dist);
           break;
       }
+      if (heavyBattle && l.tier >= 2) vis = false;
+      if (l.offView) vis = false;
       if (l.obj.parent === this.layers.labels && !showLabels) vis = false;
       if (l.obj.parent && !l.obj.parent.visible) vis = false;
       l.obj.visible = vis && op > 0.02;

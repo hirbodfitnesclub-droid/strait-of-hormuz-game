@@ -14,6 +14,20 @@ export interface ShootOpts {
 }
 
 const PI = Math.PI;
+/* PERF: shared lerp-target colors for the hot path. shoot()/spark()/flashAt()/
+   explode() and the per-projectile trail spawner used to allocate several
+   `new THREE.Color(...)` per call (trails: one per projectile every ~16ms).
+   These constants are only ever READ (as lerp targets / setColorAt sources),
+   never mutated, so sharing them is safe. */
+const C_WARM = new THREE.Color('#fff6d8');
+const C_FLAME = new THREE.Color('#ffd27a');
+const C_SPARK_MIX = new THREE.Color('#ffe2a0');
+const C_FLASH_MIX = new THREE.Color('#fff3c0');
+const C_LIGHT_MIX = new THREE.Color('#ffb060');
+const C_BOOM_MIX = new THREE.Color('#ff4a10');
+const C_TORPEDO_TRAIL = new THREE.Color('#eaf6ff');
+const C_HYPER_TRAIL = new THREE.Color('#ffb0d0');
+const C_ROCKET_TRAIL = new THREE.Color('#e3e6ea');
 const addMat = (c: THREE.Color | string, op = 1) =>
   new THREE.MeshBasicMaterial({ color: c, toneMapped: false, transparent: true, opacity: op, blending: THREE.AdditiveBlending, depthWrite: false });
 
@@ -89,6 +103,7 @@ export class BattleFX {
   private queue: { at: number; fn: () => void }[] = [];
   private clock = 0;
   private tmp = new THREE.Vector3(); private tmp2 = new THREE.Vector3(); private col = new THREE.Color();
+  private col2 = new THREE.Color(); private col3 = new THREE.Color();
   private bodyMat: THREE.MeshStandardMaterial; private darkMat: THREE.MeshStandardMaterial;
 
   constructor() {
@@ -173,7 +188,7 @@ export class BattleFX {
     this.smokeP.spawn(p, (Math.random() - 0.5) * 0.9, 0.9 + Math.random() * 1.1, (Math.random() - 0.5) * 0.9, 1.4 + Math.random() * 1.2, size, this.col);
   }
   spark(p: THREE.Vector3, color: string, count: number) {
-    this.col.set(color).lerp(new THREE.Color('#ffe2a0'), 0.5).multiplyScalar(6);
+    this.col.set(color).lerp(C_SPARK_MIX, 0.5).multiplyScalar(6);
     for (let i = 0; i < count; i++) {
       const a = Math.random() * PI * 2, e = Math.random() * 0.9 + 0.2, sp = 5 + Math.random() * 12;
       this.sparkP.spawn(p, Math.cos(a) * Math.cos(e) * sp, Math.sin(e) * sp + 3.5, Math.sin(a) * Math.cos(e) * sp, 0.4 + Math.random() * 0.6, 1.1 + Math.random() * 1.4, this.col);
@@ -188,7 +203,7 @@ export class BattleFX {
     f.g.rotation.z = Math.random() * 6;
     f.g.userData.size = size;
     f.g.scale.setScalar(size);
-    f.mat.color.set(color).lerp(new THREE.Color('#fff3c0'), 0.5).multiplyScalar(6);
+    f.mat.color.set(color).lerp(C_FLASH_MIX, 0.5).multiplyScalar(6);
     f.g.visible = true;
   }
   shoot(o: ShootOpts) {
@@ -198,9 +213,9 @@ export class BattleFX {
     const j = o.jitter ?? 0.25;
     pr.off.set((Math.random() - 0.5) * j, (Math.random() - 0.5) * j * 0.5, (Math.random() - 0.5) * j);
     pr.dur = o.dur ?? 0.6; pr.arc = o.arc ?? 0; pr.size = o.size ?? 1; pr.t = 0; pr.trail = 0; pr.color = o.color; pr.air = !!o.air; pr.track = o.track;
-    const c = new THREE.Color(o.color);
-    (pr.glow.material as THREE.MeshBasicMaterial).color.copy(c).lerp(new THREE.Color('#fff6d8'), 0.35).multiplyScalar(o.kind === 'tracer' ? 7 : 5);
-    (pr.flame.material as THREE.MeshBasicMaterial).color.copy(c).lerp(new THREE.Color('#ffd27a'), 0.6).multiplyScalar(7);
+    const c = this.col2.set(o.color);
+    (pr.glow.material as THREE.MeshBasicMaterial).color.copy(c).lerp(C_WARM, 0.35).multiplyScalar(o.kind === 'tracer' ? 7 : 5);
+    (pr.flame.material as THREE.MeshBasicMaterial).color.copy(c).lerp(C_FLAME, 0.6).multiplyScalar(7);
     const missile = o.kind === 'missile' || o.kind === 'rocket' || o.kind === 'hyper' || o.kind === 'torpedo';
     pr.body.visible = missile;
     pr.flame.visible = missile && o.kind !== 'torpedo';
@@ -223,7 +238,7 @@ export class BattleFX {
     if (b.water) b.g.position.y = Math.max(0.05, Math.min(p.y, 0.4));
     b.g.visible = true;
     this.light.position.copy(p); this.light.position.y += 1.2;
-    this.light.color.set(color).lerp(new THREE.Color('#ffb060'), 0.6);
+    this.light.color.set(color).lerp(C_LIGHT_MIX, 0.6);
     this.light.intensity = 60 * size;
     this.spark(p, color, Math.round(8 + size * 6));
     for (let i = 0; i < Math.round(3 + size * 2.5); i++) {
@@ -267,9 +282,9 @@ export class BattleFX {
       pr.trail -= d;
       if (pr.trail <= 0 && pr.kind !== 'tracer' && pr.kind !== 'shell') {
         pr.trail = pr.kind === 'torpedo' ? 0.03 : 0.016;
-        if (pr.kind === 'torpedo') this.smokeP.spawn(tmp, (Math.random() - 0.5) * 0.4, 0.2, (Math.random() - 0.5) * 0.4, 0.9, 0.3, new THREE.Color('#eaf6ff'));
-        else if (pr.kind === 'plasma') this.sparkP.spawn(tmp, (Math.random() - 0.5) * 2, (Math.random() - 0.5) * 2, (Math.random() - 0.5) * 2, 0.3, 1.6, new THREE.Color(pr.color).multiplyScalar(5));
-        else this.smokeP.spawn(tmp, (Math.random() - 0.5) * 0.3, 0.3, (Math.random() - 0.5) * 0.3, pr.kind === 'hyper' ? 1.0 : 1.8, pr.kind === 'rocket' ? 0.3 : 0.45, new THREE.Color(pr.kind === 'hyper' ? '#ffb0d0' : '#e3e6ea'));
+        if (pr.kind === 'torpedo') this.smokeP.spawn(tmp, (Math.random() - 0.5) * 0.4, 0.2, (Math.random() - 0.5) * 0.4, 0.9, 0.3, C_TORPEDO_TRAIL);
+        else if (pr.kind === 'plasma') this.sparkP.spawn(tmp, (Math.random() - 0.5) * 2, (Math.random() - 0.5) * 2, (Math.random() - 0.5) * 2, 0.3, 1.6, this.col3.set(pr.color).multiplyScalar(5));
+        else this.smokeP.spawn(tmp, (Math.random() - 0.5) * 0.3, 0.3, (Math.random() - 0.5) * 0.3, pr.kind === 'hyper' ? 1.0 : 1.8, pr.kind === 'rocket' ? 0.3 : 0.45, pr.kind === 'hyper' ? C_HYPER_TRAIL : C_ROCKET_TRAIL);
       }
       if (pr.t >= 1) {
         pr.on = false;
@@ -287,7 +302,7 @@ export class BattleFX {
       const e = 1 - Math.pow(1 - t, 3);
       const s = b.size;
       b.fire.scale.setScalar(s * (0.25 + e * 0.9));
-      b.fm.color.copy(b.color).lerp(new THREE.Color('#ff4a10'), t).multiplyScalar(6 * (1 - t) * (1 - t) + 0.05);
+      b.fm.color.copy(b.color).lerp(C_BOOM_MIX, t).multiplyScalar(6 * (1 - t) * (1 - t) + 0.05);
       b.fm.opacity = 1 - t;
       b.core.scale.setScalar(s * 0.45 * Math.max(0, 1 - t * 3));
       b.cm.color.set('#fff8e0').multiplyScalar(10);

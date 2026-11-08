@@ -97,6 +97,9 @@ export default function Game() {
   const previousWave = useRef(game.wave);
   const activeBattle = game.phase === "battle";
   const otherInterface = selectedSlot !== null || selectedBuilding !== null || panel !== null || moreOpen || helpOpen || progressPanel !== null;
+  // PERF (§16.8): while any panel/sheet is open, the 3D map may cap its render
+  // loop at 30fps whenever the camera is still (see hormuz-map loop).
+  useEffect(() => { (window as unknown as { __hormuzCalmUi?: boolean }).__hormuzCalmUi = otherInterface; }, [otherInterface]);
   const pendingReport = game.idle.lastBattle && !game.idle.lastBattle.claimed ? game.idle.lastBattle : null;
   const rewardInterface = !otherInterface && (!!game.idle.offline || game.idle.rewards.length>0 || !!pendingReport);
   const interfacePaused = otherInterface || rewardInterface;
