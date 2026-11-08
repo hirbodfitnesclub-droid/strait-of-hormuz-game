@@ -62,14 +62,20 @@ INSTALL_DISPATCH_JS = """() => {
   if (!sync || !sync.fx || typeof sync.dispatchShotFx !== 'function') return 'no-dispatch';
   if (window.__shotEvents) return 'already';
   window.__shotEvents = [];
+  // Wave 2 instrumentation fix: the probe was written against an older
+  // dispatchShotFx(slot, baseKind, ...) signature. The real one is
+  // dispatchShotFx(shotRecord, sx, sy, sz, x2, z2, game) — a private
+  // (compile-time only) method, so it IS wrappable at runtime; the slot
+  // and model kind live on the shot record itself.
   const orig = sync.dispatchShotFx.bind(sync);
-  sync.dispatchShotFx = (slot, baseKind, ...rest) => {
+  sync.dispatchShotFx = (rec, ...rest) => {
     const L = window.__fxprobe;
     const b = L ? { s: L.shoot.length, f: L.flash.length, r: L.rail.length } : { s: 0, f: 0, r: 0 };
-    const out = orig(slot, baseKind, ...rest);
+    const out = orig(rec, ...rest);
     if (L) window.__shotEvents.push({
       t: performance.now(), g: sync.state ? sync.state.elapsed : null,
-      slot, baseKind,
+      slot: rec && typeof rec.slot === 'number' ? rec.slot : -1,
+      baseKind: rec ? rec.modelKind : null,
       shoot: L.shoot.length - b.s, flash: L.flash.length - b.f,
       rail: L.rail.length - b.r });
     return out;
@@ -174,7 +180,11 @@ async def measure_family(pw, base_url: str, fam: str, kind: str,
             # Interval family (silo / autocannon): telemetry first if usable.
             interval, source = med, "fx-dispatch(game-clock)"
             if tele0 and tele1 and game_dt > 0:
-                keys = {"silo": ("missile", "silo"), "autocannon": ("cannon", "autocannon")}[fam]
+                # Telemetry mirrors fireStats, whose keys are MODEL kinds
+                # (weapons-spec modelKindFor): the silo family is "silo",
+                # the autocannon family is "autocannon" — the probe's old
+                # ("missile"/"cannon") keys never exist in that map.
+                keys = {"silo": ("silo",), "autocannon": ("autocannon",)}[fam]
                 for k in keys:
                     if k in tele0 and k in tele1 and tele1[k] > tele0[k]:
                         interval = game_dt / (tele1[k] - tele0[k])
