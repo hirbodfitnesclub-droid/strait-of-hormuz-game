@@ -21,6 +21,9 @@ export interface Tower {
   /** Battle-seconds until this tower may fire again (discrete-fire core).
    *  Absent/0 = ready. Decremented by battle time only while in battle. */
   cooldown?: number;
+  /** MECH-A: battle-second accumulator for branch abilities that are not
+   *  ordinary shots — EMP pulse period, sonar hack cycle, mine planting. */
+  abilityClock?: number;
 }
 export interface Enemy {
   id: number;
@@ -36,6 +39,23 @@ export interface Enemy {
   intercept?: number;
   armorBreak?: number;
   hitFlash?: number;
+  /** MECH-A → MECH-B contract: EMP pulse shutdown stamps on the shared
+   *  battle clock (GameState.battleTime). While
+   *  `s.battleTime < (e.weaponDownUntil ?? 0)` the enemy's weapons are
+   *  offline (no destroyer missiles, no boss-2 stun attack); while
+   *  `s.battleTime < (e.radarDownUntil ?? 0)` its radar-driven systems are
+   *  offline (boss-4 jammer, destroyer point-defense). An ABSENT stamp
+   *  means the system is UP (MECH-B gates on exactly this). EMP pulses
+   *  refresh both stamps to battleTime + 4. */
+  weaponDownUntil?: number;
+  radarDownUntil?: number;
+  /** MECH-A: remaining battle-seconds of EMP-pulse slow (×0.4 movement). */
+  empSlow?: number;
+  /** MECH-A: remaining battle-seconds this air unit is hacked by a sonar
+   *  hub and fights for the player (no advance, no leak, no bounty). */
+  hackTimer?: number;
+  /** Killed without bounty/combo/kill credit (hacked drone detonation). */
+  noReward?: boolean;
 }
 export interface Pirate { id: number; progress: number; hp: number; }
 export interface Contraband { id: number; progress: number; }
@@ -55,6 +75,11 @@ export interface Shot {
   crit: boolean;
   interval: number;          // seconds between this tower's shots (0 = beam/pirate)
   x1: number; y1: number; x2: number; y2: number;
+  /** MECH-A: set when the shot was fired by a boat entity (garrison /
+   *  torpedo boat, or the Ghadir hunter sub) — the render origin is the
+   *  boat's position in x1/y1, NOT the tower model. -1 marks an
+   *  entity-origin effect record (EMP pulse ring, mine explosion). */
+  boatId?: number;
 }
 /** A projectile in flight. eta counts down in battle time; on arrival the
  *  shot's damage resolves through applyDamage — or fizzles if the target is
@@ -69,7 +94,28 @@ export interface PendingImpact {
   modelKind: ModelKind | "hero";
   branch: number | null;
   heroType?: number;         // hero shots only (type 2 breaks armor on impact)
+  boatId?: number;           // MECH-A: fired by a boat entity (see Shot.boatId)
 }
+/** MECH-A: one deployed boat of a boat-family tower — a real entity with
+ *  its own HP, station on the enemy lane and fire cooldown. Garrison boats
+ *  physically block surface enemies at their station; torpedo boats pin
+ *  heavy ships they engage; the Ghadir is the mine branch's hunter sub and
+ *  fires the branch's spec shots through the tower's discrete-fire loop. */
+export interface BoatUnit {
+  id: number;
+  slot: number;              // owning tower slot
+  role: "garrison" | "torpedo" | "ghadir";
+  index: number;             // 0..count-1 within the tower's unit set
+  hp: number;
+  maxHp: number;
+  progress: number;          // station: lane progress in front of the tower
+  offset: number;            // perpendicular offset from the lane (% units)
+  state: "active" | "respawn";
+  respawnClock: number;      // battle-seconds until redeployment
+  cooldown: number;          // battle-seconds until this boat may fire
+}
+/** MECH-A: one planted sea mine of a mine-branch tower. */
+export interface MineUnit { id: number; slot: number; x: number; y: number; }
 export interface Popup { id: number; x: number; y: number; text: string; life: number; }
 /** Cumulative combat counters kept in the logic state (QA جزئی-۲): shots are
  *  counted at the moment of fire, hits/fizzled when the impact resolves —
@@ -91,6 +137,7 @@ export interface GameState {
   phase: Phase; mode: Mode; speed: 1 | 2 | 3; layout: MapLayout;
   enemies: Enemy[]; pirates: Pirate[]; contraband: Contraband[]; merchants: Merchant[]; shots: Shot[]; popups: Popup[];
   pendingImpacts: PendingImpact[];
+  boats: BoatUnit[]; mines: MineUnit[];
   fireStats: Record<string, FireStat>;
   spawnRemaining: number; spawnClock: number; spawnIndex: number; nextId: number; earlyBonus: boolean;
   countdown: number; trafficClock: number; trafficCount: number; destroyed: number;
@@ -98,6 +145,11 @@ export interface GameState {
   hero: { x: number; y: number; active: number; attackClock?: number; route?: Point[]; routeIndex?: number };
   hero2: { x: number; y: number; active: number; attackClock?: number; route?: Point[]; routeIndex?: number } | null;
   towerStuns: Record<number, number>;
+  /** Cumulative battle clock: battle-seconds including the game-speed
+   *  multiplier, advanced only while phase === "battle" and never reset —
+   *  the shared time base for cross-team stamps (MECH-A's EMP
+   *  weaponDownUntil / radarDownUntil, MECH-B's enemy-missile gating). */
+  battleTime: number;
   challengeRule: number;
   chests: number; prestige: number; event: "spill" | "storm" | "vip" | null;
   eventClock: number; manualNight: boolean; lastSavedAt: number;
@@ -216,10 +268,10 @@ export function initialGame(): GameState {
     research: [],
     cards: { cannon: { count: 0, level: 1 }, heavy: { count: 0, level: 1 }, missile: { count: 0, level: 1 }, air: { count: 0, level: 1 }, ew: { count: 0, level: 1 }, boat: { count: 0, level: 1 } },
     islands: ["main", "qeshm"], security: 70, hearts: 20, wave: 1, highestWave: 0,
-    phase: "peace", mode: "campaign", speed: 1, layout: "landscape", enemies: [], pirates: [], contraband: [], merchants: [{ id: 1, progress: .24, kind: "bulk", reward: 120, paid: false }, { id: 2, progress: .63, kind: "container", reward: 500, paid: false }], shots: [], popups: [], pendingImpacts: [], fireStats: {},
+    phase: "peace", mode: "campaign", speed: 1, layout: "landscape", enemies: [], pirates: [], contraband: [], merchants: [{ id: 1, progress: .24, kind: "bulk", reward: 120, paid: false }, { id: 2, progress: .63, kind: "container", reward: 500, paid: false }], shots: [], popups: [], pendingImpacts: [], boats: [], mines: [], fireStats: {},
     spawnRemaining: 0, spawnClock: 0, spawnIndex: 0, nextId: 3, earlyBonus: false, countdown: 15, trafficClock: 0, trafficCount: 0,
     destroyed: 0, elapsed: 0, cooldowns: { strike: 0, emp: 0, overdrive: 0 }, overdrive: 0,
-    hero: { ...sampleLane(getLane("landscape", "enemy"), .45), active: 0 }, hero2: null, towerStuns: {}, challengeRule: 0, chests: 0, prestige: 0, event: null, eventClock: 0,
+    hero: { ...sampleLane(getLane("landscape", "enemy"), .45), active: 0 }, hero2: null, towerStuns: {}, battleTime: 0, challengeRule: 0, chests: 0, prestige: 0, event: null, eventClock: 0,
     manualNight: false, lastSavedAt: Date.now(),
   };
 }
@@ -480,7 +532,7 @@ export function hydrateGame(raw: unknown): { game: GameState; offline: number } 
   // Buildings are rebuilt from the known ids only: spreading the saved
   // record would carry arbitrary keys (including "__proto__") into the
   // state, the same prototype-chain hole the contract check had.
-  const game: GameState = { ...base, ...saved, buildings: { ...base.buildings }, cards: sanitizeCards(saved.cards), cooldowns: { ...base.cooldowns, ...saved.cooldowns }, idle: sanitizeIdle(saved.idle), shots: [], popups: [], pendingImpacts: [] };
+  const game: GameState = { ...base, ...saved, buildings: { ...base.buildings }, cards: sanitizeCards(saved.cards), cooldowns: { ...base.cooldowns, ...saved.cooldowns }, idle: sanitizeIdle(saved.idle), shots: [], popups: [], pendingImpacts: [], boats: [], mines: [] };
   game.cash = Math.max(0, num(game.cash, base.cash)); game.oil = num(game.oil, base.oil); game.fuel = num(game.fuel, base.fuel); game.steel = num(game.steel, base.steel); game.ammo = num(game.ammo, base.ammo);
   game.hearts = Math.max(0, Math.min(20, num(game.hearts, 20))); game.wave = Math.max(1, Math.floor(num(game.wave, 1))); game.highestWave = Math.max(0, Math.floor(num(game.highestWave, 0)));
   game.security = Math.max(0, Math.min(100, num(game.security, 70))); game.prestige = Math.max(0, Math.floor(num(game.prestige, 0))); game.oilSplit = Math.max(0, Math.min(100, num(game.oilSplit, 40)));
@@ -495,6 +547,7 @@ export function hydrateGame(raw: unknown): { game: GameState; offline: number } 
       focusId: optNum(t.focusId), focusTime: optNum(t.focusTime), lastPopup: optNum(t.lastPopup),
     };
   });
+  game.battleTime = Math.max(0, num(game.battleTime, 0));
   game.islands = (Array.isArray(game.islands) ? game.islands : base.islands).filter(id => ISLANDS.some(i => i.id === id));
   if (!game.islands.includes("main")) game.islands.push("main");
   game.research = (Array.isArray(game.research) ? game.research : []).filter(r => typeof r === "string");
@@ -548,6 +601,20 @@ export function hydrateGame(raw: unknown): { game: GameState; offline: number } 
     const v = saved.fireStats[k] as Partial<FireStat> | null;
     if (v && typeof v === "object") game.fireStats[k] = { shots: Math.max(0, Math.floor(num(v.shots, 0))), hits: Math.max(0, Math.floor(num(v.hits, 0))), fizzled: Math.max(0, Math.floor(num(v.fizzled, 0))) };
   }
+  // MECH-A entities (QA round-2 متوسط-۵): boats and mines are live battle
+  // state the player paid for (a full field = 40 ammo) — a mid-battle
+  // save/load must restore them, not silently wipe the minefield and
+  // resurrect the boats at full HP (a free heal). Same validation pattern
+  // as the rest of this sanitizer: entries with a bad identity are
+  // dropped, numeric fields fall back to safe values, nothing crashes.
+  game.boats = (Array.isArray(saved.boats) ? saved.boats : []).filter(b => b && typeof b === "object" && (b.role === "garrison" || b.role === "torpedo" || b.role === "ghadir") && Number.isInteger(b.slot) && b.slot >= 0 && b.slot < SLOTS.length && Number.isInteger(b.index) && b.index >= 0).map(b => {
+    const maxHp = Math.max(1, num(b.maxHp, boatMaxHp(b.role, 1)));
+    return { id: Number.isInteger(b.id) ? b.id : 0, slot: b.slot, role: b.role, index: b.index, hp: Math.max(0, Math.min(maxHp, num(b.hp, maxHp))), maxHp, progress: Math.max(0, Math.min(1, num(b.progress, 0))), offset: num(b.offset, 0), state: b.state === "respawn" ? "respawn" as const : "active" as const, respawnClock: Math.max(0, num(b.respawnClock, 0)), cooldown: Math.max(0, num(b.cooldown, 0)) };
+  });
+  game.mines = (Array.isArray(saved.mines) ? saved.mines : []).filter(m => m && typeof m === "object" && Number.isInteger(m.slot) && m.slot >= 0 && m.slot < SLOTS.length && Number.isFinite(m.x) && Number.isFinite(m.y)).map(m => ({ id: Number.isInteger(m.id) ? m.id : 0, slot: m.slot, x: m.x, y: m.y }));
+  // Restored entity ids must never collide with ids minted after the load.
+  for (const b of game.boats) game.nextId = Math.max(game.nextId, b.id + 1);
+  for (const m of game.mines) game.nextId = Math.max(game.nextId, m.id + 1);
   game.challengeRule = [0, 1, 2].includes(game.challengeRule) ? game.challengeRule : 0;
   game.combo = intIn(saved.combo, 0, 0, Number.MAX_SAFE_INTEGER);
   game.comboTimer = Math.max(0, num(saved.comboTimer, 0));
@@ -672,8 +739,93 @@ function makeEnemy(s: GameState, kind: Enemy["kind"], progress = 0): Enemy {
   return { id: s.nextId++, kind, boss, hp: maxHp, maxHp, progress, stun: 0, specialClock: 0 };
 }
 function enemyTarget(e: Enemy) { return e.kind === "air" ? "air" : e.kind === "sub" || (e.kind === "boss" && e.boss === 2 && e.progress < 0.5) ? "sub" : "sea"; }
+/** Submarine detection (checklist ۱٫۵/۲). MECH-A fixes, per audit team 3b:
+ *  a STUNNED detector reveals nothing (boss 2's stun used to fail at its
+ *  main purpose), and a healthy sonar-hub tower (EW tier 4, branch 1)
+ *  reveals submarines across the WHOLE map, not just inside its range. */
 function canSeeSub(s: GameState, pos: { x: number; y: number }) {
-  return s.towers.some(t => (t.kind === "ew" || t.kind === "boat") && distance(getSlots(s.layout)[t.slot], pos) <= getRange(s, t));
+  const detectorUp = (t: Tower) => (s.towerStuns?.[t.slot] ?? 0) <= 0;
+  if (s.towers.some(t => t.kind === "ew" && t.tier === 4 && t.branch === 1 && detectorUp(t))) return true;
+  return s.towers.some(t => (t.kind === "ew" || t.kind === "boat") && detectorUp(t) && distance(getSlots(s.layout)[t.slot], pos) <= getRange(s, t));
+}
+
+/* ================= MECH-A: EW branches & boat-family mechanics =================
+ * EMP branch: periodic area pulse instead of shots. Sonar branch: drone
+ * hack + map-wide sub detection (in canSeeSub above). Boat family: real
+ * boat entities that block/pin and fire for themselves; mine branch: an
+ * automatic minefield plus the Ghadir hunter sub. Numbers marked "spec"
+ * come from weapons-spec.ts (R1); the rest are checklist ۱٫۵/۱٫۶ values. */
+export const EMP_SLOW_FACTOR = 0.4;        // pulse slow: −60% movement
+export const EMP_EFFECT_SECONDS = 4;       // slow + weapon/radar shutdown per pulse
+export const SONAR_HACK_INTERVAL = 8;      // seconds between hack attempts
+export const SONAR_HACK_DURATION = 10;     // seconds a hacked drone serves the player
+export const HACK_DPS = 25;                // hacked drone's fire vs its former fleet
+export const HACK_DETONATE_DAMAGE = 150;   // checklist ۱٫۵: kamikaze dive damage
+export const HACK_DETONATE_DIST = 2;       // dive triggers at this range (% units)
+export const HACK_BLAST_RADIUS = 3.5;
+export const HACK_ENGAGE_RADIUS = 12;
+export const BOAT_RESPAWN_SECONDS = 6;     // redeployment delay after a boat is sunk
+export const ANTI_BOAT_WAVE_GROWTH = 1.05; // return fire vs boats grows ×1.05^(wave−1) (QA round-2 متوسط-۴)
+export const ANTI_BOAT_ROTATE_SECONDS = 4; // a blocked enemy rotates its return fire between the boats holding it
+export const GHADIR_COUNTERFIRE_FACTOR = 0.5; // return fire on the Ghadir (a submarine) lands at half the anti-boat rate
+export const BLOCK_BAND = 0.03;            // lane-progress band a blocking boat holds
+export const TORPEDO_PIN_RADIUS = 8;       // engagement range of the 100% heavy-ship pin
+export const BOAT_FIRE_RANGE_PADDING = 6;  // boats engage out to tower range + this
+export const MINE_FIELD_CAP = 10;          // checklist ۱٫۶: max mines per mine tower
+export const MINE_TRIGGER_RADIUS = 2.2;
+export const MINE_BLAST_RADIUS = 3.5;
+export const MINE_SPACING = 2.6;           // min world distance between one tower's mines
+
+const stationCache = new Map<string, number>();
+/** Lane progress of the point on the enemy lane closest to a position —
+ *  where a tower's boats take station (on the lane, in front of the tower). */
+export function laneStationProgress(pos: { x: number; y: number }, layout: MapLayout = "landscape"): number {
+  const key = `${layout}:${pos.x.toFixed(2)}:${pos.y.toFixed(2)}`;
+  const hit = stationCache.get(key);
+  if (hit !== undefined) return hit;
+  const path = getLane(layout, "enemy");
+  let best = 0, bd = Infinity;
+  for (let p = 0; p <= 1.0001; p += 0.002) {
+    const d = distance(pos, sampleLane(path, Math.min(1, p)));
+    if (d < bd) { bd = d; best = Math.min(1, p); }
+  }
+  stationCache.set(key, best);
+  return best;
+}
+/** World (%-unit) position of a boat: its lane station plus a perpendicular
+ *  offset, so a tower's boats spread across the channel instead of stacking
+ *  on one point (and never intersect the enemy spawn line visually). */
+export function boatPosition(boat: { progress: number; offset: number }, layout: MapLayout = "landscape"): { x: number; y: number } {
+  const path = getLane(layout, "enemy");
+  const base = sampleLane(path, boat.progress);
+  const ahead = sampleLane(path, Math.min(1, boat.progress + 0.01));
+  let nx = -(ahead.y - base.y), ny = ahead.x - base.x;
+  const len = Math.hypot(nx, ny) || 1; nx /= len; ny /= len;
+  return { x: base.x + nx * boat.offset, y: base.y + ny * boat.offset };
+}
+export type BoatRole = BoatUnit["role"];
+export function boatRoleFor(tower: Tower): { role: BoatRole; count: number } {
+  if (tower.tier >= 4 && tower.branch === 0) return { role: "torpedo", count: 5 };  // spec units (R1)
+  if (tower.tier >= 4 && tower.branch === 1) return { role: "ghadir", count: 1 };
+  return { role: "garrison", count: 3 };                                            // spec units from tier 1 (R1)
+}
+export function boatMaxHp(role: BoatRole, tier: number): number {
+  return role === "torpedo" ? 240 : role === "ghadir" ? 600 : 140 + (tier - 1) * 90;
+}
+function boatOffset(role: BoatRole, index: number): number {
+  if (role === "torpedo") return (index - 2) * 1.6;
+  if (role === "garrison") return (index - 1) * 1.7;
+  return 0;
+}
+/** Damage per second a blocked/pinned enemy deals to the boat holding it.
+ *  Grows ×1.05 per wave (QA round-2 متوسط-۴): enemy HP scales ×1.22^wave,
+ *  so flat return fire made boat lines relatively stronger every wave. */
+function antiBoatDps(enemy: Enemy, wave: number): number {
+  const base = enemy.kind === "boss" ? 26 : enemy.kind === "destroyer" ? 22 : enemy.kind === "corvette" ? 12 : enemy.kind === "speed" ? 6 : 8;
+  return base * Math.pow(ANTI_BOAT_WAVE_GROWTH, Math.max(0, wave - 1));
+}
+function isHeavyShip(enemy: Enemy): boolean {
+  return enemy.kind === "corvette" || enemy.kind === "destroyer" || (enemy.kind === "boss" && enemyTarget(enemy) === "sea");
 }
 function bounty(s: GameState, enemy: Enemy) {
   const base = enemy.kind === "boss" ? 700 : enemy.kind === "destroyer" ? 120 : enemy.kind === "corvette" ? 65 : 35;
@@ -728,7 +880,7 @@ function towerCandidates(s: GameState, tower: Tower) {
   const def = TOWERS[tower.kind], range = getRange(s, tower);
   const candidates = s.enemies.filter(e => {
     const pos = enemyPosition(e, s.layout), target = enemyTarget(e);
-    return e.hp > 0 && e.progress < 1 && def.targets.includes(target) && distance(slot, pos) <= range && (target !== "sub" || canSeeSub(s, pos));
+    return e.hp > 0 && e.progress < 1 && (e.hackTimer ?? 0) <= 0 && def.targets.includes(target) && distance(slot, pos) <= range && (target !== "sub" || canSeeSub(s, pos));
   });
   candidates.sort((a, b) => tower.priority === "strongest" ? b.hp - a.hp : tower.priority === "weakest" ? a.hp - b.hp : tower.priority === "air" ? Number(b.kind === "air") - Number(a.kind === "air") || b.progress - a.progress : b.progress - a.progress);
   return candidates;
@@ -750,8 +902,10 @@ function resolveImpact(s: GameState, p: PendingImpact) {
   const tower = p.slot >= 0 ? s.towers.find(t => t.slot === p.slot) : undefined;
   const targetPos = enemyPosition(target, s.layout);
   // Void shot: target left the firing tower's range before impact (hitscan
-  // resolves in the same tick it fires, so it is naturally exempt).
-  if (tower && distance(getSlots(s.layout)[tower.slot], targetPos) > getRange(s, tower)) { bumpFireStat(s, p.modelKind, "fizzled"); return; }
+  // resolves in the same tick it fires, so it is naturally exempt). Boat
+  // shots (MECH-A) are exempt: the boat tracked its target from its own
+  // position, and a torpedo in the water does not fizzle on range drift.
+  if (tower && p.boatId == null && distance(getSlots(s.layout)[tower.slot], targetPos) > getRange(s, tower)) { bumpFireStat(s, p.modelKind, "fizzled"); return; }
   const source: DamageSource = { kind: p.kind, modelKind: p.modelKind, slot: p.slot, branch: p.branch, direct: true };
   const dealt = applyDamage(s, target, p.damage, source);
   if (p.heroType === 2) target.armorBreak = 5; // hero type 2 cracks armor on impact
@@ -771,6 +925,254 @@ function resolveImpact(s: GameState, p: PendingImpact) {
   }
   if (tower.tier === 4 && tower.kind === "cannon" && tower.branch === 1) {
     for (const other of towerCandidates(s, tower).filter(e => e.id !== target.id).slice(0, 4)) applyDamage(s, other, p.damage * 0.5, splashSource);
+  }
+}
+
+/* ================= MECH-A phases (run inside the battle tick) ================= */
+
+/** Keep the boat entities in step with the placed boat-family towers:
+ *  create missing units at their lane station, retire units of sold or
+ *  re-branched towers, scale HP on tier change, run respawn timers. */
+function syncBoats(s: GameState, battleDt: number) {
+  const keep = new Set<string>();
+  for (const tower of s.towers) {
+    if (tower.kind !== "boat") continue;
+    const { role, count } = boatRoleFor(tower);
+    const maxHp = boatMaxHp(role, tower.tier);
+    const station = laneStationProgress(getSlots(s.layout)[tower.slot], s.layout);
+    const perBoatInterval = 1 / weaponSpec(tower.kind, tower.tier, tower.branch).fireRate;
+    for (let i = 0; i < count; i++) {
+      keep.add(`${tower.slot}:${role}:${i}`);
+      const boat = s.boats.find(b => b.slot === tower.slot && b.role === role && b.index === i);
+      if (!boat) {
+        s.boats.push({ id: s.nextId++, slot: tower.slot, role, index: i, hp: maxHp, maxHp, progress: station, offset: boatOffset(role, i), state: "active", respawnClock: 0, cooldown: (i * perBoatInterval) / count });
+      } else {
+        if (boat.maxHp !== maxHp) { boat.hp = Math.max(1, Math.round(boat.hp * maxHp / boat.maxHp)); boat.maxHp = maxHp; }
+        boat.progress = station;
+        if (boat.state === "respawn") {
+          // Torpedo squadrons do not launch replacements into an active
+          // pin engagement (QA round-2 مهم-۱): while a heavy ship sits
+          // inside the pin radius of the sunken boat's station, its
+          // respawn clock holds. With a flat 6s redeploy the pool would
+          // refill faster than return fire drains it (240 HP ≈ 10s per
+          // boat) and the pin could never be broken by sinking the
+          // squadron — the checklist's "while the boats live" condition.
+          const pinEngaged = boat.role === "torpedo" && s.enemies.some(e => e.hp > 0 && isHeavyShip(e) && distance(boatPosition(boat, s.layout), enemyPosition(e, s.layout)) <= TORPEDO_PIN_RADIUS);
+          if (!pinEngaged) {
+            boat.respawnClock -= battleDt;
+            if (boat.respawnClock <= 0) { boat.state = "active"; boat.hp = maxHp; boat.respawnClock = 0; }
+          }
+        }
+      }
+    }
+  }
+  s.boats = s.boats.filter(b => keep.has(`${b.slot}:${b.role}:${b.index}`));
+}
+
+/** One hacked drone's turn (MECH-A sonar): it engages its former fleet —
+ *  sustained fire on the nearest enemy, and a kamikaze dive (checklist
+ *  ۱٫۵: ۱۵۰ damage) when it gets close. It never advances or leaks. */
+function hackBehavior(s: GameState, enemy: Enemy, battleDt: number) {
+  const pos = enemyPosition(enemy, s.layout);
+  let best: Enemy | null = null; let bd = Infinity;
+  for (const other of s.enemies) {
+    if (other === enemy || other.hp <= 0 || other.progress >= 1 || (other.hackTimer ?? 0) > 0) continue;
+    const d = distance(pos, enemyPosition(other, s.layout));
+    if (d < bd) { bd = d; best = other; }
+  }
+  if (!best) return;
+  if (bd <= HACK_DETONATE_DIST) {
+    for (const other of s.enemies) {
+      if (other === enemy || other.hp <= 0 || (other.hackTimer ?? 0) > 0) continue;
+      if (distance(pos, enemyPosition(other, s.layout)) <= HACK_BLAST_RADIUS) applyDamage(s, other, HACK_DETONATE_DAMAGE, { kind: "aura" });
+    }
+    enemy.hp = 0; enemy.noReward = true; enemy.hackTimer = 0;
+    return;
+  }
+  if (bd <= HACK_ENGAGE_RADIUS) applyDamage(s, best, HACK_DPS * battleDt, { kind: "aura" });
+}
+
+/** EMP pulses and sonar hacks (MECH-A). The EMP branch fires NO shots:
+ *  every spec period (2s) it emits one area pulse — spec damage to every
+ *  enemy in range, 60% slow, and 4s of weapon + radar shutdown (the
+ *  weaponDownUntil / radarDownUntil fields MECH-B consumes). The sonar
+ *  branch keeps its spec shots; every 8s it additionally hacks the
+ *  nearest air enemy in range for 10s. */
+function empSonarPhase(s: GameState, battleDt: number, stats: ReturnType<typeof getStats>) {
+  for (const tower of s.towers) {
+    if (tower.kind !== "ew" || tower.tier !== 4 || tower.branch === null) continue;
+    if ((s.towerStuns?.[tower.slot] ?? 0) > 0) continue;
+    const slotPos = getSlots(s.layout)[tower.slot];
+    const spec = weaponSpec(tower.kind, tower.tier, tower.branch);
+    let clock = (tower.abilityClock ?? 0) + battleDt;
+    if (tower.branch === 0) {
+      const period = specInterval(spec); // 2s at spec fire rate 0.5
+      while (clock >= period) {
+        const targets = s.enemies.filter(e => e.hp > 0 && e.progress < 1 && (e.hackTimer ?? 0) <= 0 && distance(slotPos, enemyPosition(e, s.layout)) <= getRange(s, tower));
+        if (!targets.length) { clock = period; break; } // hold the charge until something enters range
+        clock -= period;
+        const damage = spec.damage * damageTech(s, tower) * stats.grid;
+        for (const e of targets) {
+          applyDamage(s, e, damage, { kind: "ew", modelKind: "emp", slot: tower.slot, branch: 0 });
+          e.empSlow = EMP_EFFECT_SECONDS;
+          // absolute stamps on the shared battle clock (MECH-B contract)
+          e.weaponDownUntil = s.battleTime + EMP_EFFECT_SECONDS;
+          e.radarDownUntil = s.battleTime + EMP_EFFECT_SECONDS;
+        }
+        // FX record for the pulse ring (gamesync MECH-A section renders it)
+        s.shots.push({ slot: tower.slot, kind: "ew", modelKind: "emp", targetId: -1, flightDur: 0, damage, crit: false, interval: period, x1: slotPos.x, y1: slotPos.y, x2: slotPos.x, y2: slotPos.y, boatId: -1 });
+      }
+    } else if (clock >= SONAR_HACK_INTERVAL) {
+      let best: Enemy | null = null; let bd = Infinity;
+      for (const e of s.enemies) {
+        if (e.kind !== "air" || e.hp <= 0 || e.progress >= 1 || (e.hackTimer ?? 0) > 0) continue;
+        const d = distance(slotPos, enemyPosition(e, s.layout));
+        if (d <= getRange(s, tower) && d < bd) { bd = d; best = e; }
+      }
+      if (best) { best.hackTimer = SONAR_HACK_DURATION; clock = 0; }
+      else clock = SONAR_HACK_INTERVAL; // hold, retry next tick
+    }
+    tower.abilityClock = clock;
+  }
+}
+
+/** Automatic minefield of the mine branch (MECH-A): the tower plants sea
+ *  mines on the enemy lane inside its range (cap 10, one per spec
+ *  interval, spec ammo per mine) and any surface/sub enemy coming within
+ *  the trigger radius sets one off for spec damage in the blast radius.
+ *  Exploded mines are replanted by the same cycle. */
+function minesPhase(s: GameState, battleDt: number, stats: ReturnType<typeof getStats>) {
+  s.mines = s.mines.filter(m => s.towers.some(t => t.slot === m.slot && t.kind === "boat" && t.tier === 4 && t.branch === 1));
+  const spec = weaponSpec("boat", 4, 1);
+  for (const tower of s.towers) {
+    if (tower.kind !== "boat" || tower.tier !== 4 || tower.branch !== 1) continue;
+    if ((s.towerStuns?.[tower.slot] ?? 0) > 0) continue;
+    let clock = (tower.abilityClock ?? 0) + battleDt;
+    const period = specInterval(spec);
+    while (clock >= period) {
+      const count = s.mines.reduce((n, m) => n + (m.slot === tower.slot ? 1 : 0), 0);
+      if (count >= MINE_FIELD_CAP || s.ammo < spec.ammoPerShot) { clock = period; break; }
+      s.ammo -= spec.ammoPerShot;
+      clock -= period;
+      const slotPos = getSlots(s.layout)[tower.slot];
+      const station = laneStationProgress(slotPos, s.layout);
+      // Planting spots are chosen by WORLD distance, not lane progress:
+      // the lane is waypoint-parameterised, so equal progress steps are
+      // wildly unequal in space — a progress-spread field used to stack
+      // all 10 mines on one point, where a single ship tripped them all.
+      const off = (count % 2 === 0 ? 1 : -1) * (0.8 + (count % 3) * 0.5);
+      let chosen: { x: number; y: number } | null = null; let chosenScore = Infinity;
+      for (let p = Math.max(0.005, station - 0.2); p <= Math.min(0.995, station + 0.2); p += 0.001) {
+        const cand = boatPosition({ progress: p, offset: off }, s.layout);
+        if (distance(slotPos, cand) > getRange(s, tower)) continue;
+        let clear = Infinity;
+        for (const m of s.mines) if (m.slot === tower.slot) clear = Math.min(clear, distance(m, cand));
+        if (clear < MINE_SPACING) continue;
+        const score = Math.abs(p - station);
+        if (score < chosenScore) { chosenScore = score; chosen = cand; }
+      }
+      const pos = chosen ?? boatPosition({ progress: station, offset: 0 }, s.layout);
+      s.mines.push({ id: s.nextId++, slot: tower.slot, x: pos.x, y: pos.y });
+    }
+    tower.abilityClock = clock;
+  }
+  const exploded: MineUnit[] = [];
+  const tripped = new Set<number>(); // one mine per enemy per tick — a ship crossing the field trips them one at a time
+  for (const mine of s.mines) {
+    const near = s.enemies.filter(e => e.hp > 0 && e.progress < 1 && (e.hackTimer ?? 0) <= 0 && !tripped.has(e.id) && enemyTarget(e) !== "air" && distance(mine, enemyPosition(e, s.layout)) <= MINE_TRIGGER_RADIUS);
+    if (!near.length) continue;
+    for (const e of near) tripped.add(e.id);
+    exploded.push(mine);
+    const tower = s.towers.find(t => t.slot === mine.slot);
+    const damage = spec.damage * (tower ? damageTech(s, tower) : 1) * stats.grid;
+    for (const e of s.enemies) {
+      if (e.hp <= 0 || e.progress >= 1 || (e.hackTimer ?? 0) > 0) continue;
+      // A sea mine is an anti-ship weapon (QA round-2 مهم-۲): the blast
+      // honours the same air exclusion as the trigger — air and sea lanes
+      // pass within 0.28 units of each other, so without this the mine
+      // branch was the game's strongest anti-air weapon by accident.
+      if (enemyTarget(e) === "air") continue;
+      if (distance(mine, enemyPosition(e, s.layout)) <= MINE_BLAST_RADIUS) applyDamage(s, e, damage, { kind: "boat", modelKind: "mine", slot: mine.slot, branch: 1 });
+    }
+    s.shots.push({ slot: mine.slot, kind: "boat", modelKind: "mine", targetId: near[0].id, flightDur: 0, damage, crit: false, interval: 0, x1: mine.x, y1: mine.y, x2: mine.x, y2: mine.y, boatId: -1 });
+  }
+  if (exploded.length) s.mines = s.mines.filter(m => !exploded.includes(m));
+}
+
+/** Whether a boat of this tower may engage the enemy. Torpedo boats never
+ *  engage submarines (checklist ۱٫۶); submarines must be detected first. */
+function boatTargetOk(s: GameState, tower: Tower, boat: BoatUnit, e: Enemy): boolean {
+  const target = enemyTarget(e);
+  if (!TOWERS[tower.kind].targets.includes(target)) return false;
+  if (boat.role === "torpedo" && target === "sub") return false;
+  if (target === "sub" && !canSeeSub(s, enemyPosition(e, s.layout))) return false;
+  return true;
+}
+
+/** Garrison and torpedo boats fire for themselves (MECH-A): per-boat spec
+ *  damage and rate, per-shot ammo from the shared stock, shots originating
+ *  at the boat's own position. Overdrive and the catamaran aura speed the
+ *  boats exactly as they speed towers. The Ghadir does not fire here — it
+ *  fires through the tower's discrete loop (sub-priority targeting). */
+function boatFirePhase(s: GameState, battleDt: number, stats: ReturnType<typeof getStats>) {
+  for (const boat of s.boats) {
+    if (boat.state !== "active" || boat.role === "ghadir") continue;
+    const tower = s.towers.find(t => t.slot === boat.slot && t.kind === "boat");
+    if (!tower || (s.towerStuns?.[tower.slot] ?? 0) > 0) continue;
+    const spec = weaponSpec(tower.kind, tower.tier, tower.branch);
+    const slotPos = getSlots(s.layout)[tower.slot];
+    let rateMult = 1;
+    if (s.overdrive > 0) rateMult *= 2;
+    if ((distance(slotPos, s.hero) < 18 && s.hero.active === 0) || (s.hero2 && distance(slotPos, s.hero2) < 18 && s.hero2.active === 0)) rateMult *= 1.2;
+    const interval = 1 / spec.fireRate;
+    boat.cooldown -= battleDt * rateMult;
+    if (boat.cooldown > 0) continue;
+    const pos = boatPosition(boat, s.layout);
+    const engage = getRange(s, tower) + BOAT_FIRE_RANGE_PADDING;
+    for (let shotNo = 0; boat.cooldown <= 0; shotNo++) {
+      if (shotNo >= MAX_SHOTS_PER_TICK) { boat.cooldown = interval; break; }
+      const targets = s.enemies.filter(e => e.hp > 0 && e.progress < 1 && (e.hackTimer ?? 0) <= 0 && distance(pos, enemyPosition(e, s.layout)) <= engage && boatTargetOk(s, tower, boat, e));
+      // torpedo boats prioritise the heavy ships they exist to pin
+      targets.sort((a, b) => (boat.role === "torpedo" ? Number(isHeavyShip(b)) - Number(isHeavyShip(a)) : 0) || b.progress - a.progress);
+      const target = targets[0];
+      if (!target) { boat.cooldown = 0; break; }
+      const ammoCost = s.overdrive > 0 ? 0 : spec.ammoPerShot;
+      if (ammoCost > 0 && s.ammo < ammoCost) { boat.cooldown = interval * 3; break; } // same starved-stock ruling as towers
+      if (ammoCost > 0) s.ammo -= ammoCost;
+      const crit = Math.random() < spec.critChance;
+      let damage = spec.damage * damageTech(s, tower) * stats.grid;
+      if (crit) damage *= 2;
+      const targetPos = enemyPosition(target, s.layout);
+      const flightDur = flightTime(spec.modelKind, distance(pos, targetPos));
+      boat.cooldown += interval;
+      bumpFireStat(s, spec.modelKind, "shots");
+      s.pendingImpacts.push({ targetId: target.id, eta: flightDur, damage, crit, slot: tower.slot, kind: "boat", modelKind: spec.modelKind, branch: tower.branch, boatId: boat.id });
+      s.shots.push({ slot: tower.slot, kind: "boat", modelKind: spec.modelKind, targetId: target.id, flightDur, damage, crit, interval: interval / rateMult, x1: pos.x, y1: pos.y, x2: targetPos.x, y2: targetPos.y, boatId: boat.id });
+    }
+  }
+}
+
+/** Return fire on the Ghadir hunter sub (QA round-2 مهم-۱): the sub used
+ *  to be untouchable — its 600 HP and respawn cycle were dead numbers.
+ *  Destroyers and corvettes (the ASW-capable classes) engaging it deal
+ *  HALF the anti-boat rate — a submarine is a harder target than a
+ *  surface boat. When the Ghadir sinks, the mine branch holds fire (the
+ *  discrete-fire loop already gates on an active Ghadir) until it
+ *  redeploys. */
+function ghadirCounterfirePhase(s: GameState, battleDt: number) {
+  for (const boat of s.boats) {
+    if (boat.role !== "ghadir" || boat.state !== "active") continue;
+    const tower = s.towers.find(t => t.slot === boat.slot && t.kind === "boat" && t.tier === 4 && t.branch === 1);
+    if (!tower) continue;
+    const engage = getRange(s, tower) + BOAT_FIRE_RANGE_PADDING;
+    const pos = boatPosition(boat, s.layout);
+    for (const e of s.enemies) {
+      if (e.hp <= 0 || e.progress >= 1 || (e.hackTimer ?? 0) > 0) continue;
+      if (e.kind !== "destroyer" && e.kind !== "corvette") continue;
+      if (distance(pos, enemyPosition(e, s.layout)) > engage) continue;
+      boat.hp -= GHADIR_COUNTERFIRE_FACTOR * antiBoatDps(e, s.wave) * battleDt;
+    }
+    if (boat.hp <= 0) { boat.hp = 0; boat.state = "respawn"; boat.respawnClock = BOAT_RESPAWN_SECONDS; }
   }
 }
 
@@ -936,6 +1338,14 @@ function tick(s: GameState, delta: number, battlePaused = false) {
     s.enemies.push(makeEnemy(s, kind)); s.spawnRemaining--; s.spawnClock += 1.35;
   }
   for (const key of Object.keys(s.towerStuns ?? {})) { const left = (s.towerStuns[Number(key)] ?? 0) - battleDt; if (left <= 0) delete s.towerStuns[Number(key)]; else s.towerStuns[Number(key)] = left; }
+  // MECH-A pre-phase: boats deploy, EMP pulses land and sonar hacks are
+  // assigned BEFORE movement, so their effects apply from this same tick.
+  // The shared battle clock advances first, so stamps set this tick are
+  // measured against the already-advanced time.
+  s.battleTime = (s.battleTime ?? 0) + battleDt;
+  syncBoats(s, battleDt);
+  empSonarPhase(s, battleDt, stats);
+  minesPhase(s, battleDt, stats);
   const reinforcements: Enemy[] = [];
   for (const enemy of s.enemies) {
     const pos = enemyPosition(enemy, s.layout);
@@ -943,11 +1353,57 @@ function tick(s: GameState, delta: number, battlePaused = false) {
     enemy.intercept = Math.max(0, (enemy.intercept ?? 0) - battleDt);
     enemy.armorBreak = Math.max(0, (enemy.armorBreak ?? 0) - battleDt);
     enemy.hitFlash = Math.max(0, (enemy.hitFlash ?? 0) - battleDt * 3);
+    // MECH-A: the EMP slow counts down in battle time. (weaponDownUntil /
+    // radarDownUntil are absolute battleTime stamps — never decremented;
+    // consumers compare them against s.battleTime.)
+    enemy.empSlow = Math.max(0, (enemy.empSlow ?? 0) - battleDt);
+    if ((enemy.hackTimer ?? 0) > 0) {
+      // Hacked by a sonar hub (MECH-A): fights for the player — no advance,
+      // no leaking, no boss abilities.
+      enemy.hackTimer = Math.max(0, (enemy.hackTimer ?? 0) - battleDt);
+      hackBehavior(s, enemy, battleDt);
+      continue;
+    }
     let slow = 1;
     for (const t of s.towers) {
-      if ((t.kind === "ew" || (t.kind === "boat" && enemy.kind !== "air")) && distance(getSlots(s.layout)[t.slot], pos) < getRange(s, t)) {
-        slow = Math.min(slow, t.kind === "boat" ? (t.tier === 4 ? 0.25 : 0.48) : (t.tier === 4 ? 0.4 : 0.7));
-        if (t.kind === "ew" && t.tier === 4 && t.branch === 1 && enemy.kind === "air") applyDamage(s, enemy, 20 * battleDt, { kind: "aura" });
+      // EW slow aura: tiers 1-3 ×0.7, sonar branch ×0.4. The EMP branch has
+      // NO aura — its slow arrives by pulse (empSlow below). Boat towers no
+      // longer slow by aura at all (audit F-6): their boats physically
+      // block and pin, which is computed after this loop.
+      if (t.kind === "ew" && !(t.tier === 4 && t.branch === 0) && distance(getSlots(s.layout)[t.slot], pos) < getRange(s, t)) {
+        slow = Math.min(slow, t.tier === 4 ? 0.4 : 0.7);
+      }
+    }
+    if ((enemy.empSlow ?? 0) > 0) slow = Math.min(slow, EMP_SLOW_FACTOR);
+    // Garrison blocking / torpedo pinning (MECH-A): a surface enemy held by
+    // a boat does not advance at all. A held enemy shoots back at the boats
+    // holding it — the boats are real targets with their own HP, and the
+    // pin/block lasts only while they live (checklist ۱٫۶).
+    if (enemyTarget(enemy) === "sea") {
+      const band = s.boats.filter(b => b.state === "active" && b.role === "garrison" && enemy.progress >= b.progress - 0.002 && enemy.progress <= b.progress + BLOCK_BAND);
+      if (band.length) {
+        slow = 0;
+        // Return fire ROTATES between the boats holding the line (QA
+        // round-2 متوسط-۴): permanent focus on boat #1 left the rest of
+        // the line at full HP until its turn came.
+        const target = band[(Math.floor(s.battleTime / ANTI_BOAT_ROTATE_SECONDS) + enemy.id) % band.length];
+        target.hp -= antiBoatDps(enemy, s.wave) * battleDt;
+        if (target.hp <= 0) { target.hp = 0; target.state = "respawn"; target.respawnClock = BOAT_RESPAWN_SECONDS; }
+      } else if (isHeavyShip(enemy)) {
+        // Torpedo pin (QA round-2 مهم-۱): the pinned ship fires back at
+        // the NEAREST pinning boat — before this, torpedo boats could
+        // never take damage and the pin could only end with the ship.
+        let nearest: BoatUnit | undefined; let nd = Infinity;
+        for (const b of s.boats) {
+          if (b.state !== "active" || b.role !== "torpedo") continue;
+          const d = distance(boatPosition(b, s.layout), pos);
+          if (d <= TORPEDO_PIN_RADIUS && d < nd) { nd = d; nearest = b; }
+        }
+        if (nearest) {
+          slow = 0; // torpedo squadron pin: heavy ship held 100% while engaged
+          nearest.hp -= antiBoatDps(enemy, s.wave) * battleDt;
+          if (nearest.hp <= 0) { nearest.hp = 0; nearest.state = "respawn"; nearest.respawnClock = BOAT_RESPAWN_SECONDS; }
+        }
       }
     }
     if (enemy.stun > 0) { enemy.stun = Math.max(0, enemy.stun - battleDt); slow = 0; }
@@ -970,7 +1426,7 @@ function tick(s: GameState, delta: number, battlePaused = false) {
     hero.attackClock = (hero.attackClock ?? 0) + battleDt;
     const heroInterval = hero.active === 1 ? 15 : hero.active === 2 ? 4 : 3;
     if (hero.attackClock >= heroInterval) {
-      const heroTargets = s.enemies.filter(e => e.hp > 0 && distance(hero, enemyPosition(e, s.layout)) < (hero.active === 1 ? 35 : 23) && (enemyTarget(e) !== "sub" || hero.active === 2 || canSeeSub(s, enemyPosition(e, s.layout))));
+      const heroTargets = s.enemies.filter(e => e.hp > 0 && (e.hackTimer ?? 0) <= 0 && distance(hero, enemyPosition(e, s.layout)) < (hero.active === 1 ? 35 : 23) && (enemyTarget(e) !== "sub" || hero.active === 2 || canSeeSub(s, enemyPosition(e, s.layout))));
       heroTargets.sort((a, b) => hero.active === 1 ? b.hp - a.hp : hero.active === 2 ? Number(b.kind === "boss") - Number(a.kind === "boss") || b.hp - a.hp : b.progress - a.progress);
       const heroTarget = heroTargets[0];
       if (heroTarget) {
@@ -1000,6 +1456,18 @@ function tick(s: GameState, delta: number, battlePaused = false) {
     const slot = getSlots(s.layout)[tower.slot];
     if (!slot) continue;
     if ((s.towerStuns?.[tower.slot] ?? 0) > 0) continue; // knocked out by Leviathan missiles
+    // MECH-A: garrison/torpedo towers never fire from the base model —
+    // their boats fire for themselves in boatFirePhase. The EMP branch
+    // never fires shots — it pulses in empSonarPhase.
+    if (tower.kind === "boat" && !(tower.tier === 4 && tower.branch === 1)) continue;
+    if (tower.kind === "ew" && tower.tier === 4 && tower.branch === 0) continue;
+    // MECH-A: the mine branch's shots are fired by its Ghadir hunter sub —
+    // if the sub is not deployed, the branch holds fire.
+    let ghadir: BoatUnit | undefined;
+    if (tower.kind === "boat" && tower.tier === 4 && tower.branch === 1) {
+      ghadir = s.boats.find(b => b.slot === tower.slot && b.role === "ghadir" && b.state === "active");
+      if (!ghadir) continue;
+    }
     const spec = weaponSpec(tower.kind, tower.tier, tower.branch);
     if (spec.mode === "beam") {
       // Thermal laser: a continuous hitscan beam — no projectile, no
@@ -1019,9 +1487,15 @@ function tick(s: GameState, delta: number, battlePaused = false) {
     let lastInterval = specInterval(spec);
     for (let shotNo = 0; tower.cooldown <= 0; shotNo++) {
       if (shotNo >= MAX_SHOTS_PER_TICK) { tower.cooldown = lastInterval; break; } // safety cap: drop the remaining debt rather than burst forever
-      const target = towerCandidates(s, tower)[0]; // target re-evaluated for every shot in the tick
+      const cands = towerCandidates(s, tower); // target re-evaluated for every shot in the tick
+      if (ghadir) {
+        // Ghadir hunts submarines first (MECH-A), then bosses, then the lead ship
+        cands.sort((a, b) => Number(enemyTarget(b) === "sub") - Number(enemyTarget(a) === "sub") || Number(b.kind === "boss") - Number(a.kind === "boss") || b.progress - a.progress);
+      }
+      const target = cands[0];
       if (!target) { tower.focusId = undefined; tower.focusTime = 0; tower.cooldown = 0; break; } // no target: no cooldown debt accrues
       const targetPos = enemyPosition(target, s.layout);
+      const origin = ghadir ? boatPosition(ghadir, s.layout) : slot;
       let interval = specInterval(spec);
       if (s.overdrive > 0) interval *= 0.5; // overdrive = fire rate ×2 at zero ammo cost (مهم-۳۰)
       if ((distance(slot, s.hero) < 18 && s.hero.active === 0) || (s.hero2 && distance(slot, s.hero2) < 18 && s.hero2.active === 0)) interval /= 1.2; // catamaran aura = nearby fire rate ×1.2 (متوسط-۱۵)
@@ -1040,13 +1514,18 @@ function tick(s: GameState, delta: number, battlePaused = false) {
       const crit = Math.random() < spec.critChance;
       let damage = spec.damage * damageTech(s, tower) * stats.grid;
       if (crit) damage *= 2;
-      const flightDur = flightTime(spec.modelKind, distance(slot, targetPos));
+      const flightDur = flightTime(spec.modelKind, distance(origin, targetPos));
       tower.cooldown += interval;
       bumpFireStat(s, spec.modelKind, "shots");
-      s.pendingImpacts.push({ targetId: target.id, eta: flightDur, damage, crit, slot: tower.slot, kind: tower.kind, modelKind: spec.modelKind, branch: tower.branch });
-      s.shots.push({ slot: tower.slot, kind: tower.kind, modelKind: spec.modelKind, targetId: target.id, flightDur, damage, crit, interval, x1: slot.x, y1: slot.y, x2: targetPos.x, y2: targetPos.y });
+      s.pendingImpacts.push({ targetId: target.id, eta: flightDur, damage, crit, slot: tower.slot, kind: tower.kind, modelKind: spec.modelKind, branch: tower.branch, ...(ghadir ? { boatId: ghadir.id } : {}) });
+      s.shots.push({ slot: tower.slot, kind: tower.kind, modelKind: spec.modelKind, targetId: target.id, flightDur, damage, crit, interval, x1: origin.x, y1: origin.y, x2: targetPos.x, y2: targetPos.y, ...(ghadir ? { boatId: ghadir.id } : {}) });
     }
   }
+  // MECH-A: garrison/torpedo boats fire from their own positions (their
+  //  impacts join the same resolution pass below).
+  boatFirePhase(s, battleDt, stats);
+  // MECH-A round 2: ASW return fire on the Ghadir hunter sub.
+  ghadirCounterfirePhase(s, battleDt);
   // Projectiles land: advance every in-flight shot by this tick's battle
   // time and resolve the arrivals — damage exists only from this moment.
   if (s.pendingImpacts.length) {
@@ -1060,6 +1539,7 @@ function tick(s: GameState, delta: number, battlePaused = false) {
   }
   for (const enemy of s.enemies) {
     if (enemy.hp <= 0) {
+      if (enemy.noReward) continue; // MECH-A: a hacked drone's detonation pays no bounty
       const cash = bounty(s, enemy);
       s.combo = (s.comboTimer ?? 0) > 0 ? (s.combo ?? 0) + 1 : 1;
       s.comboTimer = 3.5;
@@ -1088,7 +1568,12 @@ function tick(s: GameState, delta: number, battlePaused = false) {
     s.idle.lastBattle = { id:`battle-${s.nextId++}`, wave:s.wave, title:operationInfo(s.wave).title, victory:false, stars:0, cash:0, xp:0, chests:0, destroyed:s.destroyed-s.idle.waveStartKills, seconds:s.elapsed-s.idle.waveStartedAt, hearts:0, claimed:false };
     s.idle.revision++; s.phase = "defeat"; s.enemies = []; s.spawnRemaining = 0; s.pendingImpacts = []; return;
   }
-  if (s.spawnRemaining === 0 && s.enemies.length === 0) {
+  if (s.spawnRemaining === 0 && s.enemies.every(e => (e.hackTimer ?? 0) > 0)) {
+    // Studio ruling (QA round-2 متوسط-۳): hacked units are the player's
+    // own assets at cleanup — they are silently recalled with the wave
+    // (no leak, no bounty, no waiting out the hack timer while the wave
+    // hangs open, and no post-"cleanup" leak when the hack expires).
+    s.enemies = [];
     s.pendingImpacts = []; // battle over (QA جزئی-۱): no orphan in-flight records freeze into the intermission
     const info = operationInfo(s.wave), stars = s.hearts >= 19 ? 3 : s.hearts >= 14 ? 2 : 1;
     s.idle.stars[String(s.wave)] = Math.max(s.idle.stars[String(s.wave)] ?? 0, stars);
@@ -1124,6 +1609,8 @@ export function cloneForTick(state: GameState): GameState {
     buildings: { ...state.buildings },
     towers: state.towers.map(t => ({ ...t })),
     enemies: state.enemies.map(e => ({ ...e })),
+    boats: (state.boats ?? []).map(b => ({ ...b })),
+    mines: (state.mines ?? []).map(m => ({ ...m })),
     pirates: state.pirates.map(p => ({ ...p })),
     contraband: state.contraband.map(c => ({ ...c })),
     merchants: state.merchants.map(m => ({ ...m })),
@@ -1225,6 +1712,11 @@ export function gameReducer(state: GameState, action: Action): GameState {
     case "sell-tower": {
       const tower = s.towers.find(t => t.slot === action.slot);
       if (tower) { const refund = s.research.includes("recycle") ? 0.8 : 0.5; s.cash += TOWERS[tower.kind].cost * refund; s.steel += TOWERS[tower.kind].steel * refund; s.towers = s.towers.filter(t => t.slot !== action.slot); }
+      // MECH-A entities retire with their tower in EVERY phase (QA
+      // round-2 جزئی-۳): cleanup used to wait for the next battle tick,
+      // leaving ghost boats/mines rendered through peacetime.
+      s.boats = s.boats.filter(b => b.slot !== action.slot);
+      s.mines = s.mines.filter(m => m.slot !== action.slot);
       break;
     }
     case "priority": {
@@ -1254,10 +1746,13 @@ export function gameReducer(state: GameState, action: Action): GameState {
         if (action.x === undefined || action.y === undefined) break;
         // Spell damage goes through the single damage path (QA-ROOT: the flat
         // hp cut bypassed the Titan's shield cycle and every other defense).
-        for (const e of s.enemies) if (distance(enemyPosition(e, s.layout), { x: action.x, y: action.y }) < 17) applyDamage(s, e, 450, { kind: "spell" });
+        // A hacked drone fights for the player (MECH-A QA round-2 متوسط-۲):
+        // the player's own spells must not hit it — every other damage path
+        // already exempts hackTimer > 0, and killing it paid a bounty.
+        for (const e of s.enemies) if ((e.hackTimer ?? 0) <= 0 && distance(enemyPosition(e, s.layout), { x: action.x, y: action.y }) < 17) applyDamage(s, e, 450, { kind: "spell" });
         s.popups.push({ id: s.nextId++, x: action.x, y: action.y, text: "💥", life: 1.2 }); s.cooldowns.strike = 60;
       } else if (action.spell === "emp") {
-        for (const e of s.enemies) { e.stun = 6; applyDamage(s, e, 35, { kind: "spell" }); } s.cooldowns.emp = 90;
+        for (const e of s.enemies) { if ((e.hackTimer ?? 0) > 0) continue; e.stun = 6; applyDamage(s, e, 35, { kind: "spell" }); } s.cooldowns.emp = 90;
       } else { s.overdrive = 10; s.cooldowns.overdrive = 120; }
       break;
     }
