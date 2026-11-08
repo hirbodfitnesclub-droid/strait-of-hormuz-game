@@ -24,8 +24,12 @@ import { RewardView, BattleResultView, OfflineView } from "./RewardViews";
 import { currentMission, operationInfo, type MissionTarget } from "@/lib/progression";
 import { scenarioForWave, loadDiary, appendDiary, type DiaryEntry, type Scenario } from "@/lib/news";
 import type { DailyStatus } from "@/lib/daily";
+import { serverApiEnabled } from "@/lib/runtime";
 
-const SAVE_KEY = "hormuz-game-v1", PLAYER_KEY = "hormuz-player-id", PREFERENCES_KEY = "hormuz-preferences-v2";
+const SAVE_KEY = "hormuz-game-v1", PLAYER_KEY = "hormuz-player-id", PREFERENCES_KEY = "hormuz-preferences-v2", DIARY_KEY = "hormuz-war-diary-v1";
+// On a save conflict (409) the server's current state is backed up here
+// (with a timestamp) before this device overwrites it — see saveAll below.
+const SERVER_BACKUP_KEY = "hormuz-server-backup-v1";
 const spells: { id: Spell; name: string; short: string; icon: typeof Rocket; cooldown: number; key: string }[] = [
   { id: "strike", name: "باران بالستیک", short: "موشکی", icon: Rocket, cooldown: 60, key: "1" },
   { id: "emp", name: "پالس الکترومغناطیسی", short: "پالس EMP", icon: Zap, cooldown: 90, key: "2" },
@@ -37,13 +41,18 @@ const navigation: { id: "map" | "economy" | "missions" | "managers" | "more"; la
 ];
 
 export default function Game() {
-  const [game, dispatch] = useReducer(gameReducer, undefined, initialGame);
+  const [game, rawDispatch] = useReducer(gameReducer, undefined, initialGame);
   const [loaded, setLoaded] = useState(false);
   const [panel, setPanel] = useState<PanelName | null>(null);
   const [progressPanel, setProgressPanel] = useState<ProgressPanel | null>(null);
   const [daily, setDaily] = useState<DailyStatus | null>(null);
   const [dailyBusy, setDailyBusy] = useState(false);
   const [dailyError, setDailyError] = useState(false);
+  // In the native (Capacitor) build there is no server, so the daily gift
+  // can never load: the panel and its shortcut show an honest "web only"
+  // status instead of a claim button stuck on "connecting…" (S-2).
+  const [dailyWebOnly, setDailyWebOnly] = useState(false);
+  useEffect(() => { setDailyWebOnly(!serverApiEnabled()); }, []);
   const [incomeBurst, setIncomeBurst] = useState<{id:number;cash:number}|null>(null);
   const incomeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hiddenAt = useRef<number | null>(null);
@@ -75,6 +84,7 @@ export default function Game() {
   const [preferencesLoaded, setPreferencesLoaded] = useState(false);
   const gameRef = useRef(game), soundRef = useRef(sound), vibrationRef = useRef(vibration);
   const playerRef = useRef("");
+  const serverVersionRef = useRef(0);
   const audioRef = useRef<BattleAudio | null>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const announcementTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -95,6 +105,31 @@ export default function Game() {
   const interfaceRef = useRef(interfacePaused);
   interfaceRef.current = interfacePaused;
   gameRef.current = game; soundRef.current = sound; vibrationRef.current = vibration; pauseRef.current = battlePaused;
+
+  // A full reset must also wipe everything that lives outside the game
+  // state, or the pre-reset run resurrects: the war diary, the player
+  // identity and the server-side save record all belong to the old run.
+  const dispatch = useCallback((action: Parameters<typeof rawDispatch>[0]) => {
+    if (action.type === "reset") {
+      const oldId = playerRef.current;
+      try {
+        localStorage.removeItem(SAVE_KEY);
+        localStorage.removeItem(DIARY_KEY);
+        localStorage.removeItem(PLAYER_KEY);
+        localStorage.removeItem(SERVER_BACKUP_KEY);
+      } catch { /* Storage unavailable; the in-memory reset still applies. */ }
+      const freshId = crypto.randomUUID();
+      try { localStorage.setItem(PLAYER_KEY, freshId); } catch { /* A later load mints an id instead. */ }
+      playerRef.current = freshId;
+      serverVersionRef.current = 0;
+      setDiary([]);
+      setDaily(null); setDailyError(false);
+      if (oldId && serverApiEnabled()) {
+        void fetch(`/api/save?id=${encodeURIComponent(oldId)}`, { method: "DELETE", keepalive: true }).catch(() => {});
+      }
+    }
+    rawDispatch(action);
+  }, []);
   const stats = getStats(game);
   const isNight = game.manualNight !== (Math.floor(game.elapsed / 180) % 2 === 1);
 
@@ -161,23 +196,26 @@ export default function Game() {
       const local = localStorage.getItem(SAVE_KEY);
       if (local && restore(JSON.parse(local))) { setLoaded(true); return; }
     } catch { id = crypto.randomUUID(); playerRef.current = id; }
+    if (!serverApiEnabled()) { setLoaded(true); return; }
     fetch(`/api/save?id=${encodeURIComponent(id)}`).then(r => r.ok ? r.json() : null).then(data => {
-      if (!cancelled && data?.state) restore(data.state);
+      if (cancelled || !data) return;
+      if (typeof data.version === "number") serverVersionRef.current = data.version;
+      if (data.state) restore(data.state);
     }).catch(() => {}).finally(() => { if (!cancelled) setLoaded(true); });
     return () => { cancelled = true; };
   }, [notify]);
 
   const reloadDaily = useCallback(async () => {
-    if(!playerRef.current)return;
+    if(!playerRef.current||!serverApiEnabled())return;
     setDailyBusy(true);setDailyError(false);
     try { const response=await fetch(`/api/rewards?id=${encodeURIComponent(playerRef.current)}`);if(!response.ok)throw new Error("unavailable");const status=await response.json() as DailyStatus;setDaily(status);if(status.reward&&!gameRef.current.idle.appliedDailyIds.includes(status.reward.id))dispatch({type:"apply-daily",reward:status.reward}); }
     catch { setDailyError(true); }
     finally { setDailyBusy(false); }
   }, []);
   const claimDaily = async () => {
-    if(dailyBusy||!daily?.available)return;
+    if(dailyBusy||!daily?.available||!serverApiEnabled())return;
     setDailyBusy(true);setDailyError(false);feedback();
-    try { const response=await fetch("/api/rewards",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({id:playerRef.current})});if(!response.ok)throw new Error("unavailable");const status=await response.json() as DailyStatus;setDaily(status);if(status.reward)dispatch({type:"apply-daily",reward:status.reward});setProgressPanel(null); }
+    try { const response=await fetch("/api/rewards",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({id:playerRef.current})});if(!response.ok)throw new Error("unavailable");const status=await response.json() as DailyStatus;setDaily(status);if(status.reward&&!gameRef.current.idle.appliedDailyIds.includes(status.reward.id))dispatch({type:"apply-daily",reward:status.reward});setProgressPanel(null); }
     catch { setDailyError(true); }
     finally { setDailyBusy(false); }
   };
@@ -220,11 +258,39 @@ export default function Game() {
     if (!loaded) return;
     const snapshot = () => ({ ...gameRef.current, shots: [], popups: [], lastSavedAt: Date.now() });
     const saveLocal = () => { try { localStorage.setItem(SAVE_KEY, JSON.stringify(snapshot())); } catch { /* Server save remains available. */ } };
-    const saveAll = () => {
+    function saveAll(recovered = false) {
       const state = snapshot();
-      try { localStorage.setItem(SAVE_KEY, JSON.stringify(state)); } catch { /* Server save remains available. */ }
-      if (playerRef.current) void fetch("/api/save", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: playerRef.current, state }), keepalive: true }).catch(() => {});
-    };
+      try { localStorage.setItem(SAVE_KEY, JSON.stringify(state)); } catch { /* Local snapshot is best-effort. */ }
+      if (!playerRef.current || !serverApiEnabled()) return;
+      void fetch("/api/save", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: playerRef.current, baseVersion: serverVersionRef.current, state }), keepalive: true }).then(async response => {
+        const data = await response.json().catch(() => null) as { version?: number; serverVersion?: number } | null;
+        if (!data) return;
+        if (response.ok && typeof data.version === "number") { serverVersionRef.current = data.version; return; }
+        if (response.status !== 409 || typeof data.serverVersion !== "number" || recovered) return;
+        // Conflict policy: LAST-WRITER-WINS, guarded (official policy — see
+        // src/app/api/save/route.ts and fix-program.md, team SAVE). This
+        // device is about to overwrite a newer server record (e.g. progress
+        // made on a second device). Before rebasing, fetch the server's
+        // current state and keep a timestamped local backup of exactly what
+        // is being overwritten, so the loss is never silent; only then
+        // adopt the server version as the new base and save on top of it.
+        // `recovered` bounds this to a single recovery attempt per cycle.
+        try {
+          const current = await fetch(`/api/save?id=${encodeURIComponent(playerRef.current)}`).then(r => (r.ok ? r.json() : null)).catch(() => null) as { state?: unknown; version?: number } | null;
+          if (current?.state) {
+            try {
+              localStorage.setItem(SERVER_BACKUP_KEY, JSON.stringify({
+                at: new Date().toISOString(),
+                serverVersion: typeof current.version === "number" ? current.version : data.serverVersion,
+                state: current.state,
+              }));
+            } catch { /* The backup is best-effort; the rebase still applies. */ }
+          }
+        } catch { /* The rebase below still applies. */ }
+        serverVersionRef.current = data.serverVersion;
+        saveAll(true);
+      }).catch(() => {});
+    }
     const timer = setInterval(() => { if (!document.hidden) saveAll(); }, 8000);
     const onVisibility = () => {
       if (document.hidden) { hiddenAt.current=Date.now();saveAll(); }
@@ -410,7 +476,7 @@ export default function Game() {
     <main className={`game-map ${targeting ? "aiming" : ""} ${selectedSlot !== null || selectedBuilding !== null ? "choosing-tower" : ""}`} ref={mapRef} onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp} onPointerCancel={onPointerUp} onClick={onMapClick}>
 <WorldView3D game={game} selectedSlot={selectedSlot} targeting={targeting} targetPreview={targetPreview} isNight={isNight} onSlot={chooseSlot} onBuilding={chooseBuilding} onPlatform={id => { const built = game.idle.platforms ?? []; if (built.includes(id)) return; if (game.cash < platformCost(built.length)) { notify("دلار کافی برای ساخت سکوی نفتی ندارید."); return; } dispatch({ type: "build-platform", id }); notify("سکوی نفتی ساخته شد؛ +۸ بشکه بر ثانیه"); feedback(); }} onHero={() => { setTargeting("hero"); setTargetPreview(game.hero); setSelectedSlot(null); feedback(); }} onHero2={() => { if (game.hero2) { setTargeting("hero2"); setTargetPreview(game.hero2); setSelectedSlot(null); feedback(); } }} onInspect={id => { dispatch({ type: "inspect", id }); notify("محموله کشف شد؛ ۵۰ فولاد دریافت کردید."); feedback(); }} onGroundAction={handleGroundAction} onGroundHover={handleGroundHover} />
 
-      <IdleHud game={game} hidden={interfacePaused||targeting!==null} onCollect={collectIncome} onBoost={activateProduction} onBattle={mainAction} onMission={navigateMission} onClaimMission={claimMission} onJournal={()=>openProgress("missions")} onManagers={()=>openProgress("managers")} onDaily={()=>openProgress("daily")} onContracts={()=>openProgress("contracts")} dailyAvailable={daily?.available??false} />
+      <IdleHud game={game} hidden={interfacePaused||targeting!==null} onCollect={collectIncome} onBoost={activateProduction} onBattle={mainAction} onMission={navigateMission} onClaimMission={claimMission} onJournal={()=>openProgress("missions")} onManagers={()=>openProgress("managers")} onDaily={()=>openProgress("daily")} onContracts={()=>openProgress("contracts")} dailyAvailable={daily?.available??false} dailyWebOnly={dailyWebOnly} />
       <div className="wave-hud"><div className="wave-hud-main"><button onClick={() => openPanel("war")} aria-label="انتخاب حالت نبرد"><Waves size={19} /><span>موج <strong>{fa(game.wave)}</strong><small>{game.mode === "campaign" ? "/ ۲۵" : game.mode === "endless" ? " / ∞" : " / چالش"}</small></span><ChevronDown size={12} /></button><span className="hud-divider" /><span className="base-health"><Heart size={16} fill="currentColor" /><strong>{fa(game.hearts)}</strong><small>/۲۰</small></span></div><div className="wave-progress"><i style={{ width: `${progress * 100}%` }} /></div>{!activeBattle && previewUnits.length > 0 && <div className="wave-preview" aria-label="ترکیب موج بعدی">{previewUnits.map(u => <span key={u.kind === "boss" ? `boss-${u.boss}` : u.kind} className={`preview-unit unit-${u.kind}${u.kind === "boss" ? ` boss-${u.boss}` : ""}`} title={u.kind === "boss" ? "غول‌آخر" : u.kind === "speed" ? "تندرو" : u.kind === "corvette" ? "ناوچه" : u.kind === "air" ? "هوایی" : u.kind === "sub" ? "زیردریایی" : "ناوشکن"}>{u.kind === "boss" ? "☠" : u.kind === "air" ? "✈" : u.kind === "sub" ? "⚓" : u.kind === "destroyer" ? "⬢" : u.kind === "corvette" ? "⬣" : "▲"}<b>{fa(u.count)}</b></span>)}</div>}{activeBattle && <div className="wave-caption">{battlePaused ? <><Pause size={10} /> نبرد متوقف است</> : <><i /> {fa(remaining)} هدف باقی‌مانده</>}</div>}</div>
       {boss && !interfacePaused && !targeting && <div className="boss-bar" role="status" aria-label={`غول‌آخر موج ${fa(game.wave)}`}><span className="boss-skull">☠</span><div className="boss-track"><div className="boss-fill" style={{ width: `${Math.max(0, (boss.hp / boss.maxHp) * 100)}%` }} /><span className="boss-label">غول‌آخر موج {fa(game.wave)} · {fa(Math.max(0, Math.ceil(boss.hp)))} / {fa(boss.maxHp)}</span></div></div>}
       {showCombo && !interfacePaused && !targeting && <div className="combo-badge" aria-hidden="true"><Flame size={16} fill="currentColor" /><strong>×{fa(game.combo)}</strong><span>کمبو!</span><i style={{ width: `${Math.min(100, (game.comboTimer / 3.5) * 100)}%` }} /></div>}
@@ -439,7 +505,7 @@ export default function Game() {
     {selectedSlot !== null && sheetSlot === null && <SlotRadial key={`radial-${selectedSlot}`} game={game} slot={selectedSlot} dispatch={dispatch} close={() => setSelectedSlot(null)} openSheet={() => setSheetSlot(selectedSlot)} onBuild={buildTower} feedback={feedback} notify={notify} />}
     {sheetSlot !== null && <TowerSheet key={sheetSlot} game={game} slot={sheetSlot} kind={previewKind} onKindChange={setPreviewKind} dispatch={dispatch} close={() => setSheetSlot(null)} onResearch={() => openPanel("research")} onBuild={buildTower} feedback={feedback} notify={notify} />}
     {panel && <Panels panel={panel} game={game} dispatch={dispatch} close={() => setPanel(null)} notify={notify} sound={sound} setSound={setSound} vibration={vibration} setVibration={setVibration} cinematic={cinematic} setCinematic={setCinematic} onSelectTower={chooseSlot} onSelectBuilding={chooseBuilding} />}
-    {progressPanel && <ProgressionPanels panel={progressPanel} game={game} dispatch={dispatch} close={()=>setProgressPanel(null)} navigate={navigateMission} feedback={feedback} notify={notify} daily={daily} dailyBusy={dailyBusy} dailyError={dailyError} claimDaily={claimDaily} reloadDaily={()=>void reloadDaily()} />}
+    {progressPanel && <ProgressionPanels panel={progressPanel} game={game} dispatch={dispatch} close={()=>setProgressPanel(null)} navigate={navigateMission} feedback={feedback} notify={notify} daily={daily} dailyBusy={dailyBusy} dailyError={dailyError} claimDaily={claimDaily} reloadDaily={()=>void reloadDaily()} dailyWebOnly={dailyWebOnly} />}
     {moreOpen && <MoreMenu game={game} close={() => setMoreOpen(false)} open={openPanel} openProgress={openProgress} />}
     {!otherInterface && (game.idle.offline ? <OfflineView game={game} dispatch={dispatch} feedback={feedback}/> : game.idle.rewards[0] ? <RewardView key={game.idle.rewards[0].id} reward={game.idle.rewards[0]} dispatch={dispatch} feedback={feedback}/> : pendingReport ? <BattleResultView report={pendingReport} dispatch={dispatch} autoBattle={game.idle.autoBattle} feedback={feedback} onDevelop={()=>openPanel("defense")}/> : null)}
     {incomeBurst && !interfacePaused && <div className="income-burst" key={incomeBurst.id} aria-hidden="true"><strong>+${compact(incomeBurst.cash)}</strong>{Array.from({length:9},(_,i)=><span key={i} style={{"--coin-i":i} as React.CSSProperties}><Coins size={19}/></span>)}</div>}
