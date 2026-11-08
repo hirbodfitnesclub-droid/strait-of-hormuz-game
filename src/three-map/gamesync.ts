@@ -5,7 +5,8 @@ import buildingsData from './buildings-3d.json';
 import { loadModel, TOWER_MODEL, BRANCH_MODEL, groundY } from './models3d';
 import { hull } from './ships3d';
 import { pctTo3d, point3dToPct } from './coords';
-import { getRange, type GameState } from '@/lib/game';
+import { getRange, type GameState, type Shot } from '@/lib/game';
+import type { BattleSound } from '@/lib/battle-audio';
 import { BattleFX } from './battlefx';
 
 type LaneName = 'enemy' | 'trade' | 'pirate' | 'port';
@@ -15,6 +16,7 @@ const PLATFORMS = (slotsData as { platforms: { id: number; x: number; z: number 
 const BUILDINGS = buildingsData as Record<string, { glb: string; x: number; z: number; water: boolean }>;
 
 export interface SyncCallbacks {
+  onSound?(kind: BattleSound): void;
   onSlot(id: number): void;
   onBuilding(id: string): void;
   onPlatform(id: number): void;
@@ -44,15 +46,26 @@ const DPR_STEPS = [2, 1.6, 1.3, 1.1, 1];
 const LANE_SAMPLES = 256;
 
 const KIND_COLOR: Record<string, number> = { cannon: 0xffd27a, heavy: 0xff9a5c, missile: 0xff6a5c, air: 0x7ac8ff, ew: 0xc07aff, boat: 0x7affc8 };
+const CENTER3D = new THREE.Vector3(329, 0, 231); // theater center (world ≈658×462)
 
 /* ===== Pack animation system (Phase 0) — the pack's own motions, revived =====
    Models carry named nodes (anim:*) from the pack source; GLB export preserved them.
    Behaviors below replicate the pack's useWeapon/useFrame math (kit.tsx, towers.tsx, buildings.tsx). */
+/* All 18 pack glow colors, transcribed from the pack's own data table
+   (owner-models/src/data/towers.ts glowColor) — ew/garrison/torpedo/mine
+   previously fell back to base-family colors and never got a charge glow
+   (audit مهم-۳۹). */
 const PACK_GLOW: Record<string, string> = {
   autocannon: '#ffb020', ciws: '#ff6b78', railgun: '#38e1c6', howitzer: '#ff9a3c', mlrs: '#ff8a00',
   thermobaric: '#ff5c39', silo: '#ff4d5e', hypersonic: '#ff2d78', swarm: '#7dd3fc', aadefense: '#38bdf8',
-  bavar: '#4ade80', laser: '#c026d3', emp: '#8b5cf6', sonar: '#22ff88',
+  bavar: '#4ade80', laser: '#c026d3', ew: '#38e1c6', emp: '#8b5cf6', sonar: '#22ff88',
+  garrison: '#fbbf24', torpedo: '#ff5c39', mine: '#22d3ee',
 };
+/** Kinds whose models collect glow materials for the charge-cycle pulse. */
+const CHARGE_GLOW_KINDS = new Set(['railgun', 'thermobaric', 'hypersonic', 'ew', 'garrison', 'torpedo', 'mine']);
+/** Heavy missiles whose rolled damage gets a floating number on impact
+ *  (PRD §۸٫۳ — floating numbers are for crits, heavy missiles and bounty). */
+const HEAVY_POPUP_KINDS = new Set(['silo', 'hypersonic', 'swarm', 'bavar']);
 // turn = yaw/pitch tracking speed, loft = pitch bias, recoil in model units — from pack useWeapon opts
 const WEAPON_SPEC: Record<string, { turn: number; loft?: number; maxUp?: number; recoil: number }> = {
   autocannon: { turn: 5, recoil: 0.16 }, ciws: { turn: 8, recoil: 0.2 }, railgun: { turn: 2.5, recoil: 0.45 },
@@ -62,7 +75,6 @@ const WEAPON_SPEC: Record<string, { turn: number; loft?: number; maxUp?: number;
   aadefense: { turn: 6, maxUp: 1.4, recoil: 0.14 }, bavar: { turn: 5, recoil: 0.2 },
   laser: { turn: 5, recoil: 0.2 }, sonar: { turn: 2, recoil: 0.2 },
 };
-const GLOW_PULSE_KINDS = new Set(['railgun', 'thermobaric', 'hypersonic']);
 
 interface AnimNode {
   obj: THREE.Object3D; name: string; phase: number;
@@ -202,6 +214,7 @@ function enemyModel(kind: string, boss: number): THREE.Group {
 }
 
 interface Ent { obj: THREE.Group; bar?: ReturnType<typeof barSprites>; init?: boolean; phase: number; bobAmp: number; wake?: THREE.Mesh; mats?: THREE.Material[]; speed?: number; lastTx?: number; lastTz?: number }
+interface PopupSprite { sp: THREE.Sprite; mat: THREE.SpriteMaterial; tex: THREE.CanvasTexture; cv: HTMLCanvasElement; age: number; dur: number; wx: number; wz: number; baseY: number; w: number }
 
 let _wakeTex: THREE.Texture | null = null;
 function wakeTexture(): THREE.Texture {
@@ -272,6 +285,18 @@ export class GameSync3D {
   private prevHp = new Map<string, number>();
   private kenneyRev = false;
   private lastShots: unknown = null;
+  /* Camera shake (checklist ۱۳٫۲ — was completely absent, F-9): pack amounts
+   * accumulate here, decay at the pack's 1.6/s, capped at the pack's 0.45. */
+  shake = 0;
+  /* 3D popup renderer (PRD §۸٫۳): floating numbers for crits, heavy missiles
+   * and bounty/money ONLY — never for ordinary shots. */
+  readonly popupSprites = new Map<number, PopupSprite>();
+  private popupFree: PopupSprite[] = [];
+  private popupSeq = -1;
+  private seenPopups = new Set<number>();
+  private prevCooldowns: Record<string, number> | null = null;
+  private prevHearts: number | null = null;
+  private entKinds = new Map<string, string>();
   /* Shot/impact telemetry (fix program): window.__telemetry READS the
    * logic-side counters (GameState.fireStats — shots counted at fire time,
    * hits/fizzled resolved by the impact phase in game.ts) instead of
@@ -372,6 +397,8 @@ export class GameSync3D {
   setState(game: GameState, opts: { selectedSlot: number | null; targeting: string | null; targetPreview: { x: number; y: number } }) {
     this.state = game; this.selectedSlot = opts.selectedSlot; this.targeting = opts.targeting;
     this.syncTelemetry(game);
+    this.consumePopups(game);
+    this.detectStateEvents(game);
     // movement stability: cap how far a target may move per state update (~22 u/s) so a
     // hitched tick can no longer teleport ships — they sail fast instead of streaking.
     const nowS = performance.now();
@@ -383,6 +410,131 @@ export class GameSync3D {
     if (dens !== this.lastDensity) { this.lastDensity = dens; try { this.map.setBattleDensity?.(dens); } catch { /* noop */ } }
     this.reconcileStatics(game);
     this.updateSelectionVisuals(game, opts.targetPreview);
+  }
+
+  private sound(kind: BattleSound) {
+    try { this.cb.onSound?.(kind); } catch { /* audio is best-effort */ }
+  }
+
+  /** Popup stream consumption. The logic curates which popups exist, but the
+   *  3D renderer never consumed them (audit: the 3D battle was numberless).
+   *  Rendering follows PRD §۸٫۳ — crits and money gains float; the 💥 marker
+   *  becomes the strike's ballistic FX instead of a floating emoji, and the
+   *  combo marker only plays its sound (the HUD badge already shows it). */
+  private consumePopups(game: GameState) {
+    for (const p of game.popups) {
+      if (this.seenPopups.has(p.id)) continue;
+      this.seenPopups.add(p.id);
+      if (p.text === '💥') { this.strikeFx(p.x, p.y); continue; }
+      if (p.text.startsWith('🔥')) { this.sound('combo'); continue; }
+      if (p.text.startsWith('✸')) { this.sound('crit'); this.spawnPopup(p.x, p.y, p.text, '#ffb340', Math.max(0.7, p.life)); continue; }
+      if (/^\+[0-9۰-۹]/.test(p.text)) this.spawnPopup(p.x, p.y, p.text, '#7be495', Math.max(0.7, p.life));
+    }
+    if (this.seenPopups.size > 400) this.seenPopups = new Set(game.popups.map(q => q.id));
+  }
+
+  /** State transitions the renderer owns: spell casts (EMP rings, overdrive
+   *  sound) and heart leaks (alarm, checklist ۱۳٫۳). */
+  private detectStateEvents(game: GameState) {
+    const pc = this.prevCooldowns;
+    if (pc) {
+      if ((pc.emp ?? 0) < 85 && game.cooldowns.emp >= 85) this.empFx();
+      if ((pc.overdrive ?? 0) < 115 && game.cooldowns.overdrive >= 115) this.sound('overdrive');
+    }
+    this.prevCooldowns = { ...game.cooldowns };
+    if (this.prevHearts !== null && game.hearts < this.prevHearts) this.sound('alarm');
+    this.prevHearts = game.hearts;
+  }
+
+  /** EMP spell (checklist §۵): three expanding rings from the map center. */
+  private empFx() {
+    this.sound('emp');
+    const [cx, cz] = pctTo3d(50, 50);
+    const center = new THREE.Vector3(cx, 0.5, cz);
+    for (let i = 0; i < 3; i++) {
+      this.fx.schedule(i * 0.28, () => this.fx.pulse(center, '#8b5cf6', 150 + i * 45, 1.7));
+    }
+  }
+
+  /** Strike spell (checklist §۵): eight ballistic missiles staggered 0.1s,
+   *  diving from the sky onto the marked point. The logic applies the damage
+   *  (through applyDamage); this is its visible delivery. */
+  private strikeFx(xPct: number, yPct: number) {
+    const [tx, tz] = pctTo3d(xPct, yPct);
+    for (let i = 0; i < 8; i++) {
+      this.fx.schedule(i * 0.1, () => {
+        const from = new THREE.Vector3(tx - 30 + i * 2.2, 52, tz - 12 + (i % 3) * 3);
+        const to = new THREE.Vector3(tx + (Math.random() - 0.5) * 7, 0.4, tz + (Math.random() - 0.5) * 7);
+        this.fx.shoot({ from, to, kind: 'missile', color: '#ffb347', dur: 0.8, arc: -4, size: 1.25, onArrive: () => { this.sound('explosion'); if (i === 0) this.addShake(0.12, to); } });
+        this.sound('launch');
+      });
+    }
+  }
+
+  private spawnPopup(xPct: number, yPct: number, text: string, color: string, dur: number) {
+    const [wx, wz] = pctTo3d(xPct, yPct);
+    this.spawnPopupWorld(wx, wz, text, color, dur);
+  }
+
+  private spawnPopupWorld(wx: number, wz: number, text: string, color: string, dur: number) {
+    let ps = this.popupFree.pop();
+    if (!ps) {
+      if (this.popupSprites.size >= 28) return; // hard cap — busiest frames stay bounded
+      const cv = document.createElement('canvas'); cv.width = 384; cv.height = 112;
+      const tex = new THREE.CanvasTexture(cv);
+      const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false });
+      const sp = new THREE.Sprite(mat); sp.renderOrder = 40;
+      ps = { sp, mat, tex, cv, age: 0, dur: 1, wx: 0, wz: 0, baseY: 6, w: 12 };
+      this.dyn.add(sp);
+    }
+    const ctx = ps.cv.getContext('2d')!;
+    ctx.clearRect(0, 0, ps.cv.width, ps.cv.height);
+    ctx.font = '800 52px system-ui, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.lineWidth = 12; ctx.strokeStyle = 'rgba(4,16,26,0.88)';
+    ctx.strokeText(text, 192, 56); ctx.fillStyle = color; ctx.fillText(text, 192, 56);
+    ps.tex.needsUpdate = true;
+    ps.age = 0; ps.dur = dur; ps.wx = wx; ps.wz = wz; ps.baseY = 6.5;
+    ps.w = Math.min(26, 8 + text.length * 2.1);
+    ps.sp.position.set(wx, ps.baseY, wz);
+    ps.sp.scale.set(ps.w, ps.w * (112 / 384), 1);
+    ps.sp.visible = true;
+    this.popupSprites.set(this.popupSeq--, ps);
+  }
+
+  private updatePopups(dt: number) {
+    if (!this.popupSprites.size) return;
+    const speed = this.state?.speed ?? 1;
+    for (const [id, ps] of [...this.popupSprites]) {
+      ps.age += dt * speed;
+      if (ps.age >= ps.dur) { ps.sp.visible = false; this.popupSprites.delete(id); this.popupFree.push(ps); continue; }
+      const k = ps.age / ps.dur;
+      ps.sp.position.y = ps.baseY + ps.age * 3.4;
+      ps.mat.opacity = ps.age < 0.1 ? ps.age / 0.1 : 1 - Math.max(0, (k - 0.55) / 0.45);
+      const pop = 0.72 + 0.28 * easeOutBack(Math.min(1, ps.age / 0.18));
+      ps.sp.scale.set(ps.w * pop, ps.w * (112 / 384) * pop, 1);
+    }
+  }
+
+  /** Pack camera shake (checklist ۱۳٫۲): amounts are the pack's fire-callback
+   *  values, attenuated by the camera's distance from the shot, disabled
+   *  under reduce-motion. Applied to the world root — the same group-jitter
+   *  pattern as the pack's Stage (Stage.tsx). */
+  private addShake(amount: number, at?: THREE.Vector3) {
+    if (typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return;
+    let att = 1;
+    if (at) { const d = this.map.camera.position.distanceTo(at); att = Math.max(0.2, Math.min(1, 130 / Math.max(60, d))); }
+    this.shake = Math.min(0.45, this.shake + amount * att);
+  }
+
+  private applyShake(dt: number) {
+    if (this.shake > 0.002) {
+      this.shake = Math.max(0, this.shake - dt * 1.6);
+      const camD = Math.max(60, this.map.camera.position.distanceTo(CENTER3D));
+      const a = this.shake * camD * 0.03;
+      this.root.position.set((Math.random() - 0.5) * a, (Math.random() - 0.5) * a * 0.55, (Math.random() - 0.5) * a * 0.7);
+    } else if (this.root.position.x !== 0 || this.root.position.y !== 0 || this.root.position.z !== 0) {
+      this.root.position.set(0, 0, 0);
+    }
   }
 
   private towerUrl(t: GameState['towers'][number]): string {
@@ -537,9 +689,13 @@ export class GameSync3D {
     if (this.targeting) {
       const [x, z] = pctTo3d(targetPreview.x, targetPreview.y);
       if (!this.targetRingMesh) {
-        this.targetRingMesh = new THREE.Mesh(this.ringGeometry(9, 11, 48), this.ringMatTarget);
+        this.targetRingMesh = new THREE.Mesh(this.ringGeometry(110.2, 111.9, 64), this.ringMatTarget);
         this.targetRingMesh.rotation.x = -Math.PI / 2;
         this.statics.add(this.targetRingMesh);
+      } else {
+        // the ring must show the strike's real blast radius: 17 percent units
+        // ≈ 111.9 world units (the old 9–11 ring understated it ~10x)
+        this.targetRingMesh.geometry = this.ringGeometry(110.2, 111.9, 64);
       }
       this.targetRingMesh.position.set(x, 0.5, z);
       this.targetRingMesh.visible = true;
@@ -726,6 +882,7 @@ export class GameSync3D {
     // enemies
     for (const e of game.enemies) {
       const key = `enemy-${e.id}`; alive.add(key);
+      this.entKinds.set(key, e.kind);
       const y = e.kind === 'air' ? 8 : e.kind === 'sub' ? 0.1 : 0.35;
       this.setTarget(key, 'enemy', e.progress, y, 'X');
       const wakeLen = e.kind === 'boss' ? (e.boss === 4 ? 30 : 24) : e.kind === 'destroyer' ? 13.5 : e.kind === 'sub' ? 0 : e.kind === 'corvette' ? 10 : 6.5;
@@ -744,6 +901,7 @@ export class GameSync3D {
     // pirates
     for (const p of game.pirates) {
       const key = `pirate-${p.id}`; alive.add(key);
+      this.entKinds.set(key, 'pirate');
       this.setTarget(key, 'pirate', p.progress, 0.35, 'X');
       void this.ensureEnt(key, () => hull(0x14181d, 6, 2, 'patrol'), { bar: 5, bob: 0.09, wake: { len: 6, wid: 3.4, fwd: 'X' } });
       const ent = this.ents.get(key);
@@ -816,17 +974,25 @@ export class GameSync3D {
       const killed = (key.startsWith('enemy-') || key.startsWith('pirate-')) && ent.init && (this.prevHp.get(key) ?? 1) <= 0;
       if (killed) {
         this.fx.explode(ent.obj.position, '#ff7a30', 1.6);
+        // death audio + the boss's own bigger shake (checklist ۱۳٫۲/۱۳٫۳ —
+        // the 3D path used to be completely silent)
+        const ek = this.entKinds.get(key);
+        if (ek === 'boss') { this.sound('explosion'); this.addShake(0.35, ent.obj.position); }
+        else if (ek === 'speed' || ek === 'air' || ek === 'pirate') this.sound('impact');
+        else this.sound('explosion');
         const mats: THREE.Material[] = [];
         ent.obj.traverse(o => { const mm = (o as THREE.Mesh).material as THREE.Material | undefined; if (mm) { const c = mm.clone(); c.transparent = true; (o as THREE.Mesh).material = c; mats.push(c); } });
         ent.mats = mats;
         this.dying.push({ ent, t: 0 });
         this.ents.delete(key);
       } else this.dropEnt(key);
-      this.targets.delete(key); this.prevFlash.delete(key); this.prevHp.delete(key);
+      this.targets.delete(key); this.prevFlash.delete(key); this.prevHp.delete(key); this.entKinds.delete(key);
     }
     this.stepMotion(dt, now);
     this.updateAnims(dt, now);
     this.fx.update(dt);
+    this.updatePopups(dt);
+    this.applyShake(dt);
     this.tuneResolution(dt, now);
     // shots → the pack's real battle FX (projectiles/beams per weapon family)
     if (game.shots !== this.lastShots) {
@@ -853,7 +1019,7 @@ export class GameSync3D {
             ta.shotIdx++;
           }
         }
-        this.dispatchShotFx(bestSlot, s.kind, sx, sy, sz, x2, z2, game);
+        this.dispatchShotFx(s, sx, sy, sz, x2, z2, game);
       }
     }
   }
@@ -891,53 +1057,80 @@ export class GameSync3D {
   }
 
   /* Per-family FX dispatch — projectile kind/color/arc/duration transcribed from the
-     pack's own fire() callbacks (towers.tsx), re-timed for game-world distances. */
-  private dispatchShotFx(slot: number | null, baseKind: string, sx: number, sy: number, sz: number, x2: number, z2: number, game: GameState) {
+     pack's own fire() callbacks (towers.tsx), re-timed for game-world distances.
+     Wave-1 FX rules:
+     - exactly ONE visual projectile per shot record (MECH-B contract: MLRS
+       emits one record per rocket; Swarm/Bavar emit one record per volley
+       missile, each with its own targetId — the old ×4/×3 display multipliers
+       fabricated shots that never happened);
+     - homing (track) goes ONLY to guided projectiles — missile, rocket,
+       hyper, torpedo. Shells and tracers fly straight (audit مهم-۴۴);
+     - tracking follows the record's OWN target (enemy or pirate by id), not
+       the nearest entity to the impact point (audit جدید-۱);
+     - EW fires no projectile: a local pulse ring at the tower + a spark at
+       the affected target;
+     - hero shots originate from the hero's own position (the record's x1/y1)
+       in hero gold — never borrowed from the nearest tower slot. */
+  private dispatchShotFx(s: Shot, sx: number, sy: number, sz: number, x2: number, z2: number, game: GameState) {
     const F = this.fx;
+    const slot = typeof s.slot === 'number' && s.slot >= 0 ? s.slot : null;
     const ta = slot !== null ? this.towerAnims.get(slot) : undefined;
     const from = new THREE.Vector3(sx, sy, sz);
-    // homing: nearest enemy ent to the impact point becomes the tracked target
-    let trackKey: string | null = null; let isAir = false; let ty = 1.2; let bpd = 64;
-    for (const e of game.enemies) {
-      const t = this.targets.get(`enemy-${e.id}`); if (!t) continue;
-      const d = (t.pos.x - x2) ** 2 + (t.pos.z - z2) ** 2;
-      if (d < bpd) { bpd = d; trackKey = `enemy-${e.id}`; isAir = e.kind === 'air'; ty = t.pos.y; }
-    }
-    const key = trackKey;
-    const track = key ? () => this.targets.get(key)?.pos ?? null : undefined;
-    const to = new THREE.Vector3(x2, ty, z2);
+    const isHero = s.modelKind === 'hero';
+    const kind = ta?.kind || (isHero ? '' : s.modelKind);
+    const color = isHero ? '#ffd27a' : (PACK_GLOW[kind] ?? ('#' + (KIND_COLOR[s.kind] ?? 0xffffff).toString(16).padStart(6, '0')));
+    const eKey = this.targets.has(`enemy-${s.targetId}`) ? `enemy-${s.targetId}` : this.targets.has(`pirate-${s.targetId}`) ? `pirate-${s.targetId}` : null;
+    const tPos = eKey ? this.targets.get(eKey)!.pos : null;
+    const to = tPos ? tPos.clone() : new THREE.Vector3(x2, 1.2, z2);
+    const isAir = game.enemies.find(e => e.id === s.targetId)?.kind === 'air';
+    const track = eKey ? () => this.targets.get(eKey)?.pos ?? null : undefined;
     const dist = from.distanceTo(to);
-    const kind = ta?.kind ?? '';
-    const color = PACK_GLOW[kind] ?? ('#' + (KIND_COLOR[baseKind] ?? 0xffffff).toString(16).padStart(6, '0'));
     const dir = to.clone().sub(from).normalize();
     const clamp = (v: number, a: number, b: number) => Math.max(a, Math.min(b, v));
+    // Arrival effects shared by the projectile cases: per-family impact audio
+    // and the heavy-missile damage number (PRD §۸٫۳). Crits are numbered by
+    // the logic's own popup stream, so they are not duplicated here; pirate
+    // records carry damage 0 and never spawn a number.
+    const arrive = (soundKind: BattleSound | null) => () => {
+      if (soundKind) this.sound(soundKind);
+      if (!s.crit && s.damage > 0 && HEAVY_POPUP_KINDS.has(kind)) {
+        const p = eKey ? this.targets.get(eKey)?.pos : null;
+        this.spawnPopupWorld(p?.x ?? to.x, p?.z ?? to.z, `−${Math.max(1, Math.round(s.damage))}`, '#ffd9a0', 1.1);
+      }
+    };
+    if (isHero) {
+      if (s.kind === 'air') F.shoot({ from, to, kind: 'tracer', color, dur: Math.max(0.08, dist / 330), jitter: 0.4, air: isAir });
+      else { F.shoot({ from, to, kind: 'missile', color, dur: clamp(dist / 70, 0.6, 1.6), arc: dist * 0.18, track, onArrive: arrive('impact') }); F.flashAt(from, dir, color, 1.2); }
+      return;
+    }
     switch (kind) {
-      case 'railgun': F.rail(from, to, color); F.explode(to, color, 1.5); F.flashAt(from, dir, color, 2.4); break;
+      case 'railgun': F.rail(from, to, color); F.explode(to, color, 1.5); F.flashAt(from, dir, color, 2.4); this.addShake(0.15, from); break;
       case 'laser': {
         const cry = ta?.crystal ? ta.crystal.getWorldPosition(new THREE.Vector3()) : from;
-        F.rail(cry, to, color, 0.22); F.spark(to, color, 4); F.flashAt(cry, dir, color, 1.1);
+        // beam width/brightness follow the tower's focus ramp (1 → ×5, the
+        // same ramp the logic applies to beam damage) so the player sees
+        // the beam charge up on a held target
+        const tw = slot !== null ? game.towers.find(t => t.slot === slot) : undefined;
+        const ramp = Math.min(5, 1 + (tw?.focusTime ?? 0));
+        F.rail(cry, to, color, 0.22, ramp); F.spark(to, color, 4); F.flashAt(cry, dir, color, 1.1);
         break;
       }
-      case 'howitzer': F.shoot({ from, to, kind: 'shell', color: '#ffb347', dur: clamp(dist / 95, 0.5, 1.5), arc: dist * 0.09, track }); F.smoke(from, 0.7, false); F.flashAt(from, dir, '#ffb347', 1.8); break;
-      case 'mlrs':
-        for (let i = 0; i < 4; i++) F.schedule(i * 0.07, () => { F.shoot({ from, to, kind: 'rocket', color, dur: clamp(dist / 85, 0.6, 1.6), arc: dist * 0.13, jitter: 2.4, track }); F.smoke(from, 0.55, false); });
-        F.flashAt(from, dir, color, 1.6); break;
-      case 'silo': F.shoot({ from, to, kind: 'missile', color, dur: clamp(dist / 60, 0.9, 2.2), arc: dist * 0.32, track }); for (let i = 0; i < 6; i++) F.smoke(from, 0.8, false); F.flashAt(from, dir, color, 1.8); break;
-      case 'hypersonic': F.shoot({ from, to, kind: 'hyper', color, dur: clamp(dist / 220, 0.35, 0.8), arc: dist * 0.22, size: 1.4, track }); for (let i = 0; i < 8; i++) F.smoke(from, 0.9, false); F.flashAt(from, dir, color, 2); break;
-      case 'swarm':
-        for (let i = 0; i < 3; i++) F.schedule(i * 0.09, () => { F.shoot({ from, to, kind: 'missile', color, dur: clamp(dist / 70, 0.7, 1.8), arc: dist * (0.12 + (i % 3) * 0.04), size: 0.8, jitter: 1.2, track }); F.smoke(from, 0.5, false); });
-        F.flashAt(from, dir, color, 1.4); break;
-      case 'bavar': F.shoot({ from, to, kind: 'missile', color, dur: clamp(dist / 65, 0.8, 1.8), arc: dist * 0.2, air: true, track }); for (let i = 0; i < 5; i++) F.smoke(from, 0.7, false); F.flashAt(from, dir, color, 1.6); break;
-      case 'thermobaric': F.shoot({ from, to, kind: 'plasma', color, dur: clamp(dist / 80, 0.6, 1.4), arc: dist * 0.05, size: 1.2, track }); F.flashAt(from, dir, color, 2.2); break;
-      case 'emp': F.shoot({ from, to, kind: 'plasma', color, dur: clamp(dist / 110, 0.4, 1.1), size: 1.1, track }); F.flashAt(from, dir, color, 1.6); break;
-      case 'sonar': F.shoot({ from, to, kind: 'rocket', color, dur: clamp(dist / 80, 0.6, 1.5), arc: dist * 0.06, size: 1.2, track }); F.flashAt(from, dir, color, 1.5); break;
-      case 'ciws': F.shoot({ from, to, kind: 'tracer', color, dur: Math.max(0.08, dist / 360), jitter: 0.7, air: isAir, track }); F.flashAt(from, dir, color, 1.2); break;
-      case 'aadefense': F.shoot({ from, to, kind: 'tracer', color, dur: Math.max(0.08, dist / 320), jitter: 0.4, air: isAir, track }); F.flashAt(from, dir, color, 1.1); break;
-      case 'torpedo': F.shoot({ from, to, kind: 'torpedo', color, dur: clamp(dist / 34, 1, 2.6), track }); F.flashAt(from, dir, color, 0.9); break;
-      case 'mine': F.shoot({ from, to, kind: 'torpedo', color, dur: clamp(dist / 34, 1, 2.6), size: 1.3, track }); break;
-      case 'ew': F.shoot({ from, to, kind: 'plasma', color, dur: clamp(dist / 120, 0.35, 1), size: 0.7, track }); F.flashAt(from, dir, color, 1.2); break;
-      case 'garrison': F.shoot({ from, to, kind: 'tracer', color, dur: Math.max(0.08, dist / 300), jitter: 0.3, track }); F.flashAt(from, dir, color, 0.9); break;
-      default: F.shoot({ from, to, kind: 'tracer', color, dur: Math.max(0.08, dist / 300), jitter: 0.3, air: isAir, track }); F.flashAt(from, dir, color, 1.3); break;
+      case 'howitzer': F.shoot({ from, to, kind: 'shell', color: '#ffb347', dur: clamp(dist / 95, 0.5, 1.5), arc: dist * 0.09, onArrive: arrive('impact') }); F.smoke(from, 0.7, false); F.flashAt(from, dir, '#ffb347', 1.8); this.addShake(0.06, from); this.sound('launch'); break;
+      case 'mlrs': F.shoot({ from, to, kind: 'rocket', color, dur: clamp(dist / 85, 0.6, 1.6), arc: dist * 0.13, jitter: 2.4, track, onArrive: arrive('impact') }); F.smoke(from, 0.55, false); F.flashAt(from, dir, color, 1.6); this.sound('launch'); break;
+      case 'silo': F.shoot({ from, to, kind: 'missile', color, dur: clamp(dist / 60, 0.9, 2.2), arc: dist * 0.32, track, onArrive: arrive('explosion') }); for (let i = 0; i < 6; i++) F.smoke(from, 0.8, false); F.flashAt(from, dir, color, 1.8); this.addShake(0.08, from); this.sound('launch'); break;
+      case 'hypersonic': F.shoot({ from, to, kind: 'hyper', color, dur: clamp(dist / 220, 0.35, 0.8), arc: dist * 0.22, size: 1.4, track, onArrive: arrive('explosion') }); for (let i = 0; i < 8; i++) F.smoke(from, 0.9, false); F.flashAt(from, dir, color, 2); this.addShake(0.25, from); this.sound('launch'); break;
+      case 'swarm': F.shoot({ from, to, kind: 'missile', color, dur: clamp(dist / 70, 0.7, 1.8), arc: dist * (0.10 + Math.random() * 0.08), size: 0.8, jitter: 1.2, track, onArrive: arrive('impact') }); F.smoke(from, 0.5, false); F.flashAt(from, dir, color, 1.4); this.sound('launch'); break;
+      case 'bavar': F.shoot({ from, to, kind: 'missile', color, dur: clamp(dist / 65, 0.8, 1.8), arc: dist * 0.2, air: true, track, onArrive: arrive('impact') }); for (let i = 0; i < 5; i++) F.smoke(from, 0.7, false); F.flashAt(from, dir, color, 1.6); this.sound('launch'); break;
+      case 'thermobaric': F.shoot({ from, to, kind: 'plasma', color, dur: clamp(dist / 80, 0.6, 1.4), arc: dist * 0.05, size: 1.2, onArrive: arrive('explosion') }); F.flashAt(from, dir, color, 2.2); this.addShake(0.12, from); break;
+      case 'emp': F.shoot({ from, to, kind: 'plasma', color, dur: clamp(dist / 110, 0.4, 1.1), size: 1.1 }); F.flashAt(from, dir, color, 1.6); break;
+      case 'sonar': F.shoot({ from, to, kind: 'rocket', color, dur: clamp(dist / 80, 0.6, 1.5), arc: dist * 0.06, size: 1.2, track, onArrive: arrive('impact') }); F.flashAt(from, dir, color, 1.5); this.sound('launch'); break;
+      case 'ciws': F.shoot({ from, to, kind: 'tracer', color, dur: Math.max(0.08, dist / 360), jitter: 0.7, air: isAir }); F.flashAt(from, dir, color, 1.2); break;
+      case 'aadefense': F.shoot({ from, to, kind: 'tracer', color, dur: Math.max(0.08, dist / 320), jitter: 0.4, air: isAir }); F.flashAt(from, dir, color, 1.1); break;
+      case 'torpedo': F.shoot({ from, to, kind: 'torpedo', color, dur: clamp(dist / 34, 1, 2.6), track, onArrive: arrive('impact') }); F.flashAt(from, dir, color, 0.9); break;
+      case 'mine': F.shoot({ from, to, kind: 'torpedo', color, dur: clamp(dist / 34, 1, 2.6), size: 1.3, track, onArrive: arrive('impact') }); break;
+      case 'ew': F.pulse(from, color, 30, 0.85); F.spark(to, color, 3); break;
+      case 'garrison': F.shoot({ from, to, kind: 'tracer', color, dur: Math.max(0.08, dist / 300), jitter: 0.3 }); F.flashAt(from, dir, color, 0.9); break;
+      default: F.shoot({ from, to, kind: 'tracer', color, dur: Math.max(0.08, dist / 300), jitter: 0.3, air: isAir }); F.flashAt(from, dir, color, 1.3); break;
     }
   }
 
@@ -957,7 +1150,7 @@ export class GameSync3D {
       missile: (byName.get('anim:missile') ?? [])[0] ?? null,
       doorsL: byName.get('anim:doorL') ?? [], doorsR: byName.get('anim:doorR') ?? [], cells: byName.get('anim:cell') ?? [],
       crystal: (byName.get('anim:crystal') ?? [])[0] ?? null,
-      generic, glowMats: GLOW_PULSE_KINDS.has(kind) ? collectGlowMats(model, kind) : [],
+      generic, glowMats: CHARGE_GLOW_KINDS.has(kind) ? collectGlowMats(model, kind) : [],
       targetPos: null, lastShotAt: 0, period: 0, shotIdx: 0,
     };
     this.towerAnims.set(slot, ta);
@@ -1063,7 +1256,8 @@ export class GameSync3D {
         const ch = 1 - cool;
         const mult = ta.kind === 'railgun' ? 1 + ch * ch * 9 + Math.sin(t * 40) * ch * 0.6
           : ta.kind === 'thermobaric' ? 2 + ch * 6 + Math.sin(t * 8)
-          : 2 + (cool < 0.32 ? (0.32 - cool) * 25 : 0) + Math.sin(t * 5) * 0.8;
+          : ta.kind === 'hypersonic' ? 2 + (cool < 0.32 ? (0.32 - cool) * 25 : 0) + Math.sin(t * 5) * 0.8
+          : 1 + ch * ch * 4 + Math.sin(t * 6) * ch * 0.5; // ew/garrison/torpedo/mine generic charge pulse
         for (const g of ta.glowMats) {
           if (g.basic) (g.mat as THREE.MeshBasicMaterial).color.copy(g.base).multiplyScalar(Math.max(0.4, mult));
           else (g.mat as THREE.MeshStandardMaterial).emissiveIntensity = g.baseIntensity * Math.max(0.4, mult * 0.6);

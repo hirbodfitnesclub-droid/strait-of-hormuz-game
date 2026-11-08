@@ -11,6 +11,19 @@ export interface ShootOpts {
   from: THREE.Vector3; to: THREE.Vector3; kind: ShootKind; color: string;
   dur?: number; arc?: number; size?: number; jitter?: number; air?: boolean;
   track?: () => THREE.Vector3 | null;
+  onArrive?: () => void;   // fired once when the projectile completes its flight
+}
+
+/* Unified pool policy (audit مهم-۴۱): every pool first takes a free slot in
+   round-robin order; when the pool is exhausted it steals the oldest slot in
+   rotation. An effect is never silently dropped, and slot 0 is no longer the
+   universal victim whose active effect got cut off by every overflow. */
+function pickPooled<T extends { on: boolean }>(arr: T[], cur: { i: number }): T {
+  for (let k = 0; k < arr.length; k++) {
+    const idx = (cur.i + k) % arr.length;
+    if (!arr[idx].on) { cur.i = (idx + 1) % arr.length; return arr[idx]; }
+  }
+  const idx = cur.i; cur.i = (cur.i + 1) % arr.length; return arr[idx];
 }
 
 const PI = Math.PI;
@@ -83,14 +96,16 @@ interface Proj {
   on: boolean; kind: ShootKind; from: THREE.Vector3; to: THREE.Vector3; off: THREE.Vector3;
   t: number; dur: number; arc: number; size: number; trail: number; color: string; air: boolean;
   track?: () => THREE.Vector3 | null;
+  onArrive?: () => void;
   g: THREE.Group; glow: THREE.Mesh; body: THREE.Group; flame: THREE.Mesh;
 }
+interface Pulse { on: boolean; t: number; dur: number; maxR: number; m: THREE.Mesh; mat: THREE.MeshBasicMaterial }
 interface Boom {
   on: boolean; t: number; size: number; water: boolean;
   g: THREE.Group; fire: THREE.Mesh; core: THREE.Mesh; ring: THREE.Mesh; col: THREE.Mesh;
   fm: THREE.MeshBasicMaterial; cm: THREE.MeshBasicMaterial; rm: THREE.MeshBasicMaterial; wm: THREE.MeshStandardMaterial; color: THREE.Color;
 }
-interface Beam { on: boolean; t: number; dur: number; m: THREE.Mesh; mat: THREE.MeshBasicMaterial; core: THREE.Mesh }
+interface Beam { on: boolean; t: number; dur: number; w0: number; m: THREE.Mesh; mat: THREE.MeshBasicMaterial; core: THREE.Mesh }
 interface Flash { on: boolean; t: number; g: THREE.Group; mat: THREE.MeshBasicMaterial; light?: THREE.PointLight }
 
 const BOOM_SCALE = 2.0; // pack FX tuned for a ~14-unit camera; game camera is far — booms read bigger
@@ -99,6 +114,8 @@ export class BattleFX {
   readonly group = new THREE.Group();
   private smokeP: Particles; private sparkP: Particles;
   private projs: Proj[] = []; private booms: Boom[] = []; private beams: Beam[] = []; private flashes: Flash[] = [];
+  readonly pulses: Pulse[] = [];
+  private projCur = { i: 0 }; private boomCur = { i: 0 }; private beamCur = { i: 0 }; private flashCur = { i: 0 }; private pulseCur = { i: 0 };
   private light: THREE.PointLight;
   private queue: { at: number; fn: () => void }[] = [];
   private clock = 0;
@@ -159,7 +176,7 @@ export class BattleFX {
       m.add(core);
       m.visible = false;
       this.group.add(m);
-      this.beams.push({ on: false, t: 0, dur: 0.35, m, mat, core });
+      this.beams.push({ on: false, t: 0, dur: 0.35, w0: 1, m, mat, core });
     }
     // pack-style muzzle flashes (star + cone + core sphere), pooled
     const flashSphere = new THREE.SphereGeometry(0.12, 8, 6);
@@ -177,8 +194,28 @@ export class BattleFX {
       this.group.add(g);
       this.flashes.push({ on: false, t: 0, g, mat });
     }
+    // expanding pulse rings (EW shot pulse, EMP spell) — pooled, flat on the water
+    const pulseGeo = new THREE.RingGeometry(0.86, 1, 56).rotateX(-PI / 2);
+    for (let i = 0; i < 10; i++) {
+      const mat = addMat('#fff');
+      const m = new THREE.Mesh(pulseGeo, mat);
+      m.visible = false; m.renderOrder = 6;
+      this.group.add(m);
+      this.pulses.push({ on: false, t: 0, dur: 1.1, maxR: 30, m, mat });
+    }
     this.light = new THREE.PointLight('#ffaa55', 0, 30, 1.4);
     this.group.add(this.light);
+  }
+
+  /** One expanding ring at p, growing to maxR world units over dur seconds. */
+  pulse(p: THREE.Vector3, color: string, maxR: number, dur = 1.1) {
+    const pu = pickPooled(this.pulses, this.pulseCur);
+    pu.on = true; pu.t = 0; pu.dur = dur; pu.maxR = maxR;
+    pu.m.position.set(p.x, Math.max(0.35, p.y), p.z);
+    pu.mat.color.set(color).multiplyScalar(4);
+    pu.mat.opacity = 0.85;
+    pu.m.scale.setScalar(0.01);
+    pu.m.visible = true;
   }
 
   schedule(delay: number, fn: () => void) { this.queue.push({ at: this.clock + delay, fn }); }
@@ -195,7 +232,7 @@ export class BattleFX {
     }
   }
   flashAt(p: THREE.Vector3, dir: THREE.Vector3, color: string, size = 1) {
-    const f = this.flashes.find(x => !x.on) ?? this.flashes[0];
+    const f = pickPooled(this.flashes, this.flashCur);
     f.on = true; f.t = 1;
     f.g.position.copy(p);
     this.tmp.copy(p).add(dir);
@@ -207,9 +244,9 @@ export class BattleFX {
     f.g.visible = true;
   }
   shoot(o: ShootOpts) {
-    const pr = this.projs.find(p => !p.on);
-    if (!pr) return;
-    pr.on = true; pr.kind = o.kind; pr.from.copy(o.from); pr.to.copy(o.to);
+    // pool policy: never drop a shot — steal the oldest slot in rotation
+    const pr = pickPooled(this.projs, this.projCur);
+    pr.on = true; pr.kind = o.kind; pr.from.copy(o.from); pr.to.copy(o.to); pr.onArrive = o.onArrive;
     const j = o.jitter ?? 0.25;
     pr.off.set((Math.random() - 0.5) * j, (Math.random() - 0.5) * j * 0.5, (Math.random() - 0.5) * j);
     pr.dur = o.dur ?? 0.6; pr.arc = o.arc ?? 0; pr.size = o.size ?? 1; pr.t = 0; pr.trail = 0; pr.color = o.color; pr.air = !!o.air; pr.track = o.track;
@@ -231,7 +268,7 @@ export class BattleFX {
   }
   explode(p: THREE.Vector3, color: string, size: number, water = true) {
     size *= BOOM_SCALE;
-    const b = this.booms.find(x => !x.on) ?? this.booms[0];
+    const b = pickPooled(this.booms, this.boomCur);
     b.on = true; b.t = 0; b.size = size; b.water = water && p.y < 2.5;
     b.color.set(color);
     b.g.position.copy(p);
@@ -246,13 +283,15 @@ export class BattleFX {
       this.smoke(this.tmp, 0.5 + size * 0.35, true);
     }
   }
-  rail(a: THREE.Vector3, b2: THREE.Vector3, color: string, dur = 0.35) {
-    const bm = this.beams.find(x => !x.on) ?? this.beams[0];
-    bm.on = true; bm.t = 0; bm.dur = dur;
+  /** width scales the beam's thickness and brightness — the laser passes its
+   *  focus ramp (1→5) so the charge-up is visible; hitscan callers keep 1. */
+  rail(a: THREE.Vector3, b2: THREE.Vector3, color: string, dur = 0.35, width = 1) {
+    const bm = pickPooled(this.beams, this.beamCur);
+    bm.on = true; bm.t = 0; bm.dur = dur; bm.w0 = width;
     bm.m.position.copy(a);
     bm.m.lookAt(b2);
     bm.m.userData.len = a.distanceTo(b2);
-    bm.mat.color.set(color).multiplyScalar(5);
+    bm.mat.color.set(color).multiplyScalar(3.5 + width * 1.2);
     bm.m.visible = true;
   }
 
@@ -289,6 +328,8 @@ export class BattleFX {
       if (pr.t >= 1) {
         pr.on = false;
         pr.g.visible = false;
+        const arrive = pr.onArrive; pr.onArrive = undefined;
+        if (arrive) arrive();
         const size = { tracer: 0.3, shell: 1.1, missile: 1.7, rocket: 0.9, hyper: 2.6, plasma: 2.1, torpedo: 1.6 }[pr.kind] * (pr.kind === 'tracer' ? 1 : pr.size);
         if (pr.kind === 'tracer') { this.spark(pr.to, pr.color, 3); if (Math.random() < 0.25) this.explode(pr.to, pr.color, 0.3, false); }
         else this.explode(pr.to, pr.kind === 'plasma' || pr.kind === 'hyper' ? pr.color : '#ff8a2a', size, !pr.air);
@@ -318,7 +359,7 @@ export class BattleFX {
       if (!bm.on) continue;
       bm.t += d / bm.dur;
       if (bm.t >= 1) { bm.on = false; bm.m.visible = false; continue; }
-      const w = 0.2 * (1 - bm.t);
+      const w = 0.2 * bm.w0 * (1 - bm.t);
       bm.m.scale.set(w, w, bm.m.userData.len as number);
       bm.core.scale.set(0.35, 0.35, 1);
       bm.mat.opacity = 1 - bm.t;
@@ -330,6 +371,14 @@ export class BattleFX {
       const kk = f.t;
       f.g.scale.setScalar((0.6 + kk) * (f.g.userData.size ?? 1));
       f.mat.opacity = kk;
+    }
+    for (const pu of this.pulses) {
+      if (!pu.on) continue;
+      pu.t += d / pu.dur;
+      if (pu.t >= 1) { pu.on = false; pu.m.visible = false; continue; }
+      const e = 1 - Math.pow(1 - pu.t, 2);
+      pu.m.scale.setScalar(Math.max(0.01, pu.maxR * e));
+      pu.mat.opacity = 0.85 * (1 - pu.t);
     }
     this.light.intensity *= Math.pow(0.02, d);
     this.smokeP.update(d);

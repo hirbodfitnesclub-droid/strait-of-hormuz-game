@@ -681,7 +681,7 @@ function bounty(s: GameState, enemy: Enemy) {
 }
 
 export interface DamageSource {
-  kind: TowerKind | "hero" | "burn" | "aura";
+  kind: TowerKind | "hero" | "burn" | "aura" | "spell";
   modelKind?: ModelKind | "hero";
   slot?: number;           // firing tower's slot (jammer context); omit for non-tower sources
   branch?: number | null;
@@ -1252,10 +1252,12 @@ export function gameReducer(state: GameState, action: Action): GameState {
       if (s.cooldowns[action.spell] > 0 || s.phase !== "battle") break;
       if (action.spell === "strike") {
         if (action.x === undefined || action.y === undefined) break;
-        for (const e of s.enemies) if (distance(enemyPosition(e, s.layout), { x: action.x, y: action.y }) < 17) e.hp -= 450;
+        // Spell damage goes through the single damage path (QA-ROOT: the flat
+        // hp cut bypassed the Titan's shield cycle and every other defense).
+        for (const e of s.enemies) if (distance(enemyPosition(e, s.layout), { x: action.x, y: action.y }) < 17) applyDamage(s, e, 450, { kind: "spell" });
         s.popups.push({ id: s.nextId++, x: action.x, y: action.y, text: "💥", life: 1.2 }); s.cooldowns.strike = 60;
       } else if (action.spell === "emp") {
-        for (const e of s.enemies) { e.stun = 6; e.hp -= 35; } s.cooldowns.emp = 90;
+        for (const e of s.enemies) { e.stun = 6; applyDamage(s, e, 35, { kind: "spell" }); } s.cooldowns.emp = 90;
       } else { s.overdrive = 10; s.cooldowns.overdrive = 120; }
       break;
     }
