@@ -197,7 +197,7 @@ function enemyModel(kind: string, boss: number): THREE.Group {
 }
 
 interface Ent { obj: THREE.Group; bar?: ReturnType<typeof barSprites>; init?: boolean; phase: number; bobAmp: number; wake?: THREE.Mesh; mats?: THREE.Material[]; speed?: number; lastTx?: number; lastTz?: number; ind?: { stun: THREE.Sprite; slow: THREE.Sprite; eye: THREE.Sprite; shield: THREE.Mesh | null } }
-interface BldRec { obj: THREE.Object3D; band: number; baseScale: number; groundBase: number; minY: number; local: THREE.Box3; ring: THREE.Mesh; ringBase: number }
+interface BldRec { obj: THREE.Object3D; band: number; baseScale: number; groundBase: number; minY: number; local: THREE.Box3; ring: THREE.Mesh; ringBase: number; platform: boolean }
 
 let _wakeTex: THREE.Texture | null = null;
 function wakeTexture(): THREE.Texture {
@@ -232,8 +232,11 @@ function buildingBand(level: number): number { return level >= 100 ? 4 : level >
 
 /** Procedural add-ons grown onto the same GLB per band (local model units,
  *  placed against the model's own bounding box): annexes, tanks, masts,
- *  rooftop plant and — at band 4 — an emissive hi-tech crown + beacon. */
-function buildEvoGroup(band: number, box: THREE.Box3): THREE.Group {
+ *  rooftop plant and — at band 4 — an emissive hi-tech crown + beacon.
+ *  Exported for structural probes. The offshore platform (platform=true)
+ *  keeps the generic bands 1–2 but gets its own deck-anchored bands 3–4
+ *  (QA-VIS §7: the generic sy-anchored crown/mast float above its deck). */
+export function buildEvoGroup(band: number, box: THREE.Box3, platform = false): THREE.Group {
   const g = new THREE.Group(); g.name = 'vis-evo';
   if (band <= 0) return g;
   const sx = box.max.x - box.min.x, sy = box.max.y - box.min.y, sz = box.max.z - box.min.z;
@@ -252,14 +255,39 @@ function buildEvoGroup(band: number, box: THREE.Box3): THREE.Group {
     cy(0.02 * sx + 0.05, sy * 0.95, cx + sx * 0.3, gy + sy * 0.47, cz - sz * 0.32, steelM);
   }
   if (band >= 3) { // rooftop plant + second tank
-    bx(sx * 0.52, sy * 0.2, sz * 0.52, cx, gy + sy * 1.1, cz, tealM);
-    cy(Math.min(sx, sz) * 0.11, sy * 0.42, cx + sx * 0.62, gy + sy * 0.21, cz + sz * 0.34, steelM);
+    if (platform) {
+      // QA-VIS §7: platform.glb's bbox spans legs below and a derrick far
+      // above its deck plate (deck top ≈ gy + 0.36·sy), so sy-anchored
+      // pieces float in mid-air as plates/columns. Platform annexes sit ON
+      // the deck and stay low and wide: equipment skid, helipad, deck tank.
+      const deckY = gy + sy * 0.36;
+      bx(sx * 0.26, sy * 0.10, sz * 0.20, cx - sx * 0.02, deckY + sy * 0.05, cz - sz * 0.28, concrete);
+      cy(Math.min(sx, sz) * 0.17, sy * 0.03, cx + sx * 0.30, deckY + sy * 0.015, cz - sz * 0.02, tealM);
+      cy(Math.min(sx, sz) * 0.10, sy * 0.16, cx + sx * 0.34, deckY + sy * 0.08, cz + sz * 0.10, steelM);
+    } else {
+      bx(sx * 0.52, sy * 0.2, sz * 0.52, cx, gy + sy * 1.1, cz, tealM);
+      cy(Math.min(sx, sz) * 0.11, sy * 0.42, cx + sx * 0.62, gy + sy * 0.21, cz + sz * 0.34, steelM);
+    }
   }
   if (band >= 4) { // hi-tech crown: emissive trim + beacon mast
-    bx(sx * 0.6, sy * 0.05, sz * 0.6, cx, gy + sy * 1.22, cz, new THREE.MeshBasicMaterial({ color: 0x38e1c6 }));
-    cy(0.02 * sx + 0.05, sy * 0.7, cx - sx * 0.3, gy + sy * 1.35, cz + sz * 0.3, steelM);
-    const beacon = new THREE.Mesh(new THREE.SphereGeometry(Math.min(sx, sz) * 0.06 + 0.04, 10, 8), new THREE.MeshBasicMaterial({ color: 0x38e1c6 }));
-    beacon.position.set(cx - sx * 0.3, gy + sy * 1.74, cz + sz * 0.3); g.add(beacon);
+    if (platform) {
+      // QA-VIS §7: no full-height emissive trim plate and no standard beacon
+      // mast on the platform — a slim deck derrick with a crane jib and a
+      // small beacon keeps the hi-tech read at platform scale, on the deck.
+      const deckY = gy + sy * 0.36;
+      const mastH = Math.min(sx, sz) * 0.42;
+      const mastX = cx + sx * 0.16, mastZ = cz - sz * 0.245;
+      cy(0.02 * sx + 0.03, mastH, mastX, deckY + mastH / 2, mastZ, steelM);
+      bx(sx * 0.30, sy * 0.03, sz * 0.045, mastX + sx * 0.13, deckY + mastH - sy * 0.02, mastZ, steelM);
+      bx(sx * 0.20, sy * 0.08, sz * 0.20, cx + sx * 0.28, deckY + sy * 0.04, cz - sz * 0.30, blueM);
+      const beacon = new THREE.Mesh(new THREE.SphereGeometry(Math.min(sx, sz) * 0.04 + 0.03, 10, 8), new THREE.MeshBasicMaterial({ color: 0x38e1c6 }));
+      beacon.position.set(mastX, deckY + mastH + Math.min(sx, sz) * 0.04 + 0.05, mastZ); g.add(beacon);
+    } else {
+      bx(sx * 0.6, sy * 0.05, sz * 0.6, cx, gy + sy * 1.22, cz, new THREE.MeshBasicMaterial({ color: 0x38e1c6 }));
+      cy(0.02 * sx + 0.05, sy * 0.7, cx - sx * 0.3, gy + sy * 1.35, cz + sz * 0.3, steelM);
+      const beacon = new THREE.Mesh(new THREE.SphereGeometry(Math.min(sx, sz) * 0.06 + 0.04, 10, 8), new THREE.MeshBasicMaterial({ color: 0x38e1c6 }));
+      beacon.position.set(cx - sx * 0.3, gy + sy * 1.74, cz + sz * 0.3); g.add(beacon);
+    }
   }
   return g;
 }
@@ -466,7 +494,7 @@ export class GameSync3D {
     rec.obj.position.y = rec.groundBase - rec.minY * m;
     const old = rec.obj.getObjectByName('vis-evo');
     if (old) rec.obj.remove(old);
-    if (band > 0) rec.obj.add(buildEvoGroup(band, rec.local));
+    if (band > 0) rec.obj.add(buildEvoGroup(band, rec.local, rec.platform));
     (rec.ring.material as THREE.MeshBasicMaterial).color.setHex(BLD_BAND_COLORS[band]);
     rec.ring.scale.setScalar(rec.ringBase * (1 + band * 0.08));
   }
@@ -568,7 +596,7 @@ export class GameSync3D {
           const ring = new THREE.Mesh(new THREE.RingGeometry(0.9, 1.02, 48), new THREE.MeshBasicMaterial({ color: BLD_BAND_COLORS[0], transparent: true, opacity: 0.5, side: THREE.DoubleSide, depthWrite: false }));
           ring.rotation.x = -Math.PI / 2; ring.position.set(b.x, groundBase + 0.22, b.z); ring.scale.setScalar(ringBase);
           this.statics.add(model); this.statics.add(ring);
-          const nrec: BldRec = { obj: model, band: -1, baseScale, groundBase, minY: fit2.min.y, local: fit.clone(), ring, ringBase };
+          const nrec: BldRec = { obj: model, band: -1, baseScale, groundBase, minY: fit2.min.y, local: fit.clone(), ring, ringBase, platform: b.glb === 'platform' };
           this.buildings.set(id, nrec);
           this.applyBuildingBand(nrec, buildingBand(level));
           this.genericAnims.set('bld-' + id, collectAnims(model, id).generic);
