@@ -49,46 +49,17 @@ def expected_composition(wave: int) -> tuple[dict[str, int], int]:
 def battle_seed(wave: int, total: int) -> dict:
     state = seedlib.base_state()
     state.update({
-        "phase": "battle", "wave": wave, "highestWave": wave - 1,
-        "spawnRemaining": total, "spawnIndex": 0, "spawnClock": 0,
+        # Wave 2: seed at INTERMISSION with autoBattle on — the game's own
+        # startWave then builds the scenario spawn queue (the composition
+        # this probe locks). Seeding phase="battle" directly no longer
+        # works: hydrateGame refuses a context-less mid-battle save.
+        "phase": "intermission", "wave": wave, "highestWave": wave - 1,
+        "countdown": 2, "spawnRemaining": 0, "spawnIndex": 0, "spawnClock": 0,
         "enemies": [], "towers": [], "hearts": 20,
         "trafficCount": 1, "security": 100, "merchants": [],
         "hero": {"x": 20.0, "y": 66.0, "active": 0},
     })
-    # Wave 2 integration: hydrateGame refuses to resume a mid-battle save
-    # without a scenario battle context (falls back to peace, wave
-    # restarts). This probe seeds a battle in progress, so it carries the
-    # context a real save would. The queue is built with the ported
-    # expected composition above — the same kinds/order the legacy index
-    # pattern produced — and the game spawner consumes the queue first
-    # (game.ts: "Scenario queue first"), so the lock still measures the
-    # composition this probe has always asserted, now via the real path.
-    counts, _ = expected_composition(wave)
-    order = {"speed": 0, "corvette": 1, "air": 2, "sub": 3, "destroyer": 4,
-             "boss": 5}
-    queue = []
-    for index in range(total):
-        if wave % 5 == 0 and total - index == 1:
-            kind = "boss"
-        elif wave >= 4 and index % 6 == 5:
-            kind = "destroyer"
-        elif wave >= 3 and index % 5 == 3:
-            kind = "sub"
-        elif wave >= 2 and index % 4 == 2:
-            kind = "air"
-        elif index % 3 == 1:
-            kind = "corvette"
-        else:
-            kind = "speed"
-        queue.append({"kind": kind, "rev": False})
-    assert sorted(q["kind"] for q in queue) == sorted(
-        k for k, n in counts.items() for _ in range(n))
-    state["battle"] = {
-        "wave": wave, "condition": None, "objective": "repel",
-        "queue": queue, "elapsed": 0, "escort": None, "stranded": None,
-        "structureHp": 0, "structureMaxHp": 0, "airTotal": 0, "airLeaked": 0,
-        "mines": [], "mineClock": 4, "sweep": {}, "failed": False,
-    }
+    state["idle"]["autoBattle"] = True
     return state
 
 
@@ -109,6 +80,7 @@ async def run_wave(pg, wave: int) -> tuple[dict[str, int], list[float], int]:
     first_seen: dict[int, float] = {}
     deadline = time.monotonic() + 600
     while time.monotonic() < deadline:
+        await pg.evaluate(harness.DISMISS_BULLETIN_JS)
         st = await pg.evaluate(SNAP_JS)
         if st:
             for e in st["enemies"]:
@@ -138,6 +110,20 @@ async def main() -> int:
                     pg, _ = await harness.open_seeded_page(
                         ctx, args.base_url, seedlib.seed_js(battle_seed(wave, total)),
                         model_wait=240.0)
+                    # Wave 2: the seed loads at intermission with autoBattle
+                    # on; the game's own startWave builds the scenario queue
+                    # when the countdown ends. The briefing bulletin pauses
+                    # the battle at spawn 0, so keep dismissing it while
+                    # waiting for the battle phase to actually begin.
+                    start_deadline = time.monotonic() + 300
+                    while time.monotonic() < start_deadline:
+                        await pg.evaluate(harness.DISMISS_BULLETIN_JS)
+                        phase = await pg.evaluate(
+                            "() => { const s = window.__gamesync3d; "
+                            "return s && s.state ? s.state.phase : null; }")
+                        if phase == "battle":
+                            break
+                        await pg.wait_for_timeout(2000)
                     try:
                         counts, gaps, _ = await run_wave(pg, wave)
                     finally:
