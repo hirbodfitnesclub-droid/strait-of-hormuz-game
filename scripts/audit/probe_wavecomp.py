@@ -1,11 +1,11 @@
 """Wave-composition regression lock — DoD §2/§3 (audit 'healthy' list).
 
-Seeds a live battle with an empty field and lets the game's own spawner
-run; the union of enemy ids seen in the live state must match the spec
-composition (ported 1:1 from game.ts waveComposition / the tick spawner,
-which team 3 verified line-by-line), and the median spawn gap must be
-1.35 game-sec. MUST PASS on the current build — this is the baseline that
-wave-1 scenario work (team SCEN) is not allowed to break silently.
+Seeds at intermission and lets the game's own startWave + spawner run;
+the union of enemy ids seen in the live state must match the locked
+SCEN scenario composition for the wave (EXPECTED_COMPOSITIONS below,
+read off the real buildSpawnQueue), and the median spawn gap must be
+1.35 game-sec. This is the regression lock for the scenario system:
+composition changes must be deliberate and re-pinned here.
 """
 from __future__ import annotations
 
@@ -25,25 +25,30 @@ SECTION = "§2-§3 enemies & waves"
 WAVES = [1, 3, 5, 10]
 
 
+# Wave 2 re-base (SCEN): compositions are no longer produced by the old
+# index pattern in game.ts — startWave rolls the wave's authored scenario
+# and buildSpawnQueue (src/lib/scenario-mechanics.ts) builds the queue
+# from that operation's class weights (CAMPAIGN_COMPOSITION), with the
+# class-availability gates (air from wave 2, sub from wave 3, destroyer
+# from wave 4) and the boss appended last on boss waves. The tables
+# below were read off the REAL buildSpawnQueue for the four locked
+# waves (manager-verified 2026-11-08) and are pinned here as the new
+# regression lock: if scenario weights or gates change deliberately,
+# update them from buildSpawnQueue's live output, never by hand-tuning.
+EXPECTED_COMPOSITIONS: dict[int, tuple[dict[str, int], int]] = {
+    1: ({"speed": 6}, 6),                                            # op 1 سپر ساحل (pirates rewritten as speed)
+    3: ({"speed": 2, "air": 6}, 8),                                  # op 3 چشم بیدار (drone wave, air-heavy)
+    5: ({"air": 4, "destroyer": 2, "speed": 4, "boss": 1}, 11),      # op 5 دیوار آتش (+ boss 1)
+    10: ({"sub": 6, "destroyer": 4, "corvette": 3, "speed": 2, "boss": 1}, 16),  # op 10 نگهبان شعله (+ boss 2)
+}
+
+
 def expected_composition(wave: int) -> tuple[dict[str, int], int]:
-    """1:1 port of waveComposition() in src/lib/game.ts."""
-    total = 5 + min(wave, 15) + (1 if wave % 5 == 0 else 0)
-    counts: dict[str, int] = {}
-    for index in range(total):
-        kind = "speed"
-        remaining = total - index
-        if wave % 5 == 0 and remaining == 1:
-            kind = "boss"
-        elif wave >= 4 and index % 6 == 5:
-            kind = "destroyer"
-        elif wave >= 3 and index % 5 == 3:
-            kind = "sub"
-        elif wave >= 2 and index % 4 == 2:
-            kind = "air"
-        elif index % 3 == 1:
-            kind = "corvette"
-        counts[kind] = counts.get(kind, 0) + 1
-    return counts, total
+    """The locked composition for a probed wave (SCEN scenario queue)."""
+    if wave not in EXPECTED_COMPOSITIONS:
+        raise ValueError(f"no locked composition for wave {wave}")
+    counts, total = EXPECTED_COMPOSITIONS[wave]
+    return dict(counts), total
 
 
 def battle_seed(wave: int, total: int) -> dict:
