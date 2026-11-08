@@ -113,7 +113,11 @@ export interface BattleContext {
   sweep: Record<number, number>;               // boat-slot → minesweep cooldown
   failed: boolean;                             // objective lost → defeat at the resolution point
 }
-export interface Pirate { id: number; progress: number; hp: number; }
+export interface Pirate { id: number; progress: number; hp: number; /** VIP-event escorts (R6): a dedicated attack group, not traffic pirates — while the VIP ship lives they are exempt from the passive coast-guard erosion; hero/tower/boat fire still hits them in full. */ vipEscort?: boolean; }
+/** The VIP golden supertanker (R6): a real ship on the trade lane with HP.
+ *  Pirates engage it while it crosses; a safe crossing pays the old event
+ *  reward, destruction fines security instead. */
+export interface VipShip { progress: number; hp: number; maxHp: number; /** Seconds since spawn (frozen while paused); pirates cannot damage the ship during its first 5 s. */ age: number; }
 export interface Contraband { id: number; progress: number; }
 export interface Merchant { id: number; progress: number; kind: "barge" | "bulk" | "container" | "tanker"; reward: number; paid: boolean; }
 /** One discrete shot event, emitted the moment a tower (or hero) fires.
@@ -226,6 +230,7 @@ export interface GameState {
   phase: Phase; mode: Mode; speed: 1 | 2 | 3; layout: MapLayout;
   enemies: Enemy[]; pirates: Pirate[]; contraband: Contraband[]; merchants: Merchant[]; shots: Shot[]; popups: Popup[];
   battle: BattleContext | null;
+  vipShip: VipShip | null; eventCount: number; piratesDestroyed: number;
   pendingImpacts: PendingImpact[];
   boats: BoatUnit[]; mines: MineUnit[];
   enemyMissiles: EnemyMissile[];
@@ -321,6 +326,10 @@ export const PLATFORM_SLOTS = [
   { id: 4, x: 48.5, y: 50.4, name: "میدان نفتی ابوموسی" },
 ] as const;
 export function platformCost(builtCount: number) { return 2500 * (builtCount + 1); }
+/** Each offshore field belongs to its namesake island; the platform may
+ *  only be built once that island is unlocked (audit fix: platforms used
+ *  to be buildable anywhere with no regional prerequisite). */
+export const PLATFORM_ISLANDS: Record<number, string> = { 0: "siri", 1: "larak", 2: "kharg", 3: "jask", 4: "abumusa" };
 export const CHALLENGE_RULES = [
   { name: "طوفان شبانه", description: "برد برجک‌ها نصف می‌شود؛ مراقب نفوذ سریع باشید." },
   { name: "ناوگان زرهی", description: "جان دشمنان +۳۵٪، اما پاداش نبرد +۵۰٪ است." },
@@ -361,6 +370,7 @@ export function initialGame(): GameState {
     cards: { cannon: { count: 0, level: 1 }, heavy: { count: 0, level: 1 }, missile: { count: 0, level: 1 }, air: { count: 0, level: 1 }, ew: { count: 0, level: 1 }, boat: { count: 0, level: 1 } },
     islands: ["main", "qeshm"], security: 70, hearts: 20, wave: 1, highestWave: 0,
     phase: "peace", mode: "campaign", speed: 1, layout: "landscape", enemies: [], pirates: [], contraband: [], merchants: [{ id: 1, progress: .24, kind: "bulk", reward: 120, paid: false }, { id: 2, progress: .63, kind: "container", reward: 500, paid: false }], shots: [], popups: [], pendingImpacts: [], boats: [], mines: [], enemyMissiles: [], events: [], battle: null, battleTime: 0, fireStats: {},
+    vipShip: null, eventCount: 0, piratesDestroyed: 0,
     spawnRemaining: 0, spawnClock: 0, spawnIndex: 0, nextId: 3, earlyBonus: false, countdown: 15, trafficClock: 0, trafficCount: 0,
     destroyed: 0, elapsed: 0, cooldowns: { strike: 0, emp: 0, overdrive: 0 }, overdrive: 0,
     hero: { ...sampleLane(getLane("landscape", "enemy"), .45), active: 0 }, hero2: null, towerStuns: {}, challengeRule: 0, chests: 0, prestige: 0, event: null, eventClock: 0,
@@ -368,7 +378,11 @@ export function initialGame(): GameState {
   };
 }
 
-export function upgradeCost(id: BuildingId, level: number) { return Math.ceil(BUILDINGS[id].baseCost * Math.pow(1.15, level - 1)); }
+/** Cost of upgrading FROM `level` TO `level + 1`: BaseCost × 1.15^level —
+ *  the exponent sits on the destination step, so the first build costs
+ *  exactly the PRD base cost (the old 1.15^(level−1) ran one step behind
+ *  and made first builds ~13% cheaper than the PRD table). */
+export function upgradeCost(id: BuildingId, level: number) { return Math.ceil(BUILDINGS[id].baseCost * Math.pow(1.15, level)); }
 export function towerUpgradeCost(tower: Tower) {
   const def = TOWERS[tower.kind];
   return { cash: Math.ceil(def.cost * Math.pow(1.55, tower.tier)), steel: Math.ceil(def.steel * (1 + tower.tier * 0.6)) };
@@ -401,6 +415,7 @@ export function powerBreakdown(s: GameState) {
 export function piratePosition(pirate: Pirate, layout: MapLayout = "landscape") { return sampleLane(getLane(layout, "pirate"), pirate.progress); }
 export function contrabandPosition(ship: Contraband, layout: MapLayout = "landscape") { return sampleLane(getLane(layout, "trade"), ship.progress); }
 export function merchantPosition(ship: Merchant, layout: MapLayout = "landscape") { return sampleLane(getLane(layout, "trade"), ship.progress); }
+export function vipPosition(ship: VipShip, layout: MapLayout = "landscape") { return sampleLane(getLane(layout, "trade"), ship.progress); }
 export function tankerCapacityFor(dockLevel: number) { return 500 + dockLevel * 500; }
 export function portTankerPosition(progress: number, layout: MapLayout = "landscape") { return sampleLane(getLane(layout, "port"), progress); }
 export function distance(a: { x: number; y: number }, b: { x: number; y: number }) { return Math.hypot(a.x - b.x, (a.y - b.y) * 0.72); }
@@ -418,12 +433,30 @@ export function getStats(s: GameState) {
   const multi = grid * stabilityMult * (1 + s.prestige * 0.1);
   const productionBoost = s.idle.boostRemaining > 0 ? 2 : 1;
   const output = (id: BuildingId) => BUILDINGS[id].baseOutput * b[id] * Math.pow(2, Math.floor(b[id] / 10)) * multi * productionBoost * ((id === "oil" || id === "refinery") ? 1 + .15 * s.idle.managerLevels.energy : id === "arms" ? 1 + .25 * s.idle.managerLevels.supply : 1);
-  const oilRate = output("oil") * (s.research.includes("drill") ? 1.25 : 1) * (s.research.includes("seabed") ? 1.1 : 1) + (s.idle.platforms?.length ?? 0) * 8;
+  const oilRate = output("oil") * (s.research.includes("drill") ? 1.25 : 1) * (s.research.includes("seabed") ? 1.1 : 1) + (s.idle.platforms?.length ?? 0) * 8 * grid;
   const dockRate = output("dock") * (s.research.includes("dockauto") ? 1.25 : 1) * (s.research.includes("pipe") ? 1.5 : 1);
   const exportRate = Math.min(oilRate * s.oilSplit / 100, dockRate);
   const dollarRate = exportRate * 2 * (s.research.includes("trade") ? 1.5 : 1) * (1 + .1 * s.idle.managerLevels.harbor);
-  const oilCapacity = b.tank * 500 * Math.pow(2, Math.floor(b.tank / 10)) * (s.research.includes("tanktech") ? 1.2 : 1);
-  return { powerProduced, powerUsed, waterProduced, waterUsed, grid, stability, multi, productionBoost, output, oilRate, exportRate, dollarRate, oilCapacity };
+  // R11: the REAL export rate — money only flows while a tanker is berthed
+  // and loading. The theoretical dollarRate above is a planning number; it
+  // must never again drive real money (bank capacity, offline income).
+  const portTanker = s.idle.port?.tanker;
+  const loadingNow = !!portTanker && portTanker.stage === "loading" && portTanker.load < (500 + b.dock * 500) - 0.001 && s.oil > 0.001;
+  const realExportRate = loadingNow ? exportRate * 2 * (s.research.includes("trade") ? 1.5 : 1) : 0;
+  // Realized export rate over a rolling 6 h game-time window (the two
+  // window counters live on idle; the window restarts on expiry and at
+  // prestige). The lifetime ledger (port.exportedDollars) must NOT feed
+  // this: an early export hoard diluted over a whole save — or a fresh
+  // prestige — would otherwise size the bank and pay offline income on
+  // a rate the port no longer earns. 60 s floor against opening spikes.
+  // This — not the theoretical rate — sizes the harbor bank and pays
+  // offline income.
+  const avgExportRate = (s.idle.exportWindowDollars ?? 0) / Math.max(60, s.idle.exportWindowTime ?? 0);
+  const bankCapacity = Math.max(10000, Math.max(avgExportRate, realExportRate) * 6 * 3600);
+  // Tank capacity is its own formula (level × 500 × tanktech): the
+  // production step-doubling 2^floor(L/10) must NOT leak into capacity.
+  const oilCapacity = b.tank * 500 * (s.research.includes("tanktech") ? 1.2 : 1);
+  return { powerProduced, powerUsed, waterProduced, waterUsed, grid, stability, multi, productionBoost, output, oilRate, exportRate, dollarRate, oilCapacity, realExportRate, avgExportRate, bankCapacity };
 }
 /** Shooter-side damage multipliers shared by per-shot damage and display DPS:
  *  prestige, family card level and the research tree. (The old flat
@@ -464,12 +497,21 @@ export function getRange(s: GameState, tower: Tower) {
   );
   return base * (1 + (tower.tier - 1) * 0.06) * (1 + 0.03 * (s.buildings.optical ?? 0)) * (s.research.includes("radar") ? 1.2 : 1) * (s.research.includes("sonar") && (tower.kind === "ew" || tower.kind === "boat") ? 1.1 : 1) * (s.mode === "challenge" && s.challengeRule === 0 && s.phase === "battle" ? 0.5 : 1) * envFactor;
 }
+/** Deployed heroes' sustained damage rate — the "hero power" the PRD puts
+ *  in the offline defense numerator (replaces the old flat +30). Mirrors
+ *  the hero attack table in tick: type 0 = 75/3s, type 1 = 260/15s,
+ *  type 2 = 145/4s. */
+export function heroPower(s: GameState) {
+  const dps = (h: { active: number }) => h.active === 1 ? 260 / 15 : h.active === 2 ? 145 / 4 : 75 / 3;
+  return dps(s.hero) + (s.hero2 ? dps(s.hero2) : 0);
+}
 export function getOfflineReward(s: GameState, now: number) {
   const seconds = Math.max(0, Math.min(12 * 3600, (now - (s.lastSavedAt || now)) / 1000));
-  const defense = s.towers.reduce((sum, t) => sum + towerDps(s, t), 30);
+  const defense = s.towers.reduce((sum, t) => sum + towerDps(s, t), 0) + heroPower(s);
   const ratio = Math.min(1, defense / (100 + s.wave * 25));
-  const idleState = { ...s, idle: { ...s.idle, boostRemaining: 0 } };
-  const rate = getStats(idleState).dollarRate;
+  // Offline income is paid on the REALIZED export rate (R11) — what the
+  // port actually earned per second — never the theoretical dollarRate.
+  const rate = getStats(s).avgExportRate;
   const managerBonus = s.idle.managerLevels.harbor > 0 ? 1.2 : 1;
   return { seconds, ratio, amount: seconds > 30 ? rate * seconds * .5 * ratio * managerBonus : 0 };
 }
@@ -550,7 +592,7 @@ export function hydrateGame(raw: unknown): { game: GameState; offline: number } 
           load: Math.max(0, num(v.tanker.load, 0)),
         }
       : null;
-    return { tanker, nextIn: Math.max(0, num(v.nextIn, 0)), cycles: intIn(v.cycles, 0, 0, Number.MAX_SAFE_INTEGER) };
+    return { tanker, nextIn: Math.max(0, num(v.nextIn, 0)), cycles: intIn(v.cycles, 0, 0, Number.MAX_SAFE_INTEGER), exportedDollars: Math.max(0, num(v.exportedDollars, 0)) };
   };
   const sanitizeIdle = (v: unknown): IdleState => {
     if (!isRec(v)) return base.idle;
@@ -600,6 +642,8 @@ export function hydrateGame(raw: unknown): { game: GameState; offline: number } 
         ? [...new Set(v.platforms.filter((x): x is number => typeof x === "number" && Number.isInteger(x) && x >= 0 && x < PLATFORM_SLOTS.length))]
         : [],
       challengeRuns: intIn(v.challengeRuns, 0, 0, Number.MAX_SAFE_INTEGER),
+      exportWindowDollars: Math.max(0, num(v.exportWindowDollars, 0)),
+      exportWindowTime: Math.max(0, num(v.exportWindowTime, 0)),
     };
   };
   const sanitizeCards = (v: unknown): GameState["cards"] => {
@@ -663,6 +707,24 @@ export function hydrateGame(raw: unknown): { game: GameState; offline: number } 
     };
   });
   game.battleTime = Math.max(0, num(game.battleTime, 0));
+  // ECO state hardening: VIP ship, event counter, pirate counter and the
+  // port's realized-export ledger survive only when well-formed.
+  game.vipShip = game.vipShip && typeof game.vipShip === "object" && Number.isFinite(game.vipShip.hp) && Number.isFinite(game.vipShip.progress)
+    ? { progress: Math.max(0, Math.min(1, game.vipShip.progress)), hp: Math.max(0, game.vipShip.hp), maxHp: Math.max(1, num(game.vipShip.maxHp, 300)), age: Math.max(0, num(game.vipShip.age, 0)) } : null;
+  // ECO round 2: the (event, vipShip) pair must agree. A save carrying
+  // event:"vip" with no valid ship deadlocks the whole event cycle —
+  // the VIP event ends only when its ship resolves, and no new event
+  // starts while one is set — so the orphaned event is cleared and the
+  // cycle freed. A live ship without its event flag re-opens the event.
+  if (game.event !== "spill" && game.event !== "storm" && game.event !== "vip") game.event = null;
+  if (game.event === "vip" && !game.vipShip) { game.event = null; game.eventClock = 0; }
+  else if (game.event !== "vip" && game.vipShip) { game.event = "vip"; game.eventClock = 0; }
+  game.eventCount = Math.max(0, Math.floor(num(game.eventCount, 0)));
+  game.piratesDestroyed = Math.max(0, Math.floor(num(game.piratesDestroyed, 0)));
+  game.idle.exportWindowDollars = Math.max(0, num(game.idle.exportWindowDollars, 0));
+  game.idle.exportWindowTime = Math.max(0, num(game.idle.exportWindowTime, 0));
+  if (game.idle.port) game.idle.port = { ...base.idle.port, ...game.idle.port, exportedDollars: Math.max(0, num(game.idle.port.exportedDollars, 0)) };
+  (Object.keys(game.buildings) as BuildingId[]).forEach(k => { game.buildings[k] = Math.max(0, Math.floor(num(game.buildings[k], base.buildings[k]))); });
   game.islands = (Array.isArray(game.islands) ? game.islands : base.islands).filter(id => ISLANDS.some(i => i.id === id));
   if (!game.islands.includes("main")) game.islands.push("main");
   game.research = (Array.isArray(game.research) ? game.research : []).filter(r => typeof r === "string");
@@ -674,7 +736,7 @@ export function hydrateGame(raw: unknown): { game: GameState; offline: number } 
   game.mode = MODES.includes(saved.mode) ? saved.mode : base.mode;
   game.speed = saved.speed === 2 || saved.speed === 3 ? saved.speed : 1;
   game.layout = saved.layout === "portrait" ? "portrait" : "landscape";
-  game.event = saved.event === "spill" || saved.event === "storm" || saved.event === "vip" ? saved.event : null;
+  // game.event was already validated + VIP-pair-repaired above (ECO round 2); the raw saved enum must not overwrite the repair.
   // Length caps: a tampered save must not be able to inflate entity lists
   // without bound (memory / tick cost). Real battles stay far below these.
   game.enemies = (Array.isArray(saved.enemies) ? saved.enemies.map(sanitizeEnemy).filter((e): e is Enemy => e !== null) : []).slice(0, 500);
@@ -770,9 +832,12 @@ export function hydrateGame(raw: unknown): { game: GameState; offline: number } 
   const safeHero = nearestWater(game.hero, game.layout);
   game.hero = { ...game.hero, ...safeHero, route: undefined, routeIndex: undefined };
   const reward = getOfflineReward(game, Date.now());
+  // Offline timers (contracts, boost recharge) advance with real absence
+  // whether or not the cash reward is positive — they used to freeze
+  // whenever the realized export rate made the reward 0.
+  if (reward.seconds > 30) advanceOfflineTimers(game, reward.seconds);
   if (reward.amount > 0) {
     game.idle.offline = { cash: (game.idle.offline?.cash ?? 0) + reward.amount, seconds: reward.seconds, defense: reward.ratio };
-    advanceOfflineTimers(game, reward.seconds);
   }
   game.lastSavedAt = Date.now();
   return { game, offline: reward.amount };
@@ -800,7 +865,7 @@ function collectRevenue(s: GameState, manual = false) {
   s.idle.xp += Math.min(25, 4 + Math.floor(payout / 250));
 }
 function addRevenue(s: GameState, cash: number) {
-  const capacity = Math.max(10000, getStats(s).dollarRate * 6 * 3600);
+  const capacity = getStats(s).bankCapacity;
   s.idle.bank = Math.min(capacity, s.idle.bank + cash);
   s.idle.lifetimeIncome += cash;
 }
@@ -1009,7 +1074,9 @@ function isHeavyShip(enemy: Enemy): boolean {
 }
 function bounty(s: GameState, enemy: Enemy) {
   const base = enemy.kind === "boss" ? 700 : enemy.kind === "destroyer" ? 120 : enemy.kind === "corvette" ? 65 : 35;
-  return Math.round(base * Math.pow(1.1, s.wave) * (s.earlyBonus ? 1.25 : 1));
+  // R10: the early-call +25% lives ONLY on the wave-end reward; per-kill
+  // bounties never carry it (the old code applied it twice).
+  return Math.round(base * Math.pow(1.1, s.wave));
 }
 
 export interface DamageSource {
@@ -1456,6 +1523,10 @@ function pickInterceptor(s: GameState, pos: { x: number; y: number }): Tower | n
 function tick(s: GameState, delta: number, battlePaused = false) {
   const dt = Math.max(0, Math.min(1, delta));
   s.elapsed += dt; s.eventClock += dt;
+  // Rolling 6 h export window (game time): fills with the realized
+  // export flow and restarts empty on expiry — avgExportRate reads it.
+  s.idle.exportWindowTime = (s.idle.exportWindowTime ?? 0) + dt;
+  if (s.idle.exportWindowTime >= 6 * 3600) { s.idle.exportWindowTime = 0; s.idle.exportWindowDollars = 0; }
   s.idle.boostRemaining = Math.max(0, s.idle.boostRemaining - dt);
   if (s.idle.boostCharges < 3) { s.idle.boostRecharge += dt; if (s.idle.boostRecharge >= 300) { s.idle.boostCharges++; s.idle.boostRecharge = 0; } }
   if (s.idle.contract) s.idle.contract.elapsed = Math.min(CONTRACTS[s.idle.contract.id].duration, s.idle.contract.elapsed + dt);
@@ -1466,7 +1537,7 @@ function tick(s: GameState, delta: number, battlePaused = false) {
   s.oil = Math.min(oilCapacity, s.oil + produced);
   // Port & tanker cycle: crude leaves only aboard a berthed tanker. With no
   // tanker at the pier, production accumulates in storage (the upgrade signal).
-  const port = s.idle.port ?? (s.idle.port = { tanker: null, nextIn: 0, cycles: 0 });
+  const port = s.idle.port ?? (s.idle.port = { tanker: null, nextIn: 0, cycles: 0, exportedDollars: 0 });
   const tankerCapacity = 500 + s.buildings.dock * 500;
   let exported = 0;
   if (!port.tanker) {
@@ -1479,9 +1550,13 @@ function tick(s: GameState, delta: number, battlePaused = false) {
       tanker.progress = Math.min(1, tanker.progress + dt * 0.04);
       if (tanker.progress >= 1) tanker.stage = "loading";
     } else if (tanker.stage === "loading") {
-      const dockRateNow = stats.output("dock") * (s.research.includes("dockauto") ? 1.25 : 1) * (s.research.includes("pipe") ? 1.5 : 1);
-      const moved = Math.min(s.oil, dockRateNow * dt, tankerCapacity - tanker.load);
+      // R11 / PRD §3: the valve α rules the real flow — loading runs at
+      // the export share of production (min(oilRate × α, dockRate)), not
+      // the raw dock rate. α = 0 means the tanker waits at the pier.
+      const moved = Math.min(s.oil, stats.exportRate * dt, tankerCapacity - tanker.load);
       s.oil -= moved; tanker.load += moved; exported = moved;
+      port.exportedDollars = (port.exportedDollars ?? 0) + moved * 2 * (s.research.includes("trade") ? 1.5 : 1);
+      s.idle.exportWindowDollars = (s.idle.exportWindowDollars ?? 0) + moved * 2 * (s.research.includes("trade") ? 1.5 : 1);
       if (tanker.load >= tankerCapacity - 0.001 || (s.oil <= 0.001 && tanker.load > 0)) tanker.stage = "depart";
     } else {
       tanker.progress = Math.max(0, tanker.progress - dt * 0.04);
@@ -1489,9 +1564,15 @@ function tick(s: GameState, delta: number, battlePaused = false) {
     }
   }
   addRevenue(s, exported * 2 * (s.research.includes("trade") ? 1.5 : 1));
-  const toRefinery = Math.min(s.oil, stats.oilRate * (1 - s.oilSplit / 100) * dt, stats.output("refinery") * (s.research.includes("pipe") ? 1.5 : 1) * dt);
+  // Refinery: conversion is capped by the room left in the fuel tank —
+  // with a full tank the refinery stops and burns NO oil (the old code
+  // subtracted the oil and clipped the fuel away: the chain's only leak).
+  const fuelCap = s.research.includes("reserve") ? 3000 : 2500;
+  const refineYield = 0.5 * (s.research.includes("refine") ? 1.2 : 1);
+  const fuelRoomOil = Math.max(0, (fuelCap - s.fuel) / refineYield);
+  const toRefinery = Math.min(s.oil, stats.oilRate * (1 - s.oilSplit / 100) * dt, stats.output("refinery") * (s.research.includes("pipe") ? 1.5 : 1) * dt, fuelRoomOil);
   s.oil -= toRefinery;
-  s.fuel = Math.min(s.research.includes("reserve") ? 3000 : 2500, s.fuel + toRefinery * 0.5 * (s.research.includes("refine") ? 1.2 : 1));
+  s.fuel = Math.min(fuelCap, s.fuel + toRefinery * refineYield);
   s.fuel = Math.max(0, s.fuel - s.buildings.power * 0.5 * (s.research.includes("gas") ? 0.7 : 1) * dt);
   const steelBatches = Math.min(s.oil / 10, s.fuel / 2, stats.output("steel") / 3 * dt * (s.research.includes("industrial") ? 1.15 : 1), Math.max(0, 2000 - s.steel) / 3);
   s.oil -= steelBatches * 10; s.fuel -= steelBatches * 2; s.steel += steelBatches * 3;
@@ -1511,7 +1592,10 @@ function tick(s: GameState, delta: number, battlePaused = false) {
     const toll = kind === "tanker" ? 2500 : kind === "container" ? 500 : kind === "bulk" ? 120 : 25;
     s.merchants.push({ id: s.nextId++, progress: 0, kind, reward: toll, paid: false });
     if (s.trafficCount % 5 === 0 && !battlePaused) s.pirates.push({ id: s.nextId++, progress: 0, hp: 100 });
-    if (s.research.includes("smart") && s.trafficCount % 4 === 0) s.contraband.push({ id: s.nextId++, progress: 0 });
+    // R5 stage one: the optical outpost building reveals contraband.
+    // (Smart-customs research no longer gates the reveal — it raises the
+    // inspection reward and tolls instead; see the inspect action.)
+    if ((s.buildings.optical ?? 0) >= 1 && s.trafficCount % 4 === 0) s.contraband.push({ id: s.nextId++, progress: 0 });
   }
   for (const ship of s.merchants) {
     const oldProgress = ship.progress;
@@ -1543,12 +1627,41 @@ function tick(s: GameState, delta: number, battlePaused = false) {
   s.merchants = s.merchants.filter(ship => ship.progress < 1);
   for (const ship of s.contraband) ship.progress += dt / 24;
   s.contraband = s.contraband.filter(ship => ship.progress < 1);
+  // VIP golden supertanker (R6): crosses on the trade lane like a merchant
+  // (45 s, storm-slowed). Pirates damage it in the pirate pass below; the
+  // crossing resolves here — success pays the old event reward, a kill
+  // fines security instead.
+  // The whole layer freezes with the SAME battlePaused flag as the pirate
+  // layer: while paused there is no progress, no damage (pirate pass is
+  // frozen too) and no resolve — holding a pause open must not grant a
+  // risk-free escort (QA round-2 exploit).
+  if (s.vipShip && !battlePaused) {
+    const vip = s.vipShip;
+    vip.age = (vip.age ?? 0) + dt;
+    vip.progress += dt / 45 * (s.event === "storm" ? .8 : 1);
+    if (vip.hp <= 0) {
+      const pos = vipPosition(vip, s.layout);
+      s.security = Math.max(0, s.security - 10);
+      s.popups.push({ id: s.nextId++, x: pos.x, y: pos.y, text: "💥 سوپرتانکر VIP منهدم شد!", life: 2 });
+      s.vipShip = null; if (s.event === "vip") { s.event = null; s.eventClock = 0; }
+    } else if (vip.progress >= 1) {
+      const pos = vipPosition(vip, s.layout);
+      s.cash += 1000; s.security = Math.min(100, s.security + 3);
+      s.popups.push({ id: s.nextId++, x: pos.x, y: pos.y, text: "+۱۰۰۰ اسکورت VIP", life: 2 });
+      s.vipShip = null; if (s.event === "vip") { s.event = null; s.eventClock = 0; }
+    }
+  }
   // Coast guard and nearby towers automatically intercept pirates chasing merchant ships.
   // The pirate layer freezes with the battle pause (audit fix: it used to keep fighting and draining ammo).
   for (const pirate of battlePaused ? [] : s.pirates) {
     pirate.progress += dt * (stormActive ? 0.06 : 0.085);
     const pos = piratePosition(pirate, s.layout);
-    pirate.hp -= (s.research.includes("coastguard") ? 12 : 4) * dt;
+    // VIP escorts are exempt from the passive coast-guard erosion while
+    // their target lives (manager ruling, QA round 3): without this the
+    // base 4/s erosion killed both escorts at ~25 s and an undefended
+    // VIP crossed with HP to spare. Hero / tower / boat fire below is
+    // NOT exempt — escorts die to real fire only.
+    if (!(pirate.vipEscort && s.vipShip)) pirate.hp -= (s.research.includes("coastguard") ? 12 : 4) * dt;
     if (distance(s.hero, pos) < 18) pirate.hp -= 22 * dt;
     for (const tower of s.towers) {
       const slot = getSlots(s.layout)[tower.slot];
@@ -1559,14 +1672,47 @@ function tick(s: GameState, delta: number, battlePaused = false) {
         s.shots.push({ slot: tower.slot, kind: tower.kind, modelKind: mk, targetId: pirate.id, flightDur: flightTime(mk, distance(slot, pos)), damage: 0, crit: false, interval: 0, x1: slot.x, y1: slot.y, x2: pos.x, y2: pos.y });
       }
     }
-    if (pirate.hp <= 0) { s.cash += 50; s.security = Math.min(100, s.security + 2); s.destroyed++; s.popups.push({ id: s.nextId++, x: pos.x, y: pos.y, text: "+50", life: 1.4 }); }
+    // Pirates hunting the VIP hold station alongside it and tear into
+    // its hull; the coast guard / hero / tower fire in this same pass is
+    // the defense (R6). Balance (manager ruling, QA round 2): 6 dmg/s
+    // per pirate (was 12) and no damage at all during the ship's first
+    // 5 s. Escorts are exempt from the passive erosion above while the
+    // ship lives (round 3), so an undefended VIP sinks at ≈30 s
+    // (5 s grace + 300 HP / 12 per s) and the event honestly fails.
+    if (s.vipShip && Math.abs(pirate.progress - s.vipShip.progress) < 0.08) {
+      pirate.progress = s.vipShip.progress - 0.02;
+      if ((s.vipShip.age ?? 0) >= 5) s.vipShip.hp -= 6 * dt;
+    }
+    if (pirate.hp <= 0) {
+      // The bounty routes to the harbor bank, but a full bank must not
+      // silently swallow it (QA round 2): whatever does not fit goes to
+      // cash, so the +50 popup is always the amount actually received.
+      const room = Math.max(0, getStats(s).bankCapacity - s.idle.bank);
+      const banked = Math.min(50, room);
+      addRevenue(s, banked);
+      if (banked < 50) { const overflow = 50 - banked; s.cash += overflow; s.idle.lifetimeIncome += overflow; }
+      s.security = Math.min(100, s.security + 2); s.piratesDestroyed++; s.popups.push({ id: s.nextId++, x: pos.x, y: pos.y, text: "+50", life: 1.4 });
+    }
     else if (pirate.progress >= 1) { s.security = Math.max(0, s.security - 15); s.popups.push({ id: s.nextId++, x: pos.x, y: pos.y, text: "−۱۵ امنیت", life: 1.4 }); }
   }
   s.pirates = s.pirates.filter(p => p.hp > 0 && p.progress < 1);
-  if (!s.event && s.eventClock >= 180) { s.event = (["spill", "storm", "vip"] as const)[Math.max(0, Math.floor(s.elapsed / 180) - 1) % 3]; s.eventClock = 0; }
-  if (s.event && s.eventClock >= 60) {
+  // Defensive net (hydrate repairs this properly): an orphaned VIP
+  // event — flag set, ship gone — can never resolve, so free the cycle
+  // on the first tick that sees it instead of deadlocking all events.
+  if (s.event === "vip" && !s.vipShip) { s.event = null; s.eventClock = 0; }
+  // Event type rotates on the event COUNTER (spill → storm → vip), not
+  // on elapsed time — the old elapsed formula drifted with session length.
+  if (!s.event && s.eventClock >= 180) {
+    s.event = (["spill", "storm", "vip"] as const)[s.eventCount % 3]; s.eventCount++; s.eventClock = 0;
+    if (s.event === "vip") {
+      // R6: the VIP event is a real escort — a golden supertanker with HP
+      // enters the trade lane and pirates sortie against it.
+      s.vipShip = { progress: 0, hp: 300, maxHp: 300, age: 0 };
+      s.pirates.push({ id: s.nextId++, progress: 0, hp: 100, vipEscort: true }, { id: s.nextId++, progress: -0.06, hp: 100, vipEscort: true });
+    }
+  }
+  if (s.event && s.event !== "vip" && s.eventClock >= 60) {
     if (s.event === "spill") s.security = Math.max(0, s.security - 10);
-    if (s.event === "vip") s.security = Math.max(0, s.security - 5);
     s.event = null; s.eventClock = 0;
   }
   if (battlePaused) return;
@@ -2156,6 +2302,7 @@ export function cloneForTick(state: GameState): GameState {
     boats: (state.boats ?? []).map(b => ({ ...b })),
     mines: (state.mines ?? []).map(m => ({ ...m })),
     pirates: state.pirates.map(p => ({ ...p })),
+    vipShip: state.vipShip ? { ...state.vipShip } : null,
     contraband: state.contraband.map(c => ({ ...c })),
     merchants: state.merchants.map(m => ({ ...m })),
     popups: state.popups.slice(),
@@ -2239,7 +2386,9 @@ export function gameReducer(state: GameState, action: Action): GameState {
     }
     case "offline-elapsed": {
       const reward=getOfflineReward({...s,lastSavedAt:action.now-Math.max(0,action.seconds)*1000},action.now);
-      if(reward.amount>0){s.idle.offline={cash:(s.idle.offline?.cash??0)+reward.amount,seconds:reward.seconds,defense:reward.ratio};advanceOfflineTimers(s,reward.seconds);}
+      // Timers advance on any real absence, independent of the cash reward.
+      if(action.seconds>0)advanceOfflineTimers(s,Math.max(0,action.seconds));
+      if(reward.amount>0){s.idle.offline={cash:(s.idle.offline?.cash??0)+reward.amount,seconds:reward.seconds,defense:reward.ratio};}
       s.lastSavedAt=action.now;break;
     }
     case "apply-daily": {
@@ -2312,10 +2461,10 @@ export function gameReducer(state: GameState, action: Action): GameState {
     }
     case "hero": { const route = findWaterRoute(s.hero, { x: action.x, y: action.y }, s.layout); s.hero.x = route[0].x; s.hero.y = route[0].y; s.hero.route = route; s.hero.routeIndex = 1; break; }
     case "hero2": { if (s.hero2) { const route = findWaterRoute(s.hero2, { x: action.x, y: action.y }, s.layout); s.hero2.x = route[0].x; s.hero2.y = route[0].y; s.hero2.route = route; s.hero2.routeIndex = 1; } break; }
-    case "hero2-select": { if (s.hero2 && action.hero !== s.hero.active) s.hero2.active = action.hero; break; }
+    case "hero2-select": { if (s.hero2 && s.phase !== "battle" && action.hero !== s.hero.active) s.hero2.active = action.hero; break; }
     case "deploy-hero2": { if (!s.hero2 && s.highestWave >= 5 && s.cash >= 3000 && action.hero !== s.hero.active) { s.cash -= 3000; s.hero2 = { ...sampleLane(getLane(s.layout, "enemy"), .3), active: action.hero }; } break; }
     case "recall-hero2": { s.hero2 = null; break; }
-    case "hero-select": s.hero.active = action.hero; break;
+    case "hero-select": if (s.phase !== "battle") s.hero.active = action.hero; break; // R9: hero type swap is locked mid-battle
     case "unlock": {
       const cost = ISLANDS.find(i => i.id === action.island)?.cost ?? 0;
       if (!s.islands.includes(action.island) && s.cash >= cost) { s.cash -= cost; s.islands.push(action.island); }
@@ -2324,7 +2473,7 @@ export function gameReducer(state: GameState, action: Action): GameState {
     case "build-platform": {
       const built = s.idle.platforms ?? (s.idle.platforms = []);
       const cost = platformCost(built.length);
-      if (!built.includes(action.id) && s.cash >= cost) { s.cash -= cost; built.push(action.id); }
+      if (!built.includes(action.id) && s.islands.includes(PLATFORM_ISLANDS[action.id] ?? "") && s.cash >= cost) { s.cash -= cost; built.push(action.id); }
       break;
     }
     case "open-chest": {
@@ -2332,14 +2481,21 @@ export function gameReducer(state: GameState, action: Action): GameState {
       break;
     }
     case "inspect": {
+      // R5: the reveal gate is enforced by the reducer itself, not only
+      // by the UI hiding the button — without the optical outpost the
+      // action is rejected, so a contraband ship smuggled in by a stale
+      // or tampered save grants nothing.
+      if ((s.buildings.optical ?? 0) < 1) break;
       const ship = s.contraband.find(item => item.id === action.id);
-      if (ship) { const pos = contrabandPosition(ship, s.layout); s.steel = Math.min(2000, s.steel + 50); s.contraband = s.contraband.filter(item => item.id !== action.id); s.popups.push({ id: s.nextId++, x: pos.x, y: pos.y, text: "+۵۰ فولاد", life: 1.4 }); }
+      // R5 stage two: smart-customs research raises the inspection reward
+      // (the optical outpost alone already allows the inspection).
+      if (ship) { const pos = contrabandPosition(ship, s.layout); const rewardSteel = s.research.includes("smart") ? 75 : 50; s.steel = Math.min(2000, s.steel + rewardSteel); s.contraband = s.contraband.filter(item => item.id !== action.id); s.popups.push({ id: s.nextId++, x: pos.x, y: pos.y, text: `+${rewardSteel} فولاد`, life: 1.4 }); }
       break;
     }
     case "upgrade-card": if (s.cards[action.kind].count >= 3) { s.cards[action.kind].count -= 3; s.cards[action.kind].level++; } break;
     case "resolve-event": {
       if (s.event === "spill" && s.cash >= 300) { s.cash -= 300; s.security = Math.min(100, s.security + 2); s.event = null; s.eventClock = 0; }
-      else if (s.event === "vip") { s.cash += 1000; s.security = Math.min(100, s.security + 3); s.event = null; s.eventClock = 0; }
+      else if (s.event === "vip") { /* R6: no instant resolve — the escort outcome (crossing or destruction) settles the VIP event. */ }
       else if (s.event === "storm") { s.event = null; s.eventClock = 0; }
       break;
     }
@@ -2347,7 +2503,14 @@ export function gameReducer(state: GameState, action: Action): GameState {
     case "prestige": {
       if (s.cash >= 100000 && s.highestWave >= 10) {
         const fresh=initialGame();s.cash=fresh.cash;s.oil=fresh.oil;s.fuel=fresh.fuel;s.steel=fresh.steel;s.ammo=fresh.ammo;s.buildings=fresh.buildings;s.idle.platforms=[];s.idle.port=fresh.idle.port;s.prestige++;s.phase="peace";s.wave=1;s.hearts=20;s.enemies=[];s.spawnRemaining=0;s.battle=null;
-        s.idle.bank=fresh.idle.bank;s.idle.collected=0;s.idle.collections=0;s.idle.claimedMissions=[];s.idle.claimedMilestones=[];s.idle.lastBattle=null;s.idle.contract=null;s.idle.offline=null;s.idle.rewards=[];
+        // R7: prestige resets planted towers (research, cards, managers,
+        // islands and heroes are kept) — and the harbor bank restarts at
+        // 0, NOT the 260 gift that only a brand-new game receives.
+        s.towers=[];s.pendingImpacts=[];s.towerStuns={};
+        s.idle.bank=0;s.idle.collected=0;s.idle.collections=0;s.idle.claimedMissions=[];s.idle.claimedMilestones=[];s.idle.lastBattle=null;s.idle.contract=null;s.idle.offline=null;s.idle.rewards=[];
+        // The rolling export window restarts at prestige too: the new
+        // run's bank capacity and offline income build on fresh exports.
+        s.idle.exportWindowDollars=0;s.idle.exportWindowTime=0;
         grantReward(s,{id:`prestige-${s.prestige}`,type:"milestone",title:"فصل تازهٔ توسعه آغاز شد",subtitle:"تولید و قدرت برجک‌ها برای همیشه ۱۰٪ بیشتر شد. مدیرها، کارت‌ها و جزایر شما حفظ شدند.",cash:0,xp:200,chests:2,boosts:2});
       }
       break;

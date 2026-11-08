@@ -46,8 +46,14 @@ export interface IdleState {
   port: PortState;
   platforms: number[];
   challengeRuns: number;
+  /** Rolling 6 h game-time export window: dollars actually banked from
+   *  tanker exports inside the current window (avgExportRate numerator). */
+  exportWindowDollars: number;
+  /** Game-time seconds elapsed inside the current export window. The
+   *  window restarts empty on expiry (6 h) and at prestige. */
+  exportWindowTime: number;
 }
-export interface PortState { tanker: { stage: "approach" | "loading" | "depart"; progress: number; load: number } | null; nextIn: number; cycles: number; }
+export interface PortState { tanker: { stage: "approach" | "loading" | "depart"; progress: number; load: number } | null; nextIn: number; cycles: number; /** Lifetime realized export income in $ — the basis of the realized export rate (R11). */ exportedDollars: number; }
 export function initialIdle(): IdleState {
   return {
     revision: 0, bank: 260, collected: 0, collections: 0, collectionStreak: 0, lastCollectionAt: -1000, lifetimeIncome: 0, xp: 0, upgradeCount: 0,
@@ -55,7 +61,8 @@ export function initialIdle(): IdleState {
     boostCharges: 2, boostRemaining: 0, boostRecharge: 0, autoBattle: false, stars: {}, lastBattle: null,
     waveStartedAt: 0, waveStartKills: 0, rewards: [], lootSeed: 17381, openedChests: 0, completedContracts: 0,
     contract: null, offline: null, appliedDailyIds: [],
-    port: { tanker: { stage: "approach", progress: 0, load: 0 }, nextIn: 0, cycles: 0 }, platforms: [], challengeRuns: 0,
+    port: { tanker: { stage: "approach", progress: 0, load: 0 }, nextIn: 0, cycles: 0, exportedDollars: 0 }, platforms: [], challengeRuns: 0,
+    exportWindowDollars: 0, exportWindowTime: 0,
   };
 }
 
@@ -102,7 +109,7 @@ export const MISSIONS: Mission[] = [
   { id:"tier-three", chapter:2, title:"آتش برتر", description:"یک برجک را به سطح ۳ برسانید.", target:3, metric:"towerTier", navigate:{kind:"tower"}, cash:1800, xp:180, boosts:1 },
   { id:"steel-five", chapter:2, title:"فولاد برای فردا", description:"مجتمع فولاد را به سطح ۵ ارتقا دهید.", target:5, metric:"building", metricId:"steel", navigate:{kind:"building",id:"steel"}, cash:2200, xp:180 },
   { id:"first-boss", chapter:2, title:"شکست ناو سنگین", description:"غول‌آخر موج ۵ را شکست دهید.", target:5, metric:"wave", navigate:{kind:"battle"}, cash:3000, xp:300, chests:2 },
-  { id:"new-island", chapter:3, title:"افق‌های تازه", description:"یک جزیرهٔ جدید آزاد کنید.", target:5, metric:"islands", navigate:{kind:"island"}, cash:3000, xp:250 },
+  { id:"new-island", chapter:3, title:"افق‌های تازه", description:"یک جزیرهٔ جدید آزاد کنید.", target:3, metric:"islands", navigate:{kind:"island"}, cash:3000, xp:250 },
   { id:"five-tech", chapter:3, title:"برتری فناوری", description:"۵ فناوری را پژوهش کنید.", target:5, metric:"research", navigate:{kind:"research"}, cash:3200, xp:250, chests:1 },
   { id:"oil-twenty-five", chapter:3, title:"مجتمع مدرن نفت", description:"سکوی نفتی را به سطح ۲۵ برسانید.", target:25, metric:"building", metricId:"oil", navigate:{kind:"building",id:"oil"}, cash:5000, xp:400, chests:2 },
   { id:"all-managers", chapter:3, title:"کشوری که خودکار کار می‌کند", description:"هر سه مدیر متخصص را استخدام کنید.", target:3, metric:"managers", navigate:{kind:"manager"}, cash:4000, xp:300, boosts:2 },
@@ -148,7 +155,9 @@ export function previewChest(state: GameState): Reward {
   seed ^= seed << 13; seed ^= seed >>> 17; seed ^= seed << 5;
   const number = seed >>> 0;
   const kinds: TowerKind[] = ["cannon","heavy","missile","air","ew","boat"];
-  const first = kinds[number % 6], second = kinds[(number % 6 + 1 + ((number >>> 4) % 5)) % 6];
+  // Checklist ۷٫۶: 3 cards for one family + 1 for the NEXT family in the
+  // 6-family cycle (the old seeded jump picked an arbitrary other family).
+  const first = kinds[number % 6], second = kinds[(number % 6 + 1) % 6];
   return { id:`chest-${state.idle.openedChests + 1}-${number}`, type:"chest", title:"نقشه‌های تازه رسیدند!", subtitle:"قدرتی که در تمام نبردها همراه شماست.", cash:150 + number % 351, xp:35, cards:{[first]:3,[second]:1}, boosts:state.idle.openedChests % 3 === 2 ? 1 : 0 };
 }
 export function advanceLootSeed(seed: number) { let x = seed | 0; x ^= x << 13; x ^= x >>> 17; x ^= x << 5; return x >>> 0; }
