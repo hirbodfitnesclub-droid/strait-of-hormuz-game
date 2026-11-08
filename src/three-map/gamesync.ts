@@ -1249,7 +1249,8 @@ export class GameSync3D {
     // mines sit on it too. Positions come from the logic's own helpers
     // (objectiveShipPosition / enemyMinePosition sample the trade lane);
     // setTarget maps lane progress to the render curve. Objective ships
-    // carry HP bars — a structure objective shows its HP in the HUD. =====
+    // carry HP bars here; a structure objective's HP shows in the HUD
+    // wave-caption (Game.tsx) — structure has no scene entity. =====
     const battleCtx = game.battle;
     if (battleCtx?.escort) {
       alive.add('obj-escort');
