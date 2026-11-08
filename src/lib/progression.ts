@@ -1,4 +1,4 @@
-import type { BuildingId, GameState, TowerKind } from "./game";
+import type { BuildingId, GameState, Mode, TowerKind } from "./game";
 import { scenarioForWave } from "./news";
 
 export type ManagerId = "harbor" | "energy" | "supply";
@@ -138,9 +138,9 @@ export const CONTRACTS: Record<ContractId, { title: string; destination: string;
 
 const operationNames = ["اولین نگهبانی","سپیده‌دم قشم","دفاع از لارک","مسیر امن","شکار ناو سنگین","سپر هرمز","تندر ساحلی","در سایهٔ آب","آتش میانی","اعماق خاموش","خط نقره‌ای","حفاظت از بندر","پاسگاه شرقی","آخرین تنگنا","شکستن تایتان","جبههٔ غربی","طلوع تنب","دیوار آبی","فولاد و آتش","سقوط ناو هواپیمابر","سه آبراه","دفاع نهایی","طوفان آهن","پیش از پیروزی","فرمانروایی آب‌ها"];
 const bosses = ["ناو هلیکوپتربر","زیردریایی لویاتان","رزم‌ناو تایتان","ناو هواپیمابر","ابرناوگان فرماندهی"];
-export function operationInfo(wave: number) {
+export function operationInfo(wave: number, mode: Mode = "campaign") {
   const boss = wave % 5 === 0;
-  return { title: scenarioForWave(wave, "campaign").operationName, boss, bossName: boss ? bosses[Math.min(4, Math.ceil(wave / 5) - 1)] : null, cash: 250 + wave * 180, xp: 60 + wave * 15, recommendedPower: Math.round(80 * Math.pow(1.2, wave - 1)), tip: wave >= 3 ? "سونار و پدافند هوایی را کنار توپخانه مستقر کنید." : "توپخانهٔ سریع برای شروع انتخاب مناسبی است." };
+  return { title: scenarioForWave(wave, mode).operationName, boss, bossName: boss ? bosses[Math.min(4, Math.ceil(wave / 5) - 1)] : null, cash: 250 + wave * 180, xp: 60 + wave * 15, recommendedPower: Math.round(80 * Math.pow(1.2, wave - 1)), tip: wave >= 3 ? "سونار و پدافند هوایی را کنار توپخانه مستقر کنید." : "توپخانهٔ سریع برای شروع انتخاب مناسبی است." };
 }
 
 export function previewChest(state: GameState): Reward {

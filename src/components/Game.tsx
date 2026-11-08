@@ -23,6 +23,7 @@ import ProgressionPanels, { type ProgressPanel } from "./ProgressionPanels";
 import { RewardView, BattleResultView, OfflineView } from "./RewardViews";
 import { currentMission, operationInfo, type MissionTarget } from "@/lib/progression";
 import { scenarioForWave, loadDiary, appendDiary, type DiaryEntry, type Scenario } from "@/lib/news";
+import { scenarioContextFor } from "@/lib/scenario-mechanics";
 import type { DailyStatus } from "@/lib/daily";
 import { serverApiEnabled } from "@/lib/runtime";
 
@@ -103,7 +104,11 @@ export default function Game() {
   const pendingReport = game.idle.lastBattle && !game.idle.lastBattle.claimed ? game.idle.lastBattle : null;
   const rewardInterface = !otherInterface && (!!game.idle.offline || game.idle.rewards.length>0 || !!pendingReport);
   const interfacePaused = otherInterface || rewardInterface;
-  const battlePaused = paused || interfacePaused;
+  // Bulletin gate (SCEN, audit finding): an open war bulletin — briefing
+  // included — FREEZES the battle, and the bulletin queue never overlaps
+  // the battle-result view (the render gate below shows the result first;
+  // the bulletin waits in state until the report is claimed).
+  const battlePaused = paused || interfacePaused || bulletin !== null || diaryOpen;
   const pauseRef = useRef(battlePaused);
   const interfaceRef = useRef(interfacePaused);
   interfaceRef.current = interfacePaused;
@@ -134,7 +139,10 @@ export default function Game() {
     rawDispatch(action);
   }, []);
   const stats = getStats(game);
-  const isNight = game.manualNight !== (Math.floor(game.elapsed / 180) % 2 === 1);
+  // A scenario night is FORCED for the whole battle (checklist ۴٫۰) — the
+  // manual toggle and the ambient cycle resume once the battle ends.
+  const scenarioNight = game.phase === "battle" && game.battle?.condition === "شب";
+  const isNight = scenarioNight || (game.manualNight !== (Math.floor(game.elapsed / 180) % 2 === 1));
 
   const notify = useCallback((message: string) => {
     setToast(message);
@@ -304,30 +312,31 @@ export default function Game() {
   }, [loaded,reloadDaily]);
 
   useEffect(() => {
+    const scenCtx = scenarioContextFor(gameRef.current);
     if (previousPhase.current !== "battle" && game.phase === "battle") {
       const isBoss = game.wave % 5 === 0;
       announce(isBoss ? "یک ناو سنگین در راه است" : `موج ${fa(game.wave)} آغاز شد`, isBoss ? "برای غول‌آخر آماده شوید" : "برجک‌ها به‌صورت خودکار دفاع می‌کنند", "battle");
-      const sc = scenarioForWave(game.wave, game.mode);
+      const sc = scenarioForWave(game.wave, game.mode, scenCtx);
       setBulletin({ kind: "briefing", scenario: sc, wave: game.wave });
-      setDiary(appendDiary({ at: Date.now(), wave: game.wave, kind: "before", headline: sc.newsBefore.headline, body: sc.newsBefore.body }));
+      setDiary(appendDiary({ at: Date.now(), wave: game.wave, kind: "before", headline: sc.newsBefore.headline, body: sc.newsBefore.body, zone: sc.zone }));
       playSound(isBoss ? "boss" : "wave"); setCoachDismissed(true);
       if (vibrationRef.current && typeof navigator !== "undefined" && "vibrate" in navigator && isBoss) navigator.vibrate([40, 40, 60]);
     } else if (previousPhase.current === "battle" && game.phase === "intermission") {
       setAnnouncement(null); playSound("victory");
       const completedWave = game.wave - 1; // reducer increments wave when a wave is cleared
-      const sc = scenarioForWave(completedWave, game.mode);
+      const sc = scenarioForWave(completedWave, game.mode, scenCtx);
       setBulletin({ kind: "victory", scenario: sc, wave: completedWave });
-      setDiary(appendDiary({ at: Date.now(), wave: completedWave, kind: "victory", headline: sc.newsVictory.headline, body: sc.newsVictory.body }));
+      setDiary(appendDiary({ at: Date.now(), wave: completedWave, kind: "victory", headline: sc.newsVictory.headline, body: sc.newsVictory.body, zone: sc.zone }));
     } else if (game.phase === "defeat" && previousPhase.current !== "defeat") {
       announce("خط دفاع شکسته شد", "برجک‌ها را تقویت کنید و دوباره تلاش کنید", "battle");
-      const sc = scenarioForWave(game.wave, game.mode);
+      const sc = scenarioForWave(game.wave, game.mode, scenCtx);
       setBulletin({ kind: "defeat", scenario: sc, wave: game.wave });
-      setDiary(appendDiary({ at: Date.now(), wave: game.wave, kind: "defeat", headline: sc.newsDefeat.headline, body: sc.newsDefeat.body }));
+      setDiary(appendDiary({ at: Date.now(), wave: game.wave, kind: "defeat", headline: sc.newsDefeat.headline, body: sc.newsDefeat.body, zone: sc.zone }));
       playSound("defeat");
     } else if (game.phase === "victory" && previousPhase.current !== "victory") {
-      const sc = scenarioForWave(game.wave, game.mode);
+      const sc = scenarioForWave(game.wave, game.mode, scenCtx);
       setBulletin({ kind: "final", scenario: sc, wave: game.wave });
-      setDiary(appendDiary({ at: Date.now(), wave: game.wave, kind: "victory", headline: sc.newsVictory.headline, body: sc.newsVictory.body }));
+      setDiary(appendDiary({ at: Date.now(), wave: game.wave, kind: "victory", headline: sc.newsVictory.headline, body: sc.newsVictory.body, zone: sc.zone }));
     }
     previousPhase.current = game.phase; previousWave.current = game.wave;
   }, [game.phase, game.wave, game.mode, announce, playSound]);
@@ -460,7 +469,7 @@ export default function Game() {
   const showCoach = false;
   const boss = activeBattle ? bossEnemy(game) : null;
   const showCombo = activeBattle && (game.combo ?? 0) >= 3;
-  const previewUnits = !activeBattle ? waveComposition(game.wave) : [];
+  const previewUnits = !activeBattle ? waveComposition(game.wave, scenarioForWave(game.wave, game.mode, scenarioContextFor(game))) : [];
   const mission = currentMission(game);
   const coachTarget = !mission ? "" : mission.id === "first-profit" ? "collect" : mission.id === "first-defense" || mission.id === "third-wave" || mission.id === "first-boss" || mission.id === "tenth-wave" ? "battle" : mission.metric === "building" ? "building" : mission.metric === "towers" || mission.metric === "towerTier" ? "tower" : mission.metric === "managers" ? "manager" : "";
   const moreIsActive = moreOpen || (panel !== null && panel !== "economy") || progressPanel==="contracts" || progressPanel==="daily";
@@ -490,7 +499,7 @@ export default function Game() {
       {(game.event || game.ammo < 100 || stats.grid < 0.9 || game.oil >= stats.oilCapacity - 1) && <button className="context-alert" onClick={() => openPanel(game.event ? "events" : stats.grid < 0.9 ? "city" : "economy")}><span /><strong>{game.event ? "یک رویداد نیاز به توجه دارد" : game.ammo < 100 ? "مهمات رو به اتمام است" : stats.grid < 0.9 ? "برق شبکه را تقویت کنید" : "مخزن نفت پر شده است"}</strong><ChevronLeft size={15} /></button>}
 
       {announcement && !targeting && !interfacePaused && <div className={`battle-announcement ${announcement.type}`} key={`${announcement.title}-${announcement.subtitle}`} role="status"><span>{announcement.type === "success" ? <ShieldCheck size={24} /> : announcement.type === "power" ? <Sparkles size={24} /> : <Swords size={24} />}</span><div><strong>{announcement.title}</strong><p>{announcement.subtitle}</p></div></div>}
-      {bulletin && !otherInterface && <div className={`news-bulletin ${bulletin.kind}`} role="alertdialog" aria-label="بولتن خبری جنگ"><div className="news-head"><span className="news-live"><Bell size={13} /> خبرگزاری تنگه</span><span className="news-op">عملیات «{bulletin.scenario.operationName}» · {bulletin.scenario.zone}</span><button className="news-x" onClick={() => setBulletin(null)} aria-label="بستن بولتن"><X size={15} /></button></div><strong>{bulletin.kind === "briefing" ? bulletin.scenario.newsBefore.headline : bulletin.kind === "defeat" ? bulletin.scenario.newsDefeat.headline : bulletin.scenario.newsVictory.headline}</strong><p>{bulletin.kind === "briefing" ? bulletin.scenario.newsBefore.body : bulletin.kind === "defeat" ? bulletin.scenario.newsDefeat.body : bulletin.scenario.newsVictory.body}</p>{bulletin.kind === "briefing" && <><p className="news-brief">{bulletin.scenario.briefing}</p><div className="news-chips"><span>هدف: {bulletin.scenario.objective}</span><span>دشمن: {bulletin.scenario.enemyFlavor}</span>{bulletin.scenario.specialCondition && <span>شرایط: {bulletin.scenario.specialCondition}</span>}</div></>}<div className="news-actions"><button onClick={() => setBulletin(null)}>{bulletin.kind === "briefing" ? "آغاز نبرد" : "بستن"}</button><button className="news-diary-btn" onClick={() => setDiaryOpen(true)}><ClipboardList size={14} /> دفترچه جنگ ({fa(diary.length)})</button></div></div>}
+      {bulletin && !otherInterface && !rewardInterface && <div className={`news-bulletin ${bulletin.kind}`} role="alertdialog" aria-label="بولتن خبری جنگ"><div className="news-head"><span className="news-live"><Bell size={13} /> خبرگزاری تنگه</span><span className="news-op">عملیات «{bulletin.scenario.operationName}» · {bulletin.scenario.zone}</span><button className="news-x" onClick={() => setBulletin(null)} aria-label="بستن بولتن"><X size={15} /></button></div><strong>{bulletin.kind === "briefing" ? bulletin.scenario.newsBefore.headline : bulletin.kind === "defeat" ? bulletin.scenario.newsDefeat.headline : bulletin.scenario.newsVictory.headline}</strong><p>{bulletin.kind === "briefing" ? bulletin.scenario.newsBefore.body : bulletin.kind === "defeat" ? bulletin.scenario.newsDefeat.body : bulletin.scenario.newsVictory.body}</p>{bulletin.kind === "briefing" && <><p className="news-brief">{bulletin.scenario.briefing}</p><div className="news-chips"><span>هدف: {bulletin.scenario.objective}</span><span>دشمن: {bulletin.scenario.enemyFlavor}</span>{bulletin.scenario.specialCondition && <span>شرایط: {bulletin.scenario.specialCondition}</span>}</div></>}<div className="news-actions"><button onClick={() => setBulletin(null)}>{bulletin.kind === "briefing" ? "آغاز نبرد" : "بستن"}</button><button className="news-diary-btn" onClick={() => setDiaryOpen(true)}><ClipboardList size={14} /> دفترچه جنگ ({fa(diary.length)})</button></div></div>}
       {diaryOpen && !otherInterface && <div className="diary-overlay" role="dialog" aria-label="دفترچه جنگ"><div className="diary-card"><div className="news-head"><span className="news-live"><ClipboardList size={13} /> دفترچه جنگ</span><button className="news-x" onClick={() => setDiaryOpen(false)} aria-label="بستن دفترچه"><X size={15} /></button></div><div className="diary-list">{diary.length === 0 ? <p className="diary-empty">هنوز خبری ثبت نشده است؛ نخستین نبرد، اولین صفحهٔ دفترچه را می‌نویسد.</p> : [...diary].reverse().map((e, i) => <article key={i} className={`diary-item ${e.kind}`}><small>موج {fa(e.wave)} · {e.kind === "before" ? "پیش از نبرد" : e.kind === "victory" ? "پیروزی" : "شکست"}</small><strong>{e.headline}</strong><p>{e.body}</p></article>)}</div></div></div>}
       {paused && activeBattle && !interfacePaused && !targeting && !announcement && <div className="pause-indicator"><Pause size={20} /><strong>نبرد در مکث است</strong><span>برای ادامه، دکمهٔ پخش را بزنید.</span></div>}
 

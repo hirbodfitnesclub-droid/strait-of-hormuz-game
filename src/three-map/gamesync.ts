@@ -789,7 +789,7 @@ export class GameSync3D {
     return point3dToPct(out.x, out.z);
   }
 
-  private setTarget(key: string, lane: LaneName, progress: number, y: number, fwd: 'X' | 'Z') {
+  private setTarget(key: string, lane: LaneName, progress: number, y: number, fwd: 'X' | 'Z', flip = false) {
     // PERF: read position/tangent from the fixed-resolution lane cache
     // (sampled once in the constructor), linearly interpolated — no per-frame
     // CatmullRom arc-length evaluation and no per-call Vector3 allocations.
@@ -800,7 +800,7 @@ export class GameSync3D {
     const fr = f - i0;
     const pos = this.lanePosTmp.copy(cache.pts[i0]).lerp(cache.pts[i0 + 1], fr);
     const tan = this.laneTanTmp.copy(cache.tans[i0]).lerp(cache.tans[i0 + 1], fr);
-    const heading = fwd === 'X' ? Math.atan2(-tan.z, tan.x) : Math.atan2(tan.x, tan.z) + (this.kenneyRev ? Math.PI : 0);
+    const heading = (fwd === 'X' ? Math.atan2(-tan.z, tan.x) : Math.atan2(tan.x, tan.z) + (this.kenneyRev ? Math.PI : 0)) + (flip ? Math.PI : 0);
     const t = this.targets.get(key);
     if (t) {
       const dx = pos.x - t.pos.x, dz = pos.z - t.pos.z;
@@ -913,7 +913,10 @@ export class GameSync3D {
       const key = `enemy-${e.id}`; alive.add(key);
       this.entKinds.set(key, e.kind);
       const y = e.kind === 'air' ? 8 : e.kind === 'sub' ? 0.1 : 0.35;
-      this.setTarget(key, 'enemy', e.progress, y, 'X');
+      // Siege second front (SCEN): rev units travel the lane from the far
+      // end — sample the mirrored parameter and flip the heading π so the
+      // hull faces its true direction of travel.
+      this.setTarget(key, 'enemy', e.rev ? 1 - e.progress : e.progress, y, 'X', !!e.rev);
       const wakeLen = e.kind === 'boss' ? (e.boss === 4 ? 30 : 24) : e.kind === 'destroyer' ? 13.5 : e.kind === 'sub' ? 0 : e.kind === 'corvette' ? 10 : 6.5;
       void this.ensureEnt(key, () => enemyModel(e.kind, e.boss), { bar: e.kind === 'boss' ? 10 : 5, bob: e.kind === 'air' ? 0 : 0.09, wake: wakeLen ? { len: wakeLen, wid: wakeLen * 0.55, fwd: 'X' } : undefined });
       const ent = this.ents.get(key);

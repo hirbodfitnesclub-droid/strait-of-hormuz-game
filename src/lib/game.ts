@@ -1,6 +1,8 @@
 import { initialIdle, MISSIONS, MANAGERS, CONTRACTS, currentMission, missionProgress, managerCost, operationInfo, previewChest, advanceLootSeed, type IdleState, type ManagerId, type ContractId, type UpgradeQuantity, type Reward } from "./progression";
 import { findWaterRoute, getLane, nearestWater, sampleLane, type MapLayout, type Point } from "./navigation";
 import { weaponSpec, modelKindFor, specInterval, flightTime, salvoCycleSeconds, type ModelKind } from "./weapons-spec";
+import { scenarioForWave, commitScenarioForWave, type Scenario } from "./news";
+import { buildSpawnQueue, objectiveTypeOf, conditionRangeFactor, scenarioContextFor, type ObjectiveType, type SpawnUnit } from "./scenario-mechanics";
 
 export type BuildingId = "oil" | "tank" | "dock" | "refinery" | "steel" | "arms" | "power" | "water" | "city" | "welfare" | "optical";
 export type TowerKind = "cannon" | "heavy" | "missile" | "air" | "ew" | "boat";
@@ -54,6 +56,9 @@ export interface Enemy {
   intercept?: number;
   armorBreak?: number;
   hitFlash?: number;
+  /** Siege operations (شکستن محاصره): this unit travels the enemy lane from
+   *  the opposite end — position is sampled at 1 − progress. */
+  rev?: boolean;
   /** MECH-A → MECH-B contract: EMP pulse shutdown stamps on the shared
    *  battle clock (GameState.battleTime). While
    *  `s.battleTime < (e.weaponDownUntil ?? 0)` the enemy's weapons are
@@ -71,7 +76,6 @@ export interface Enemy {
   hackTimer?: number;
   /** Killed without bounty/combo/kill credit (hacked drone detonation). */
   noReward?: boolean;
-
   /** Destroyer offensive-fire clock (MECH-B; checklist ۲٫۶): battle-time
    *  accumulated at the enemy's effective rate (frozen by stun/slow). */
   fireClock?: number;
@@ -83,6 +87,31 @@ export interface Enemy {
   addsSpawned?: number;
   /** Boss 3 only: last observed Titan shield state, for up/down events. */
   shieldUp?: boolean;
+}
+/** An enemy sea mine laid on the trade lane during a «مین‌گذاری دشمن»
+ *  battle (team SCEN). NOT the player mine branch of MECH-A: these hurt OUR
+ *  ships. Static once laid; boat (garrison) towers sweep them. */
+export interface EnemyMine { id: number; progress: number }
+/** A friendly ship an objective rides on: the escort caravan (moves along
+ *  the trade lane) or the stranded rescue ship (stationary in the channel). */
+export interface ObjectiveShip { progress: number; hp: number; maxHp: number; slow: number }
+/** Everything one battle inherits from its scenario (fix program SCEN;
+ *  audit بحرانی-۱۴/۱۵/۱۶): the spawn queue built from the scenario's class
+ *  mix, the special condition's mechanics, and the objective's win/lose
+ *  state. Rolled once in startWave; null outside battle. */
+export interface BattleContext {
+  wave: number;
+  condition: string | null;
+  objective: ObjectiveType;
+  queue: SpawnUnit[];
+  elapsed: number;               // battle-seconds (drives the dawn window)
+  escort: ObjectiveShip | null;
+  stranded: ObjectiveShip | null;
+  structureHp: number; structureMaxHp: number; // platform / loading tanker; 0 max = no structure objective
+  airTotal: number; airLeaked: number;         // air-defense leak threshold
+  mines: EnemyMine[]; mineClock: number;
+  sweep: Record<number, number>;               // boat-slot → minesweep cooldown
+  failed: boolean;                             // objective lost → defeat at the resolution point
 }
 export interface Pirate { id: number; progress: number; hp: number; }
 export interface Contraband { id: number; progress: number; }
@@ -196,6 +225,7 @@ export interface GameState {
   security: number; hearts: number; wave: number; highestWave: number;
   phase: Phase; mode: Mode; speed: 1 | 2 | 3; layout: MapLayout;
   enemies: Enemy[]; pirates: Pirate[]; contraband: Contraband[]; merchants: Merchant[]; shots: Shot[]; popups: Popup[];
+  battle: BattleContext | null;
   pendingImpacts: PendingImpact[];
   boats: BoatUnit[]; mines: MineUnit[];
   enemyMissiles: EnemyMissile[];
@@ -204,8 +234,8 @@ export interface GameState {
   spawnRemaining: number; spawnClock: number; spawnIndex: number; nextId: number; earlyBonus: boolean;
   countdown: number; trafficClock: number; trafficCount: number; destroyed: number;
   elapsed: number; cooldowns: Record<Spell, number>; overdrive: number;
-  hero: { x: number; y: number; active: number; attackClock?: number; route?: Point[]; routeIndex?: number };
-  hero2: { x: number; y: number; active: number; attackClock?: number; route?: Point[]; routeIndex?: number } | null;
+  hero: { x: number; y: number; active: number; attackClock?: number; route?: Point[]; routeIndex?: number; slow?: number };
+  hero2: { x: number; y: number; active: number; attackClock?: number; route?: Point[]; routeIndex?: number; slow?: number } | null;
   towerStuns: Record<number, number>;
   /** Cumulative battle clock: battle-seconds including the game-speed
    *  multiplier, advanced only while phase === "battle" and never reset —
@@ -330,7 +360,7 @@ export function initialGame(): GameState {
     research: [],
     cards: { cannon: { count: 0, level: 1 }, heavy: { count: 0, level: 1 }, missile: { count: 0, level: 1 }, air: { count: 0, level: 1 }, ew: { count: 0, level: 1 }, boat: { count: 0, level: 1 } },
     islands: ["main", "qeshm"], security: 70, hearts: 20, wave: 1, highestWave: 0,
-    phase: "peace", mode: "campaign", speed: 1, layout: "landscape", enemies: [], pirates: [], contraband: [], merchants: [{ id: 1, progress: .24, kind: "bulk", reward: 120, paid: false }, { id: 2, progress: .63, kind: "container", reward: 500, paid: false }], shots: [], popups: [], pendingImpacts: [], boats: [], mines: [], enemyMissiles: [], events: [], battleTime: 0, fireStats: {},
+    phase: "peace", mode: "campaign", speed: 1, layout: "landscape", enemies: [], pirates: [], contraband: [], merchants: [{ id: 1, progress: .24, kind: "bulk", reward: 120, paid: false }, { id: 2, progress: .63, kind: "container", reward: 500, paid: false }], shots: [], popups: [], pendingImpacts: [], boats: [], mines: [], enemyMissiles: [], events: [], battle: null, battleTime: 0, fireStats: {},
     spawnRemaining: 0, spawnClock: 0, spawnIndex: 0, nextId: 3, earlyBonus: false, countdown: 15, trafficClock: 0, trafficCount: 0,
     destroyed: 0, elapsed: 0, cooldowns: { strike: 0, emp: 0, overdrive: 0 }, overdrive: 0,
     hero: { ...sampleLane(getLane("landscape", "enemy"), .45), active: 0 }, hero2: null, towerStuns: {}, challengeRule: 0, chests: 0, prestige: 0, event: null, eventClock: 0,
@@ -345,9 +375,12 @@ export function towerUpgradeCost(tower: Tower) {
 }
 export function positionAt(progress: number, layout: MapLayout = "landscape") { return sampleLane(getLane(layout, "enemy"), progress); }
 export function enemyPosition(enemy: Enemy, layout: MapLayout = "landscape") {
-  if (enemy.kind === "air") { const path = getLane(layout, "enemy"), start = path[0], end = path[path.length - 1]; return { x: start.x + (end.x - start.x) * enemy.progress, y: start.y + (end.y - start.y) * enemy.progress }; }
-  return positionAt(enemy.progress, layout);
+  const p = enemy.rev ? 1 - enemy.progress : enemy.progress;
+  if (enemy.kind === "air") { const path = getLane(layout, "enemy"), start = path[0], end = path[path.length - 1]; return { x: start.x + (end.x - start.x) * p, y: start.y + (end.y - start.y) * p }; }
+  return positionAt(p, layout);
 }
+export function enemyMinePosition(mine: EnemyMine, layout: MapLayout = "landscape") { return sampleLane(getLane(layout, "trade"), mine.progress); }
+export function objectiveShipPosition(ship: ObjectiveShip, layout: MapLayout = "landscape") { return sampleLane(getLane(layout, "trade"), ship.progress); }
 /** Tower power draw in MW, read from the canonical weapons spec (R1) —
  *  replaces the old flat TOWERS.power × tier-growth formula. The tier-4
  *  "capacitors" research discount (−35%) is unchanged. */
@@ -419,7 +452,17 @@ export function towerDps(s: GameState, tower: Tower) {
 }
 export function getRange(s: GameState, tower: Tower) {
   const base = tower.kind === "air" && tower.tier === 4 && tower.branch === 0 ? 65 : TOWERS[tower.kind].range;
-  return base * (1 + (tower.tier - 1) * 0.06) * (1 + 0.03 * (s.buildings.optical ?? 0)) * (s.research.includes("radar") ? 1.2 : 1) * (s.research.includes("sonar") && (tower.kind === "ew" || tower.kind === "boat") ? 1.1 : 1) * (s.mode === "challenge" && s.challengeRule === 0 && s.phase === "battle" ? 0.5 : 1) * (s.event === "storm" ? 0.8 : 1);
+  // Environmental visibility factors combine by taking the MOST restrictive
+  // one — never by stacking, and never by one cancelling another (QA
+  // round 2): scenario fog cuts effective range 30% (detection IS range
+  // here) and keeps doing so while a storm event rages (min(0.7, 0.8) =
+  // 0.7, not the storm's 0.8 alone); scenario night cuts optical range 20%;
+  // a scenario storm coinciding with a storm event is still a single ×0.8.
+  const envFactor = Math.min(
+    s.event === "storm" ? 0.8 : 1,
+    s.phase === "battle" ? conditionRangeFactor(s.battle?.condition) : 1,
+  );
+  return base * (1 + (tower.tier - 1) * 0.06) * (1 + 0.03 * (s.buildings.optical ?? 0)) * (s.research.includes("radar") ? 1.2 : 1) * (s.research.includes("sonar") && (tower.kind === "ew" || tower.kind === "boat") ? 1.1 : 1) * (s.mode === "challenge" && s.challengeRule === 0 && s.phase === "battle" ? 0.5 : 1) * envFactor;
 }
 export function getOfflineReward(s: GameState, now: number) {
   const seconds = Math.max(0, Math.min(12 * 3600, (now - (s.lastSavedAt || now)) / 1000));
@@ -687,6 +730,38 @@ export function hydrateGame(raw: unknown): { game: GameState; offline: number } 
   // Restored entity ids must never collide with ids minted after the load.
   for (const b of game.boats) game.nextId = Math.max(game.nextId, b.id + 1);
   for (const m of game.mines) game.nextId = Math.max(game.nextId, m.id + 1);
+  // Scenario battle context (SCEN): keep a well-formed one, drop a corrupt
+  // one. A save caught mid-battle WITHOUT a valid context cannot resume
+  // its mechanics — it falls back to peace and the wave restarts cleanly
+  // instead of crashing or running mechanics-free.
+  const rawBattle = (saved as GameState).battle;
+  if (rawBattle && typeof rawBattle === "object" && Array.isArray(rawBattle.queue)) {
+    // Objective ships re-clamp on load (QA round 2): a tampered save must
+    // not resurrect a ship above its max HP (or below zero).
+    const ship = (v: unknown): ObjectiveShip | null => {
+      if (!v || typeof v !== "object") return null;
+      const maxHp = Math.max(0, num((v as ObjectiveShip).maxHp, 0));
+      return { progress: Math.max(0, Math.min(1, num((v as ObjectiveShip).progress, 0))), hp: Math.max(0, Math.min(maxHp, num((v as ObjectiveShip).hp, 0))), maxHp, slow: Math.max(0, num((v as ObjectiveShip).slow, 0)) };
+    };
+    const structureMaxHp = Math.max(0, num(rawBattle.structureMaxHp, 0));
+    const classOk = (k: unknown) => k === "speed" || k === "corvette" || k === "air" || k === "sub" || k === "destroyer" || k === "boss";
+    const objOk = (o: unknown) => o === "repel" || o === "escort" || o === "airdef" || o === "intercept" || o === "structure" || o === "siege" || o === "rescue";
+    game.battle = {
+      wave: Math.max(1, Math.floor(num(rawBattle.wave, game.wave))),
+      condition: typeof rawBattle.condition === "string" ? rawBattle.condition : null,
+      objective: objOk(rawBattle.objective) ? rawBattle.objective : "repel",
+      queue: rawBattle.queue.filter(u => u && typeof u === "object" && classOk((u as SpawnUnit).kind)).map(u => ({ kind: (u as SpawnUnit).kind, rev: !!(u as SpawnUnit).rev })),
+      elapsed: Math.max(0, num(rawBattle.elapsed, 0)),
+      escort: ship(rawBattle.escort), stranded: ship(rawBattle.stranded),
+      structureHp: Math.max(0, Math.min(structureMaxHp, num(rawBattle.structureHp, 0))), structureMaxHp,
+      airTotal: Math.max(0, Math.floor(num(rawBattle.airTotal, 0))), airLeaked: Math.max(0, Math.floor(num(rawBattle.airLeaked, 0))),
+      // The minefield cap (6) is re-applied on load, not just at laying
+      // time — a tampered save cannot smuggle in a bigger field (QA).
+      mines: Array.isArray(rawBattle.mines) ? rawBattle.mines.filter(m => m && typeof m === "object" && Number.isFinite((m as EnemyMine).progress)).map(m => ({ id: Math.floor(num((m as EnemyMine).id, 0)), progress: Math.max(0, Math.min(1, (m as EnemyMine).progress)) })).slice(0, 6) : [],
+      mineClock: Math.max(0, num(rawBattle.mineClock, 4)), sweep: {}, failed: false,
+    };
+  } else game.battle = null;
+  if (game.phase === "battle" && !game.battle) { game.phase = "peace"; game.enemies = []; game.spawnRemaining = 0; game.pendingImpacts = []; }
   game.challengeRule = [0, 1, 2].includes(game.challengeRule) ? game.challengeRule : 0;
   game.combo = intIn(saved.combo, 0, 0, Number.MAX_SAFE_INTEGER);
   game.comboTimer = Math.max(0, num(saved.comboTimer, 0));
@@ -801,15 +876,47 @@ function startWave(s: GameState, early: boolean) {
   for (const t of s.towers) { t.cooldown = 0; t.salvoLeft = undefined; } // every tower opens fire ready, MLRS with a full salvo loaded
   s.idle.waveStartedAt = s.elapsed; s.idle.waveStartKills = s.destroyed; s.idle.lastBattle = null;
   s.combo = 0; s.comboTimer = 0; s.waveLeaked = false; s.slowmo = 0;
-  s.spawnRemaining = 5 + Math.min(s.wave, 15) + (s.wave % 5 === 0 ? 1 : 0);
+  // The scenario drives this battle (SCEN): composition, condition
+  // mechanics and the objective's win/lose state are rolled ONCE here from
+  // the same scenario object the bulletin shows — text and mechanics can
+  // never diverge. Total count still follows the checklist §۳ formula
+  // (buildSpawnQueue builds exactly waveTotal units).
+  const scenario = scenarioForWave(s.wave, s.mode, scenarioContextFor(s));
+  // The run is recorded in the generator's memory NOW — at actual battle
+  // start — never at generation/preview time (QA round 2: phantom runs).
+  commitScenarioForWave(s.wave, s.mode);
+  const queue = buildSpawnQueue(s.wave, scenario);
+  const objective = objectiveTypeOf(scenario.objective);
+  const structureMaxHp = objective === "structure" ? 500 + 60 * s.wave : 0;
+  s.battle = {
+    wave: s.wave, condition: scenario.specialCondition, objective, queue,
+    elapsed: 0,
+    escort: objective === "escort" ? { progress: 0, hp: 260 + 45 * s.wave, maxHp: 260 + 45 * s.wave, slow: 0 } : null,
+    // The stranded ship waits at trade progress 0.7 — where the enemy lane
+    // converges with the channel (measured: ~2 units apart there, ~20 at
+    // 0.45). Any closer to the harbor and no enemy could ever reach it.
+    stranded: objective === "rescue" ? { progress: 0.7, hp: 320 + 50 * s.wave, maxHp: 320 + 50 * s.wave, slow: 0 } : null,
+    structureHp: structureMaxHp, structureMaxHp,
+    airTotal: queue.filter(u => u.kind === "air").length, airLeaked: 0,
+    mines: [], mineClock: 4, sweep: {}, failed: false,
+  };
+  s.spawnRemaining = queue.length;
   s.spawnIndex = 0; s.spawnClock = 0; s.countdown = 15;
 }
-function makeEnemy(s: GameState, kind: Enemy["kind"], progress = 0): Enemy {
+/** Objective lost (escort sunk, structure destroyed, intercept line
+ *  crossed, air-defense threshold breached): the battle ends as a defeat
+ *  even with hearts to spare — checklist ۴٫۰. Mirrors the hearts defeat. */
+function objectiveDefeat(s: GameState) {
+  if (s.battle) s.battle.mines = [];
+  s.idle.lastBattle = { id: `battle-${s.nextId++}`, wave: s.wave, title: operationInfo(s.wave, s.mode).title, victory: false, stars: 0, cash: 0, xp: 0, chests: 0, destroyed: s.destroyed - s.idle.waveStartKills, seconds: s.elapsed - s.idle.waveStartedAt, hearts: s.hearts, claimed: false };
+  s.idle.revision++; s.phase = "defeat"; s.enemies = []; s.spawnRemaining = 0; s.pendingImpacts = [];
+}
+function makeEnemy(s: GameState, kind: Enemy["kind"], progress = 0, rev = false): Enemy {
   const boss = kind === "boss" ? Math.min(5, Math.ceil(s.wave / 5)) : 0;
   const base = kind === "speed" ? 95 : kind === "corvette" ? 240 : kind === "air" ? 80 : kind === "sub" ? 190 : kind === "destroyer" ? 430 : 1200 + boss * 600;
   let maxHp = base * Math.pow(1.22, s.wave);
   if (s.mode === "challenge" && s.challengeRule === 1) { maxHp = Math.round(maxHp * 1.35); }
-  return { id: s.nextId++, kind, boss, hp: maxHp, maxHp, progress, stun: 0, specialClock: 0 };
+  return { id: s.nextId++, kind, boss, hp: maxHp, maxHp, progress, stun: 0, specialClock: 0, ...(rev ? { rev: true } : {}) };
 }
 function enemyTarget(e: Enemy) { return e.kind === "air" ? "air" : e.kind === "sub" || (e.kind === "boss" && e.boss === 2 && e.progress < 0.5) ? "sub" : "sea"; }
 /** Submarine detection (checklist ۱٫۵/۲). MECH-A fixes, per audit team 3b:
@@ -1249,7 +1356,24 @@ function ghadirCounterfirePhase(s: GameState, battleDt: number) {
 }
 
 export type WaveUnit = { kind: Enemy["kind"]; count: number; boss: number };
-export function waveComposition(wave: number): WaveUnit[] {
+/** Wave preview. With a scenario (the normal path — Game.tsx passes the
+ *  same scenario the bulletin shows) the counts come from the scenario's
+ *  spawn queue, so the preview is exactly what will spawn. Without one,
+ *  the legacy fixed formula answers (kept for old callers/tests). */
+export function waveComposition(wave: number, scenario?: Scenario): WaveUnit[] {
+  if (scenario) {
+    const queue = buildSpawnQueue(wave, scenario);
+    const counts = new Map<string, WaveUnit>();
+    for (const unit of queue) {
+      const bossNo = unit.kind === "boss" ? Math.min(5, Math.ceil(wave / 5)) : 0;
+      const key = unit.kind === "boss" ? `boss-${bossNo}` : unit.kind;
+      const cur = counts.get(key);
+      if (cur) cur.count++;
+      else counts.set(key, { kind: unit.kind, count: 1, boss: bossNo });
+    }
+    const order: Record<string, number> = { speed: 0, corvette: 1, air: 2, sub: 3, destroyer: 4 };
+    return [...counts.values()].sort((a, b) => (a.kind === "boss" ? 9 : order[a.kind] ?? 5) - (b.kind === "boss" ? 9 : order[b.kind] ?? 5));
+  }
   const total = 5 + Math.min(wave, 15) + (wave % 5 === 0 ? 1 : 0);
   const counts = new Map<string, WaveUnit>();
   for (let index = 0; index < total; index++) {
@@ -1376,6 +1500,9 @@ function tick(s: GameState, delta: number, battlePaused = false) {
   s.shots = [];
   s.events = []; // momentary battle events follow the same one-tick lifecycle (MECH-B)
   s.popups = s.popups.map(p => ({ ...p, life: p.life - dt })).filter(p => p.life > 0);
+  // A scenario storm IS the storm system (checklist ۴٫۰): same ×0.8 on
+  // merchant speed and tower range (getRange) as the dynamic storm event.
+  const stormActive = s.event === "storm" || (s.phase === "battle" && s.battle?.condition === "طوفان");
   s.trafficClock += dt;
   const interval = 15 - 0.1 * s.security;
   if (s.trafficClock >= interval) {
@@ -1388,13 +1515,29 @@ function tick(s: GameState, delta: number, battlePaused = false) {
   }
   for (const ship of s.merchants) {
     const oldProgress = ship.progress;
-    ship.progress += dt / (ship.kind === "tanker" ? 45 : ship.kind === "barge" ? 25 : 34) * (s.event === "storm" ? .8 : 1);
+    ship.progress += dt / (ship.kind === "tanker" ? 45 : ship.kind === "barge" ? 25 : 34) * (stormActive ? .8 : 1);
     if (!ship.paid && oldProgress < .82 && ship.progress >= .82) {
       ship.paid = true;
       const toll = ship.reward * (s.research.includes("smart") ? 1.25 : 1) * (s.research.includes("logistics") ? 1.1 : 1) * (s.research.includes("diplomacy") ? 1.15 : 1);
       addRevenue(s, toll * (1 + .1 * s.idle.managerLevels.harbor));
       const position = merchantPosition(ship, s.layout);
       s.popups.push({ id: s.nextId++, ...position, text: `+${Math.round(toll)}`, life: 1.4 });
+    }
+    // Enemy mines threaten the shipping lane in real time: merchants keep
+    // sailing while the battle layer is frozen (briefing/diary pause), so
+    // the detonation check lives HERE, on the segment the ship actually
+    // crossed this tick. A point check in the frozen battle section let a
+    // ship slip through the ±0.02 window during a pause and disarmed the
+    // mine by opening the diary (QA round 2 exploit).
+    if (s.phase === "battle" && s.battle && s.battle.mines.length) {
+      const mine = s.battle.mines.find(m => m.progress > oldProgress - 0.02 && m.progress < ship.progress + 0.02);
+      if (mine) {
+        s.battle.mines = s.battle.mines.filter(m => m.id !== mine.id);
+        const position = merchantPosition(ship, s.layout);
+        ship.progress = 2; // sunk — the traffic filter below drops progress ≥ 1
+        s.security = Math.max(0, s.security - 2);
+        s.popups.push({ id: s.nextId++, ...position, text: "کشتی تجاری به مین برخورد کرد!", life: 1.8 });
+      }
     }
   }
   s.merchants = s.merchants.filter(ship => ship.progress < 1);
@@ -1403,7 +1546,7 @@ function tick(s: GameState, delta: number, battlePaused = false) {
   // Coast guard and nearby towers automatically intercept pirates chasing merchant ships.
   // The pirate layer freezes with the battle pause (audit fix: it used to keep fighting and draining ammo).
   for (const pirate of battlePaused ? [] : s.pirates) {
-    pirate.progress += dt * (s.event === "storm" ? 0.06 : 0.085);
+    pirate.progress += dt * (stormActive ? 0.06 : 0.085);
     const pos = piratePosition(pirate, s.layout);
     pirate.hp -= (s.research.includes("coastguard") ? 12 : 4) * dt;
     if (distance(s.hero, pos) < 18) pirate.hp -= 22 * dt;
@@ -1429,7 +1572,8 @@ function tick(s: GameState, delta: number, battlePaused = false) {
   if (battlePaused) return;
   for (const hero of [s.hero, s.hero2]) {
     if (!hero) continue;
-    let travel = dt * (s.phase === "battle" ? s.speed : 1) * 6;
+    hero.slow = Math.max(0, (hero.slow ?? 0) - dt);
+    let travel = dt * (s.phase === "battle" ? s.speed : 1) * 6 * ((hero.slow ?? 0) > 0 ? 0.5 : 1);
     while (travel > 0 && hero.route && (hero.routeIndex ?? 1) < hero.route.length) {
       const index = hero.routeIndex ?? 1, target = hero.route[index];
       const remaining = Math.hypot(target.x - hero.x, target.y - hero.y);
@@ -1452,16 +1596,22 @@ function tick(s: GameState, delta: number, battlePaused = false) {
     if (s.countdown <= 0 && s.idle.autoBattle) startWave(s, false);
   }
   if (s.phase !== "battle") return;
+  if (s.battle) s.battle.elapsed += battleDt;
   s.spawnClock -= battleDt;
   while (s.spawnRemaining > 0 && s.spawnClock <= 0) {
     const index = s.spawnIndex++;
+    // Scenario queue first (rolled in startWave); the legacy index pattern
+    // remains only as a fallback for a battle restored without a context.
+    const unit = s.battle?.queue[index];
     let kind: Enemy["kind"] = "speed";
-    if (s.wave % 5 === 0 && s.spawnRemaining === 1) kind = "boss";
+    let rev = false;
+    if (unit) { kind = unit.kind; rev = unit.rev; }
+    else if (s.wave % 5 === 0 && s.spawnRemaining === 1) kind = "boss";
     else if (s.wave >= 4 && index % 6 === 5) kind = "destroyer";
     else if (s.wave >= 3 && index % 5 === 3) kind = "sub";
     else if (s.wave >= 2 && index % 4 === 2) kind = "air";
     else if (index % 3 === 1) kind = "corvette";
-    s.enemies.push(makeEnemy(s, kind)); s.spawnRemaining--; s.spawnClock += 1.35;
+    s.enemies.push(makeEnemy(s, kind, 0, rev)); s.spawnRemaining--; s.spawnClock += 1.35;
   }
   for (const key of Object.keys(s.towerStuns ?? {})) { const left = (s.towerStuns[Number(key)] ?? 0) - battleDt; if (left <= 0) delete s.towerStuns[Number(key)]; else s.towerStuns[Number(key)] = left; }
   // MECH-A pre-phase: boats deploy, EMP pulses land and sonar hacks are
@@ -1552,7 +1702,10 @@ function tick(s: GameState, delta: number, battlePaused = false) {
     }
     if (enemy.stun > 0) { enemy.stun = Math.max(0, enemy.stun - battleDt); slow = 0; }
     const velocity = enemy.kind === "speed" ? 0.033 : enemy.kind === "air" ? 0.045 : enemy.kind === "boss" ? 0.011 : enemy.kind === "destroyer" ? 0.018 : 0.024;
-    enemy.progress += velocity * slow * battleDt * (s.mode === "challenge" && s.challengeRule === 2 ? 1.3 : 1);
+    // Dawn attack (حمله سحرگاه, checklist ۴٫۰): the opening wave presses
+    // faster — +15% enemy speed for the battle's first 30 seconds. (SCEN)
+    const dawnBoost = s.battle?.condition === "حمله سحرگاه" && s.battle.elapsed < 30 ? 1.15 : 1;
+    enemy.progress += velocity * slow * battleDt * dawnBoost * (s.mode === "challenge" && s.challengeRule === 2 ? 1.3 : 1);
     // Effective time (MECH-B; audit جدید-۱۵): ability and weapon clocks run
     // on the enemy's own slowed/stunned timescale, exactly like its
     // movement — a pinned boss no longer spawns adds, launches stun
@@ -1647,6 +1800,93 @@ function tick(s: GameState, delta: number, battlePaused = false) {
       }
     }
     s.enemyMissiles = stillFlying;
+  }
+  // — Scenario objective & condition mechanics (SCEN; checklist §۴) —
+  // Everything here reads the BattleContext rolled in startWave. Losing an
+  // objective only FLAGS the failure; the defeat itself is resolved at the
+  // single resolution point below (next to the hearts defeat).
+  if (s.battle) {
+    const ctx = s.battle;
+    const failObjective = (text: string, x: number, y: number) => {
+      if (ctx.failed) return;
+      ctx.failed = true;
+      s.popups.push({ id: s.nextId++, x, y, text, life: 2.2 });
+    };
+    // Intercept (رهگیری ناوگان): no enemy may cross the mid-channel line.
+    if (ctx.objective === "intercept") {
+      const crosser = s.enemies.find(e => e.hp > 0 && e.progress >= 0.5);
+      if (crosser) { const p = enemyPosition(crosser, s.layout); failObjective("دشمن از خط رهگیری گذشت!", p.x, p.y); }
+    }
+    // Objective ships under fire: live enemies close aboard engage the ship
+    // (up to 4 attackers × 6 dmg/s) — keeping them off is the towers' job.
+    // This proximity fire is what makes escort/rescue losable at all.
+    const shipFire = (pos: { x: number; y: number }) => {
+      let attackers = 0;
+      for (const e of s.enemies) if (e.hp > 0 && distance(pos, enemyPosition(e, s.layout)) < 12) attackers++;
+      return Math.min(attackers, 4) * 6 * battleDt;
+    };
+    if (ctx.escort) {
+      const ship = ctx.escort;
+      ship.slow = Math.max(0, ship.slow - battleDt);
+      ship.progress += battleDt / 38 * (ship.slow > 0 ? 0.5 : 1) * (stormActive ? 0.8 : 1);
+      ship.hp -= shipFire(objectiveShipPosition(ship, s.layout));
+      if (ship.hp <= 0) { const p = objectiveShipPosition(ship, s.layout); failObjective("کاروان اسکورت نابود شد!", p.x, p.y); }
+      else if (ship.progress >= 1) { s.popups.push({ id: s.nextId++, x: 50, y: 30, text: "کاروان سالم به مقصد رسید", life: 2 }); ctx.escort = null; }
+    }
+    if (ctx.stranded) {
+      const ship = ctx.stranded;
+      ship.hp -= shipFire(objectiveShipPosition(ship, s.layout));
+      if (ship.hp <= 0) { const p = objectiveShipPosition(ship, s.layout); failObjective("کشتی آسیب‌دیده غرق شد!", p.x, p.y); }
+    }
+    // Enemy mining (مین‌گذاری دشمن): the mines appear on the TRADE lane —
+    // the shipping channel is what the enemy mines (ops 10/19 narrative) —
+    // never on top of the stranded ship. Boat towers sweep them; any of
+    // our ships blundering into one sets it off. (Distinct from the player
+    // mine branch, which is MECH-A's system.)
+    if (ctx.condition === "مین‌گذاری دشمن") {
+      ctx.mineClock -= battleDt;
+      if (ctx.mineClock <= 0 && ctx.mines.length < 6) {
+        ctx.mineClock = 6.5;
+        const progress = 0.15 + ((s.nextId * 37) % 70) / 100;
+        if (!ctx.stranded || Math.abs(progress - ctx.stranded.progress) > 0.06) ctx.mines.push({ id: s.nextId++, progress });
+      }
+    }
+    if (ctx.mines.length) {
+      for (const tower of s.towers) {
+        if (tower.kind !== "boat") continue;
+        ctx.sweep[tower.slot] = (ctx.sweep[tower.slot] ?? 0) - battleDt;
+        if (ctx.sweep[tower.slot] > 0) continue;
+        const slot = getSlots(s.layout)[tower.slot];
+        if (!slot) continue;
+        const mine = ctx.mines.find(m => distance(slot, enemyMinePosition(m, s.layout)) <= getRange(s, tower));
+        if (mine) {
+          ctx.mines = ctx.mines.filter(m => m.id !== mine.id);
+          ctx.sweep[tower.slot] = 2;
+          const pos = enemyMinePosition(mine, s.layout), mk = modelKindFor(tower.kind, tower.tier, tower.branch);
+          s.shots.push({ slot: tower.slot, kind: tower.kind, modelKind: mk, targetId: mine.id, flightDur: 0.2, damage: 0, crit: false, interval: 0, x1: slot.x, y1: slot.y, x2: pos.x, y2: pos.y });
+          s.popups.push({ id: s.nextId++, x: pos.x, y: pos.y, text: "مین خنثی شد", life: 1.2 });
+        }
+      }
+      // Merchant-vs-mine detonation is handled in the traffic layer above
+      // (merchants move even while this section is frozen — see there).
+      const detonated = new Set<number>();
+      if (ctx.escort) {
+        const mine = ctx.mines.find(m => !detonated.has(m.id) && Math.abs(ctx.escort!.progress - m.progress) < 0.02);
+        if (mine) {
+          detonated.add(mine.id);
+          ctx.escort.hp -= 130; ctx.escort.slow = 4;
+          const pos = objectiveShipPosition(ctx.escort, s.layout);
+          s.popups.push({ id: s.nextId++, x: pos.x, y: pos.y, text: "کاروان به مین برخورد کرد!", life: 1.8 });
+          if (ctx.escort.hp <= 0) failObjective("کاروان اسکورت نابود شد!", pos.x, pos.y);
+        }
+      }
+      for (const hero of [s.hero, s.hero2]) {
+        if (!hero) continue;
+        const mine = ctx.mines.find(m => !detonated.has(m.id) && distance(hero, enemyMinePosition(m, s.layout)) < 3.5);
+        if (mine) { detonated.add(mine.id); hero.slow = 3; const pos = enemyMinePosition(mine, s.layout); s.popups.push({ id: s.nextId++, x: pos.x, y: pos.y, text: "مین منفجر شد!", life: 1.4 }); }
+      }
+      if (detonated.size) ctx.mines = ctx.mines.filter(m => !detonated.has(m.id));
+    }
   }
   // Each hero has a distinct attack cadence in addition to the catamaran's tower aura.
   const heroAttack = (hero: NonNullable<GameState["hero2"]>) => {
@@ -1835,13 +2075,31 @@ function tick(s: GameState, delta: number, battlePaused = false) {
     } else if (enemy.progress >= 1) {
       s.waveLeaked = true;
       s.combo = 0; s.comboTimer = 0;
-      s.hearts = Math.max(0, s.hearts - (enemy.kind === "boss" ? 20 : enemy.kind === "destroyer" ? 3 : 1));
+      const leakDamage = enemy.kind === "boss" ? 20 : enemy.kind === "destroyer" ? 3 : 1;
+      s.hearts = Math.max(0, s.hearts - leakDamage);
       s.security = Math.max(0, s.security - 1);
+      if (s.battle) {
+        // Air-defense (دفاع هوایی): leaking fliers count against the
+        // threshold — more than 20% of the wave's air arm (min 1) getting
+        // through loses the operation.
+        if (enemy.kind === "air") {
+          s.battle.airLeaked++;
+          if (s.battle.objective === "airdef" && s.battle.airLeaked > Math.max(1, Math.floor(s.battle.airTotal * 0.2))) s.battle.failed = true;
+        }
+        // Structure defense (دفاع از سکو / بندر هنگام بارگیری): every leak
+        // also pounds the platform / the berthed tanker (30 HP per heart
+        // of leak); its destruction loses the operation outright.
+        if (s.battle.objective === "structure" && s.battle.structureMaxHp > 0) {
+          s.battle.structureHp -= leakDamage * 30;
+          if (s.battle.structureHp <= 0) s.battle.failed = true;
+        }
+      }
     }
   }
   s.enemies = s.enemies.filter(e => e.hp > 0 && e.progress < 1);
+  if (s.battle?.failed) { objectiveDefeat(s); return; }
   if (s.hearts <= 0) {
-    s.idle.lastBattle = { id:`battle-${s.nextId++}`, wave:s.wave, title:operationInfo(s.wave).title, victory:false, stars:0, cash:0, xp:0, chests:0, destroyed:s.destroyed-s.idle.waveStartKills, seconds:s.elapsed-s.idle.waveStartedAt, hearts:0, claimed:false };
+    s.idle.lastBattle = { id:`battle-${s.nextId++}`, wave:s.wave, title:operationInfo(s.wave, s.mode).title, victory:false, stars:0, cash:0, xp:0, chests:0, destroyed:s.destroyed-s.idle.waveStartKills, seconds:s.elapsed-s.idle.waveStartedAt, hearts:0, claimed:false };
     s.idle.revision++; s.phase = "defeat"; s.enemies = []; s.spawnRemaining = 0; s.pendingImpacts = []; s.enemyMissiles = []; return;
   }
   if (s.spawnRemaining === 0 && s.enemies.every(e => (e.hackTimer ?? 0) > 0)) {
@@ -1852,7 +2110,16 @@ function tick(s: GameState, delta: number, battlePaused = false) {
     s.enemies = [];
     s.pendingImpacts = []; // battle over (QA جزئی-۱): no orphan in-flight records freeze into the intermission
     s.enemyMissiles = []; // enemy projectiles die with the battle too (MECH-B)
-    const info = operationInfo(s.wave), stars = s.hearts >= 19 ? 3 : s.hearts >= 14 ? 2 : 1;
+    const info = operationInfo(s.wave, s.mode);
+    let stars = s.hearts >= 19 ? 3 : s.hearts >= 14 ? 2 : 1;
+    // Structure defense: the platform/tanker's remaining HP caps the
+    // stars — a saved-at-10% platform is not a flawless defense. (SCEN)
+    if (s.battle?.objective === "structure" && s.battle.structureMaxHp > 0) {
+      const ratio = s.battle.structureHp / s.battle.structureMaxHp;
+      stars = Math.min(stars, ratio >= 0.8 ? 3 : ratio >= 0.5 ? 2 : 1);
+    }
+    if (s.battle) s.battle.mines = []; // the minefield dies with the battle
+
     s.idle.stars[String(s.wave)] = Math.max(s.idle.stars[String(s.wave)] ?? 0, stars);
     const perfect = !s.waveLeaked;
     const perfectBonus = perfect ? 1.25 : 1;
@@ -1898,6 +2165,14 @@ export function cloneForTick(state: GameState): GameState {
     towerStuns: { ...state.towerStuns },
     pendingImpacts: state.pendingImpacts.map(p => ({ ...p })),
     enemyMissiles: (state.enemyMissiles ?? []).map(m => ({ ...m })),
+    battle: state.battle ? {
+      ...state.battle,
+      queue: state.battle.queue.slice(),
+      mines: state.battle.mines.slice(),
+      escort: state.battle.escort ? { ...state.battle.escort } : null,
+      stranded: state.battle.stranded ? { ...state.battle.stranded } : null,
+      sweep: { ...state.battle.sweep },
+    } : null,
     fireStats,
     // shared by reference — tick never writes these: research, cards,
     // islands, layout; shots is reassigned (s.shots = []) before any push.
@@ -2016,9 +2291,9 @@ export function gameReducer(state: GameState, action: Action): GameState {
     case "start": startWave(s, !!action.early); break;
     case "select-operation": {
       if(!Number.isInteger(action.wave)||action.wave<1||action.wave>Math.min(25,s.highestWave+1))break;
-      s.mode="campaign";s.wave=action.wave;s.hearts=20;s.phase="peace";s.enemies=[];s.enemyMissiles=[];s.spawnRemaining=0;s.idle.lastBattle=null;break;
+      s.mode="campaign";s.wave=action.wave;s.hearts=20;s.phase="peace";s.enemies=[];s.enemyMissiles=[];s.battle=null;s.spawnRemaining=0;s.idle.lastBattle=null;break;
     }
-    case "mode": s.mode = action.mode; s.wave = action.mode === "campaign" ? Math.min(25,s.highestWave+1) : 1; s.hearts = 20; s.phase = "peace"; s.enemies = []; s.enemyMissiles = []; s.spawnRemaining = 0; s.idle.lastBattle=null; break;
+    case "mode": s.mode = action.mode; s.wave = action.mode === "campaign" ? Math.min(25,s.highestWave+1) : 1; s.hearts = 20; s.phase = "peace"; s.enemies = []; s.enemyMissiles = []; s.battle = null; s.spawnRemaining = 0; s.idle.lastBattle=null; break;
     case "spell": {
       if (s.cooldowns[action.spell] > 0 || s.phase !== "battle") break;
       if (action.spell === "strike") {
@@ -2071,7 +2346,7 @@ export function gameReducer(state: GameState, action: Action): GameState {
     case "night": s.manualNight = !s.manualNight; break;
     case "prestige": {
       if (s.cash >= 100000 && s.highestWave >= 10) {
-        const fresh=initialGame();s.cash=fresh.cash;s.oil=fresh.oil;s.fuel=fresh.fuel;s.steel=fresh.steel;s.ammo=fresh.ammo;s.buildings=fresh.buildings;s.idle.platforms=[];s.idle.port=fresh.idle.port;s.prestige++;s.phase="peace";s.wave=1;s.hearts=20;s.enemies=[];s.spawnRemaining=0;
+        const fresh=initialGame();s.cash=fresh.cash;s.oil=fresh.oil;s.fuel=fresh.fuel;s.steel=fresh.steel;s.ammo=fresh.ammo;s.buildings=fresh.buildings;s.idle.platforms=[];s.idle.port=fresh.idle.port;s.prestige++;s.phase="peace";s.wave=1;s.hearts=20;s.enemies=[];s.spawnRemaining=0;s.battle=null;
         s.idle.bank=fresh.idle.bank;s.idle.collected=0;s.idle.collections=0;s.idle.claimedMissions=[];s.idle.claimedMilestones=[];s.idle.lastBattle=null;s.idle.contract=null;s.idle.offline=null;s.idle.rewards=[];
         grantReward(s,{id:`prestige-${s.prestige}`,type:"milestone",title:"فصل تازهٔ توسعه آغاز شد",subtitle:"تولید و قدرت برجک‌ها برای همیشه ۱۰٪ بیشتر شد. مدیرها، کارت‌ها و جزایر شما حفظ شدند.",cash:0,xp:200,chests:2,boosts:2});
       }
