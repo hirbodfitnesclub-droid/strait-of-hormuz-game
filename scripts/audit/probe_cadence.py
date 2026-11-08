@@ -92,6 +92,19 @@ def cadence_seed(kind: str, tier: int, branch) -> dict:
     state = seedlib.tower_config_seed(kind, tier, branch)
     state["phase"] = "battle"
     state["enemies"] = seedlib.parked_enemies()
+    # Wave 2 integration: hydrateGame (correctly) refuses to resume a
+    # mid-battle save that carries no scenario battle context — it falls
+    # back to peace and the wave restarts. This probe seeds a battle in
+    # progress, so it must carry a well-formed context like a real
+    # mid-battle save does (built exactly the way startWave builds it:
+    # wave/condition/objective/queue + objective state). Without it the
+    # seeded battle silently downgrades to peace and nothing ever fires.
+    state["battle"] = {
+        "wave": state["wave"], "condition": None, "objective": "repel",
+        "queue": [], "elapsed": 0, "escort": None, "stranded": None,
+        "structureHp": 0, "structureMaxHp": 0, "airTotal": 0, "airLeaked": 0,
+        "mines": [], "mineClock": 4, "sweep": {}, "failed": False,
+    }
     state["nextId"] = 1000
     state["spawnRemaining"] = 0
     state["trafficCount"] = 1

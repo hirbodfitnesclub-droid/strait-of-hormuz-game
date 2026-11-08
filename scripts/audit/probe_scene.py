@@ -64,7 +64,18 @@ async def main() -> int:
             pg, errors = await harness.open_seeded_page(
                 ctx, args.base_url, seedlib.seed_js(seedlib.fresh_player_seed()),
                 model_wait=240.0)
-            info = await pg.evaluate(PADS_JS)
+            # Wave 2: the renderer is alive (calls > 0) long before the
+            # full model preload lifts the veil — on this VM's SwiftShader
+            # the preload can outlast the harness's sync-ready gate, and
+            # the veil has its own 30s failsafe besides. Poll briefly for
+            # the veil to lift instead of sampling it once, instantly.
+            info = None
+            for _ in range(8):
+                info = await pg.evaluate(PADS_JS)
+                if info and not info["veil"]:
+                    break
+                await pg.wait_for_timeout(4000)
+            info = info or await pg.evaluate(PADS_JS)
             assertions.append(report.check(
                 SECTION, "scene.pads29", "29 slot pads present",
                 info is not None and info["pads"] == 29,

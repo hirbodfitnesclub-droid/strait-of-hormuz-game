@@ -168,7 +168,27 @@ async def open_seeded_page(ctx, base_url: str, seed_js: str, *,
             sync_ready = True
             break
         await pg.wait_for_timeout(2000)
-    await pg.evaluate(DISMISS_BULLETIN_JS)
+    # Wave 2 integration: SCEN's briefing bulletin now genuinely pauses
+    # the battle (bulletin !== null -> battlePaused -> the tick skips all
+    # battle mechanics). A seeded mid-battle save raises the briefing on
+    # load (previousPhase starts non-battle), and the bulletin can appear
+    # AFTER sync-ready — a single dismiss raced it and left the battle
+    # frozen for the whole measurement window (cadence/wavecomp read
+    # "0 dispatches / 0 spawns" on a healthy build). Dismiss in a loop:
+    # up to ~20s of wall time, stopping as soon as no bulletin is shown.
+    for _ in range(10):
+        clicked = await pg.evaluate(DISMISS_BULLETIN_JS)
+        if clicked:
+            break
+        shown = await pg.evaluate(
+            "() => !!document.querySelector('.news-bulletin')")
+        if not shown:
+            # No bulletin yet; it may still be about to appear — give the
+            # phase-transition effect one more beat before concluding.
+            await pg.wait_for_timeout(2000)
+            clicked = await pg.evaluate(DISMISS_BULLETIN_JS)
+            break
+        await pg.wait_for_timeout(2000)
     if not sync_ready:
         raise RuntimeError("gamesync/tower models did not become ready in time")
     return pg, errors

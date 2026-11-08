@@ -134,8 +134,14 @@ async def main() -> int:
                 detail=f"Δoil={s1['oil'] - s0['oil']:.0f} over {dt:.1f} game-sec"))
             assertions.append(report.check(
                 SECTION, "eco.manager_collect", "harbor manager auto-collects",
-                s1["collections"] > s0["collections"] and s1["bank"] < s0["bank"],
-                expected="collections +>=1 and bank decreases",
+                # Wave 2 / ECO R11: the bank now refills ONLY from realized
+                # tanker exports, so across an 8s window that contains a
+                # collection AND export income the net bank can rise again
+                # (observed: collect 4000 -> exports refill to 825). The
+                # invariant is that a collection FIRED (collections grew),
+                # not the net direction of the bank.
+                s1["collections"] > s0["collections"],
+                expected="collections +>=1 (bank direction not asserted: R11 export refill)",
                 actual={"collections": [s0["collections"], s1["collections"]],
                         "bank": [round(s0["bank"]), round(s1["bank"])]},
                 detail="managerClock seeded at 9.5s of the 10s cycle"))
