@@ -251,6 +251,17 @@ export class GameSync3D {
   private prevHp = new Map<string, number>();
   private kenneyRev = false;
   private lastShots: unknown = null;
+  /* Shot/impact telemetry (fix program): window.__telemetry READS the
+   * logic-side counters (GameState.fireStats — shots counted at fire time,
+   * hits/fizzled resolved by the impact phase in game.ts) instead of
+   * reconstructing them from render records with a wall-clock simulation
+   * (QA جزئی-۲: the old simulation counted void shots as impacts, let
+   * pirate-engagement records inflate tower counters, and silently dropped
+   * whole ticks whenever the frame rate fell below the tick rate).
+   * reset() is offset-based: it snapshots the cumulative counters and the
+   * maps report deltas from that snapshot — logic state is never mutated. */
+  private telemetry: { shots: Record<string, number>; impacts: Record<string, number>; fizzled: Record<string, number>; reset: () => void };
+  private teleOffset: Record<string, { shots: number; hits: number; fizzled: number }> = {};
   private state: GameState | null = null;
   private placing = new Set<string>();
   private reconciling = false;
@@ -286,6 +297,16 @@ export class GameSync3D {
         if (best) this.aim.set(sl.id, Math.atan2(best.x - sl.x, best.z - sl.z));
       }
     }
+    this.telemetry = {
+      shots: {}, impacts: {}, fizzled: {},
+      reset: () => {
+        this.teleOffset = {};
+        const fs = this.state?.fireStats ?? {};
+        for (const k of Object.keys(fs)) { const v = fs[k]; this.teleOffset[k] = { shots: v?.shots ?? 0, hits: v?.hits ?? 0, fizzled: v?.fizzled ?? 0 }; }
+        for (const m of [this.telemetry.shots, this.telemetry.impacts, this.telemetry.fizzled]) for (const k of Object.keys(m)) delete m[k];
+      },
+    };
+    (window as unknown as { __telemetry?: unknown }).__telemetry = this.telemetry;
     this.bindPointer();
     this.loop = this.loop.bind(this);
     this.raf = requestAnimationFrame(this.loop);
@@ -297,8 +318,25 @@ export class GameSync3D {
     this.map.scene.remove(this.root);
   }
 
+  /** Refresh window.__telemetry from the logic counters (see the telemetry
+   *  field note): maps hold per-modelKind deltas since the last reset(). */
+  private syncTelemetry(game: GameState) {
+    const fs = game.fireStats ?? {};
+    const write = (map: Record<string, number>, field: "shots" | "hits" | "fizzled") => {
+      for (const k of Object.keys(fs)) {
+        const v = Math.max(0, (fs[k]?.[field] ?? 0) - (this.teleOffset[k]?.[field] ?? 0));
+        if (v > 0) map[k] = v; else delete map[k];
+      }
+      for (const k of Object.keys(map)) if (!(k in fs)) delete map[k];
+    };
+    write(this.telemetry.shots, "shots");
+    write(this.telemetry.impacts, "hits");
+    write(this.telemetry.fizzled, "fizzled");
+  }
+
   setState(game: GameState, opts: { selectedSlot: number | null; targeting: string | null; targetPreview: { x: number; y: number } }) {
     this.state = game; this.selectedSlot = opts.selectedSlot; this.targeting = opts.targeting;
+    this.syncTelemetry(game);
     // movement stability: cap how far a target may move per state update (~22 u/s) so a
     // hitched tick can no longer teleport ships — they sail fast instead of streaking.
     const nowS = performance.now();
@@ -701,14 +739,17 @@ export class GameSync3D {
         const [x1, z1] = pctTo3d(s.x1, s.y1); const [x2, z2] = pctTo3d(s.x2, s.y2);
         const dx = x2 - x1, dz = z2 - z1; const len = Math.hypot(dx, dz) || 1;
         let sx = x1 + (dx / len) * 2.4, sz = z1 + (dz / len) * 2.4; let sy = 3.1;
-        // fire event on the owning tower: aim target, recoil, charge-cycle, real muzzle position
-        let bestSlot: number | null = null; let bd = 49;
-        for (const sl of SLOTS) { const d = (sl.x - x1) ** 2 + (sl.z - z1) ** 2; if (d < bd) { bd = d; bestSlot = sl.id; } }
+        // fire event on the owning tower: the shot record names its tower —
+        // nearest-slot guessing used to misattribute hero shots (audit جدید-۱)
+        const bestSlot: number | null = typeof s.slot === 'number' && s.slot >= 0 ? s.slot : null;
         if (bestSlot !== null) {
           const ta = this.towerAnims.get(bestSlot);
           if (ta) {
             ta.targetPos = new THREE.Vector3(x2, 1.2, z2);
-            if (ta.lastShotAt > 0) { const inst = (now - ta.lastShotAt) / 1000; if (inst > 0.05 && inst < 6) ta.period = ta.period ? ta.period * 0.6 + inst * 0.4 : inst; }
+            // charge-cycle period comes from the shot record's real firing
+            // interval (converted to wall time) — no more tick-arrival EMA,
+            // so game speed scales the visual cadence (audit مهم-۳)
+            if (s.interval > 0) ta.period = s.interval / Math.max(1, game.speed);
             ta.lastShotAt = now;
             const idx = ta.mz.length ? ta.shotIdx % ta.mz.length : 0;
             if (ta.rc.length) { const r = ta.rc[idx % ta.rc.length]; r.obj.position.z = r.bz - ta.spec.recoil; }

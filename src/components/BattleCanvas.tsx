@@ -195,7 +195,7 @@ class NavalRenderer {
         const count = this.reducedMotion ? 4 : 8;
         for (let i = 0; i < count; i++) {
           const to = { x: popup.x + Math.sin(i * 2.4) * 7, y: popup.y + Math.cos(i * 2.4) * 6 };
-          this.projectile({ x1: to.x + 18 - i * 2, y1: -10 - i * 3, x2: to.x, y2: to.y, kind: "missile" }, "ballistic", 1.6, i * 0.1);
+          this.projectile({ x1: to.x + 18 - i * 2, y1: -10 - i * 3, x2: to.x, y2: to.y, kind: "missile", slot: -1, modelKind: "silo", targetId: -1, flightDur: 1.6, damage: 0, crit: false, interval: 0 }, "ballistic", 1.6, i * 0.1);
         }
         this.ring(popup, 95, GOLD, 1.2, 0, 0.65, 1);
         this.onSound("launch");
