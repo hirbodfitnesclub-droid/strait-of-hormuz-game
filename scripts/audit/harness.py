@@ -79,7 +79,14 @@ TELEMETRY_SNAPSHOT_JS = """() => {
     if (typeof t.snapshot === 'function') snap = t.snapshot();
     else if (typeof t.getSnapshot === 'function') snap = t.getSnapshot();
     else if (typeof t.read === 'function') snap = t.read();
-    else snap = t.counters || t.families || t;
+    // Real shape on the merged build (gamesync telemetry field): the
+    // object IS {shots: {modelKind: n}, impacts: {...}, fizzled: {...},
+    // reset()}. The v1 reader fell through to `t` itself and found no
+    // numeric leaves, so it returned {} forever (audit-2 team 5,
+    // جزئی-۱۰). Read the shots map directly — it must be preferred over
+    // the bare-`t` fallback, which otherwise pre-empts it.
+    else snap = t.counters || t.families ||
+      (t.shots && typeof t.shots === 'object' ? t.shots : t);
   } catch (e) { return { error: String(e) }; }
   const out = {};
   const num = (v) => (typeof v === 'number' && isFinite(v)) ? v : null;
@@ -162,9 +169,13 @@ async def open_seeded_page(ctx, base_url: str, seed_js: str, *,
             " return { towers: s.towers ? s.towers.size : -1,"
             "          pads: s.pads ? [...s.pads.keys()].filter(k => k >= 0).length : -1 }; }"
         )
-        # An occupied slot's pad leaves the pads map, so with towers seeded
-        # the count is 29 - (occupied slots); >= 28 is the safe ready gate.
-        if state and state["towers"] >= towers_expected and state["pads"] >= 28:
+        # An occupied slot's pad leaves the pads map (gamesync removes it),
+        # so with N towers seeded the count is 29 - N and a flat >= 28 gate
+        # is IMPOSSIBLE for any towered seed (audit-2 team 5 burned ~25 min
+        # on exactly this, جزئی-۱۰). Gate on 28 - N instead (one pad of
+        # slack at every size).
+        min_pads = max(0, 28 - towers_expected)
+        if state and state["towers"] >= towers_expected and state["pads"] >= min_pads:
             sync_ready = True
             break
         await pg.wait_for_timeout(2000)
