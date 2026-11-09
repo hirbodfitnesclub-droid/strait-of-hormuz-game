@@ -897,11 +897,19 @@ small { font-size: inherit; }
 .objective-track > i { display: block; height: 100%; background: linear-gradient(90deg, #e8b18e, #eac788); transition: width .4s ease; }
 .objective-bar b { font-variant-numeric: tabular-nums; color: #f5e3cc; }
 .peace-preview { position: absolute; z-index: 11; top: 128px; right: 32px; padding: 0; }
+/* D-026 extension: intermission intercept warning riding the wave preview
+   (expanded view only, exactly like .peace-preview) — anchored to the same
+   right edge, just below the preview row. pointer-events:none so the map
+   beneath stays fully interactive; it renders only at intercept doorsteps
+   (waves 4/11/20 intermission), never in the D-023 canonical states. */
+.intercept-preview-warning { position: absolute; z-index: 11; top: 166px; right: 32px; width: min(370px, calc(100vw - 64px)); display: flex; flex-direction: column; gap: 3px; padding: 9px 12px; border: 1px solid #eac78855; border-radius: 12px; background: #2c2113d9; backdrop-filter: blur(12px); box-shadow: 0 8px 24px #00000030; color: #f0d9a0; font-size: 11px; line-height: 1.9; pointer-events: none; }
+.intercept-preview-warning strong { font-size: 11.5px; color: #ffd9a0; }
 @media (max-width: 700px) {
   .hud-controls { top: 20px; left: 14px; }
   .war-essentials { top: 72px; left: 14px; width: min(330px, calc(100vw - 28px)); }
   .war-strip { min-height: 38px; padding: 4px 10px; gap: 7px; }
   .peace-preview { top: 84px; right: 14px; }
+  .intercept-preview-warning { top: 120px; right: 14px; width: calc(100vw - 28px); }
 }
 /* Focus mode compacts the first-run coach to its step title + action (the
    explanatory sentence returns in the expanded view) so the default view

@@ -510,6 +510,14 @@ export default function Game() {
   const previewUnits = !activeBattle ? waveComposition(game.wave, scenarioForWave(game.wave, game.mode, scenarioContextFor(game))) : [];
   const airWarn = bulletin?.kind === "briefing" ? antiAirWarning(game) : null; // D-024: briefing air warning
   const interceptWarn = bulletin?.kind === "briefing" ? interceptWarning(game) : null; // D-026: briefing intercept warning — teaches the wave-4 combo
+  /* D-026 extension (QA-WAVE2 playability note): the briefing bulletin is
+     created only after the reducer enters battle, but hero swap is locked
+     in battle (R9) — so the same teaching must also reach the player at
+     INTERMISSION, while the swap can still precede the first attempt.
+     interceptWarning's pre-start path (rolled battle of THIS wave, else
+     the scenario derivation) is exactly the intermission read; in battle
+     the briefing chip above covers it, so this stays null there. */
+  const interceptPreviewWarn = !activeBattle ? interceptWarning(game) : null;
   /* War essential set (D-023): the scenario objective gets its OWN HP bar
      (structure / escort / rescue) instead of text glued to a caption, and
      the air-defense objective gets an explicit leak counter (team 5, I4):
@@ -544,6 +552,13 @@ export default function Game() {
 <WorldView3D game={game} selectedSlot={selectedSlot} targeting={targeting} targetPreview={targetPreview} isNight={isNight} timeMode={timeMode} onSlot={chooseSlot} onBuilding={chooseBuilding} onPlatform={id => { const built = game.idle.platforms ?? []; if (built.includes(id)) return; if (game.cash < platformCost(built.length)) { notify("دلار کافی برای ساخت سکوی نفتی ندارید."); return; } dispatch({ type: "build-platform", id }); notify("سکوی نفتی ساخته شد؛ +۸ بشکه بر ثانیه"); feedback(); }} onHero={() => { setTargeting("hero"); setTargetPreview(game.hero); setSelectedSlot(null); feedback(); }} onHero2={() => { if (game.hero2) { setTargeting("hero2"); setTargetPreview(game.hero2); setSelectedSlot(null); feedback(); } }} onInspect={id => { dispatch({ type: "inspect", id }); notify("محموله کشف شد؛ ۵۰ فولاد دریافت کردید."); feedback(); }} onGroundAction={handleGroundAction} onGroundHover={handleGroundHover} playSound={playSound} />
 
       <IdleHud game={game} hidden={interfacePaused||targeting!==null} focus={focus} onCollect={collectIncome} onBoost={activateProduction} onBattle={mainAction} onJournal={()=>openProgress("missions")} />
+      {/* D-026 extension: intermission intercept warning, riding the wave
+          preview (same visibility as .peace-preview itself: expanded view,
+          HUD not hidden, not in battle) so the hero swap can precede the
+          player's FIRST intercept attempt — in battle the briefing chip
+          carries the same teaching. Pointer-events are off (see CSS), so
+          it never blocks the map beneath it. */}
+      {!activeBattle && !focus && !interfacePaused && !targeting && interceptPreviewWarn && <div className="intercept-preview-warning" role="alert"><strong>⚠ موج بعدی «رهگیری ناوگان» است</strong><span>{fa(interceptPreviewWarn.units)} شناور دشمن از خط میانیِ تنگه می‌گذرند، پیش از آنکه برجک‌های ساحلی به بردشان برسند؛ برجک‌ها به‌تنهایی نگهشان نمی‌دارند. پیش از شروع موج، کمبو را آماده کن: ۱) قهرمان نوع ۲ — فرماندهٔ زیردریایی فاتح، شکارچی ناوهای سنگین{interceptPreviewWarn.heroReady ? " (قهرمانت همین حالا نوع ۲ است)" : "؛ تعویض قهرمان فقط پیش از شروع نبرد ممکن است"}؛ ۲) با ورود گروه پیشرو، پالس EMP را بزن تا متوقف و بی‌دفاع شود؛ ۳) ضربه را روی گروه دوم فرود بیاور. بدون هر سه، ناوگان رد می‌شود و عملیات می‌بازد.</span></div>}
       {/* Permanent HUD controls (D-023): focus toggle + the rehoused
           day/night tri-state (D-021) + the daily-reward ready dot. This
           stack replaces the removed wave-hud / world-status cluster; the
