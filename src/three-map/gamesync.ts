@@ -8,6 +8,7 @@ import { pctTo3d, point3dToPct } from './coords';
 import { getRange, getStats, getSlots, enemyMissilePosition, enemyPosition, distance, type GameState, type Shot } from '@/lib/game';
 import type { BattleSound } from '@/lib/battle-audio';
 import { BattleFX } from './battlefx';
+import { canonicalAnimName } from './anim-names';
 
 type LaneName = 'enemy' | 'trade' | 'pirate' | 'port';
 const LANES = lanesData as Record<LaneName, [number, number][]>;
@@ -53,7 +54,9 @@ const KIND_COLOR: Record<string, number> = { cannon: 0xffd27a, heavy: 0xff9a5c, 
 const CENTER3D = new THREE.Vector3(329, 0, 231); // theater center (world ≈658×462)
 
 /* ===== Pack animation system (Phase 0) — the pack's own motions, revived =====
-   Models carry named nodes (anim:*) from the pack source; GLB export preserved them.
+   Models carry named nodes (anim:*) from the pack source; GLB export preserved them
+   inside the files, but GLTFLoader sanitizes the names on load (':' stripped,
+   duplicates suffixed) — collectAnims canonicalizes them back via anim-names.ts.
    Behaviors below replicate the pack's useWeapon/useFrame math (kit.tsx, towers.tsx, buildings.tsx). */
 /* All 18 pack glow colors, transcribed from the pack's own data table
    (owner-models/src/data/towers.ts glowColor) — ew/garrison/torpedo/mine
@@ -99,12 +102,23 @@ interface TowerAnim {
 const MAT_CLONE_NAMES = new Set(['anim:ping', 'anim:door', 'anim:shell']);
 
 function collectAnims(root: THREE.Object3D, seedKey: string): { byName: Map<string, THREE.Object3D[]>; generic: AnimNode[] } {
-  const byName = new Map<string, THREE.Object3D[]>();
+  // GLTFLoader delivers the pack's `anim:<key>` nodes under sanitized names
+  // (`animrc`, `animrc_1`, ...) — canonicalize back to the colon names the
+  // runtime keys on, with duplicates ordered by their loader ordinal so
+  // indexed lists (mlrs mz×12, silo cell/doorL/doorR, swarm mz×8, boats)
+  // keep authored order (D-019; see anim-names.ts).
+  const found = new Map<string, { obj: THREE.Object3D; ord: number }[]>();
   root.traverse(o => {
-    if (o.name && o.name.startsWith('anim:')) {
-      const arr = byName.get(o.name) ?? []; arr.push(o); byName.set(o.name, arr);
-    }
+    if (!o.name) return;
+    const c = canonicalAnimName(o.name);
+    if (!c) return;
+    const arr = found.get(c.name) ?? []; arr.push({ obj: o, ord: c.ord }); found.set(c.name, arr);
   });
+  const byName = new Map<string, THREE.Object3D[]>();
+  for (const [name, entries] of found) {
+    entries.sort((a, b) => a.ord - b.ord); // stable sort: ord ties keep traverse order
+    byName.set(name, entries.map(e => e.obj));
+  }
   const generic: AnimNode[] = [];
   let gi = 0;
   for (const [name, nodes] of byName) {
