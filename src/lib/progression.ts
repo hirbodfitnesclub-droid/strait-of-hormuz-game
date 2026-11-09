@@ -10,9 +10,33 @@ export type Reward = {
   steel?: number; ammo?: number; chests?: number; boosts?: number;
   cards?: Partial<Record<TowerKind, number>>;
 };
+/** Why a battle was lost (D-024): set from the ACTUAL defeat path in
+ *  game.ts — the air-defense leak threshold, an objective ship/structure
+ *  loss, the fatal leak that zeroed the hearts (a boss leak is its own
+ *  reason), or plain line collapse. The defeat banner and the battle
+ *  report show defeatReasonText(reason) so the player learns what
+ *  actually killed the operation (audit-2 C1: defeats arrived at 18/20
+ *  hearts with no explanation at all). */
+export type DefeatReason = "air-leak" | "escort-lost" | "rescue-lost" | "structure-lost" | "intercept-crossed" | "boss-breakthrough" | "line-broken" | "objective-failed";
+export const DEFEAT_REASONS: readonly DefeatReason[] = ["air-leak", "escort-lost", "rescue-lost", "structure-lost", "intercept-crossed", "boss-breakthrough", "line-broken", "objective-failed"];
+export function defeatReasonText(reason?: string | null): string {
+  switch (reason) {
+    case "air-leak": return "نشت هوایی از حد مجاز گذشت؛ پرنده‌های دشمن از پدافند رد شدند.";
+    case "escort-lost": return "کاروان اسکورت زیر آتش دشمن نابود شد.";
+    case "rescue-lost": return "کشتی آسیب‌دیده پیش از پایان عملیات غرق شد.";
+    case "structure-lost": return "سازهٔ تحت حفاظت (سکو / نفت‌کش در حال بارگیری) نابود شد.";
+    case "intercept-crossed": return "دشمن از خط رهگیری گذشت.";
+    case "boss-breakthrough": return "غول‌آخر از خط دفاع گذشت و قلب‌ها به صفر رسید.";
+    case "line-broken": return "قلب‌ها با نشت دشمن به صفر رسید.";
+    case "objective-failed": return "هدف عملیات از دست رفت.";
+    default: return "";
+  }
+}
 export interface BattleReport {
   id: string; wave: number; title: string; victory: boolean; stars: number;
   cash: number; xp: number; chests: number; destroyed: number; seconds: number; hearts: number; claimed: boolean;
+  /** Defeats only (D-024): the mechanical cause, from the defeat path. */
+  reason?: DefeatReason;
 }
 export interface IdleState {
   revision: number;
@@ -103,6 +127,8 @@ export const MISSIONS: Mission[] = [
   { id:"refinery-five", chapter:1, title:"پالایش بیشتر، قدرت بیشتر", description:"پالایشگاه را به سطح ۵ برسانید.", target:5, metric:"building", metricId:"refinery", navigate:{kind:"building",id:"refinery"}, cash:1000, xp:120 },
   { id:"first-tech", chapter:1, title:"یک قدم جلوتر", description:"اولین فناوری را پژوهش کنید.", target:1, metric:"research", navigate:{kind:"research"}, cash:900, xp:125, boosts:1 },
   { id:"oil-ten", chapter:1, title:"جهش صنعتی", description:"سکوی نفتی را به سطح ۱۰ برسانید و تولید را دو برابر کنید.", target:10, metric:"building", metricId:"oil", navigate:{kind:"building",id:"oil"}, cash:1500, xp:180, chests:1 },
+  { id:"steel-first", chapter:1, title:"فولاد، پیش از نبرد هوایی", description:"مجتمع فولاد را بسازید تا درآمد فولاد شروع شود؛ فولاد خودبه‌خود تولید نمی‌شود و برجک‌های تازه — از جمله پدافند هوایی — فولاد می‌خواهند.", target:1, metric:"building", metricId:"steel", navigate:{kind:"building",id:"steel"}, cash:600, xp:80 },
+  { id:"first-aa", chapter:1, title:"آسمان را پوشش بده", description:"یک برجک پدافند هوایی مستقر کنید؛ موج سوم نخستین حملهٔ هوایی دشمن است و توپخانهٔ زمینی به‌تنهایی کافی نیست.", target:1, metric:"towers", metricId:"air", navigate:{kind:"tower"}, cash:700, xp:100 },
   { id:"third-wave", chapter:1, title:"آبراه تحت حفاظت", description:"موج سوم را پاکسازی کنید.", target:3, metric:"wave", navigate:{kind:"battle"}, cash:1800, xp:200 },
   { id:"first-contract", chapter:2, title:"تجارت فراتر از ساحل", description:"یک قرارداد حمل‌ونقل را تکمیل و تسویه کنید.", target:1, metric:"contracts", navigate:{kind:"contract"}, cash:1400, xp:150 },
   { id:"two-managers", chapter:2, title:"تیم حرفه‌ای", description:"دو مدیر متخصص استخدام کنید.", target:2, metric:"managers", navigate:{kind:"manager"}, cash:1800, xp:160 },
@@ -121,7 +147,7 @@ export function missionProgress(state: GameState, mission: Mission) {
   if (mission.metric === "collected") value = idle.collected;
   if (mission.metric === "building") value = state.buildings[mission.metricId as BuildingId] ?? 0;
   if (mission.metric === "managers") value = Object.values(idle.managerLevels).filter(level => level > 0).length;
-  if (mission.metric === "towers") value = state.towers.length;
+  if (mission.metric === "towers") value = mission.metricId ? state.towers.filter(t => t.kind === (mission.metricId as TowerKind)).length : state.towers.length;
   if (mission.metric === "towerTier") value = Math.max(0, ...state.towers.map(t => t.tier));
   if (mission.metric === "wave") value = state.highestWave;
   if (mission.metric === "research") value = state.research.length;
