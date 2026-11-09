@@ -1,4 +1,4 @@
-import { initialIdle, MISSIONS, MANAGERS, CONTRACTS, currentMission, missionProgress, managerCost, operationInfo, previewChest, advanceLootSeed, type IdleState, type ManagerId, type ContractId, type UpgradeQuantity, type Reward } from "./progression";
+import { initialIdle, MISSIONS, MANAGERS, CONTRACTS, currentMission, missionProgress, managerCost, operationInfo, previewChest, advanceLootSeed, DEFEAT_REASONS, type IdleState, type ManagerId, type ContractId, type UpgradeQuantity, type Reward, type DefeatReason } from "./progression";
 import { findWaterRoute, getLane, nearestWater, sampleLane, type MapLayout, type Point } from "./navigation";
 import { weaponSpec, modelKindFor, specInterval, flightTime, salvoCycleSeconds, type ModelKind } from "./weapons-spec";
 import { scenarioForWave, commitScenarioForWave, type Scenario } from "./news";
@@ -112,6 +112,8 @@ export interface BattleContext {
   mines: EnemyMine[]; mineClock: number;
   sweep: Record<number, number>;               // boat-slot → minesweep cooldown
   failed: boolean;                             // objective lost → defeat at the resolution point
+  failReason: DefeatReason | null;             // D-024: which objective path failed (set where failed is set)
+  fatalLeak: Enemy["kind"] | null;            // D-024: kind of the leak that zeroed the hearts (boss = breakthrough)
 }
 export interface Pirate { id: number; progress: number; hp: number; /** VIP-event escorts (R6): a dedicated attack group, not traffic pirates — while the VIP ship lives they are exempt from the passive coast-guard erosion; hero/tower/boat fire still hits them in full. */ vipEscort?: boolean; }
 /** The VIP golden supertanker (R6): a real ship on the trade lane with HP.
@@ -251,6 +253,14 @@ export interface GameState {
   chests: number; prestige: number; event: "spill" | "storm" | "vip" | null;
   eventClock: number; manualNight: boolean; lastSavedAt: number;
   combo: number; comboTimer: number; maxCombo: number; waveLeaked: boolean; slowmo: number;
+  /** D-024 spiral pre-alerts: consecutive seconds spent in the danger
+   *  zone (fuel < 60 and falling / grid < 0.9). `warnings` flips only
+   *  after ~10 s of SUSTAIN — a momentary dip or a stable low-fuel
+   *  equilibrium never warns; the choke itself is what must not be the
+   *  first signal (audit-2 I2). Game.tsx renders these through the
+   *  existing context-alert. */
+  lowFuelTime: number; lowGridTime: number; lowFuelStart: number;
+  warnings: { fuel: boolean; power: boolean };
 }
 
 export const BUILDINGS: Record<BuildingId, { name: string; short: string; baseCost: number; baseOutput: number; unit: string; power: number; category: "economy" | "city"; description: string }> = {
@@ -364,6 +374,7 @@ export function initialGame(): GameState {
   return {
     version: 1, idle: initialIdle(), cash: 1200, oil: 300, fuel: 200, steel: 150, ammo: 300, oilSplit: 40,
     combo: 0, comboTimer: 0, maxCombo: 0, waveLeaked: false, slowmo: 0,
+    lowFuelTime: 0, lowGridTime: 0, lowFuelStart: -1, warnings: { fuel: false, power: false },
     buildings: { oil: 1, tank: 1, dock: 1, refinery: 0, steel: 0, arms: 0, power: 1, water: 1, city: 1, welfare: 0, optical: 0 },
     towers: [],
     research: [],
@@ -456,7 +467,11 @@ export function getStats(s: GameState) {
   // Tank capacity is its own formula (level × 500 × tanktech): the
   // production step-doubling 2^floor(L/10) must NOT leak into capacity.
   const oilCapacity = b.tank * 500 * (s.research.includes("tanktech") ? 1.2 : 1);
-  return { powerProduced, powerUsed, waterProduced, waterUsed, grid, stability, multi, productionBoost, output, oilRate, exportRate, dollarRate, oilCapacity, realExportRate, avgExportRate, bankCapacity };
+  // D-024: the steel rate is exposed even when it is 0 — steel income
+  // being invisible (and unexplained) until the factory existed was
+  // audit-2 I1. UI reads this to show "۰ فولاد/ث — مجتمع فولاد بسازید".
+  const steelRate = output("steel");
+  return { powerProduced, powerUsed, waterProduced, waterUsed, grid, stability, multi, productionBoost, output, oilRate, exportRate, dollarRate, oilCapacity, realExportRate, avgExportRate, bankCapacity, steelRate };
 }
 /** Shooter-side damage multipliers shared by per-shot damage and display DPS:
  *  prestige, family card level and the research tree. (The old flat
@@ -569,6 +584,7 @@ export function hydrateGame(raw: unknown): { game: GameState; offline: number } 
       cash: num(v.cash, 0), xp: num(v.xp, 0), chests: intIn(v.chests, 0, 0, 999),
       destroyed: intIn(v.destroyed, 0, 0, 1000000000), seconds: Math.max(0, num(v.seconds, 0)),
       hearts: intIn(v.hearts, 0, 0, 20), claimed: v.claimed === true,
+      reason: (DEFEAT_REASONS as readonly string[]).includes(v.reason as string) ? (v.reason as DefeatReason) : undefined,
     };
   };
   const sanitizeContract = (v: unknown): IdleState["contract"] => {
@@ -821,6 +837,8 @@ export function hydrateGame(raw: unknown): { game: GameState; offline: number } 
       // time — a tampered save cannot smuggle in a bigger field (QA).
       mines: Array.isArray(rawBattle.mines) ? rawBattle.mines.filter(m => m && typeof m === "object" && Number.isFinite((m as EnemyMine).progress)).map(m => ({ id: Math.floor(num((m as EnemyMine).id, 0)), progress: Math.max(0, Math.min(1, (m as EnemyMine).progress)) })).slice(0, 6) : [],
       mineClock: Math.max(0, num(rawBattle.mineClock, 4)), sweep: {}, failed: false,
+      failReason: (DEFEAT_REASONS as readonly string[]).includes(rawBattle.failReason as string) ? (rawBattle.failReason as DefeatReason) : null,
+      fatalLeak: (ENEMY_KINDS as readonly string[]).includes(rawBattle.fatalLeak as string) ? (rawBattle.fatalLeak as Enemy["kind"]) : null,
     };
   } else game.battle = null;
   if (game.phase === "battle" && !game.battle) { game.phase = "peace"; game.enemies = []; game.spawnRemaining = 0; game.pendingImpacts = []; }
@@ -829,6 +847,11 @@ export function hydrateGame(raw: unknown): { game: GameState; offline: number } 
   game.comboTimer = Math.max(0, num(saved.comboTimer, 0));
   game.maxCombo = intIn(saved.maxCombo, 0, 0, Number.MAX_SAFE_INTEGER);
   game.waveLeaked = saved.waveLeaked === true; game.slowmo = 0;
+  // D-024 warning timers: old saves lack them (defaults), tampered ones
+  // degrade to "no warning history" — never to a stuck-on alert.
+  game.lowFuelTime = Math.max(0, num(game.lowFuelTime, 0)); game.lowGridTime = Math.max(0, num(game.lowGridTime, 0));
+  game.lowFuelStart = num(game.lowFuelStart, -1);
+  game.warnings = { fuel: (saved.warnings as { fuel?: unknown } | null)?.fuel === true, power: (saved.warnings as { power?: unknown } | null)?.power === true };
   const safeHero = nearestWater(game.hero, game.layout);
   game.hero = { ...game.hero, ...safeHero, route: undefined, routeIndex: undefined };
   const reward = getOfflineReward(game, Date.now());
@@ -963,7 +986,7 @@ function startWave(s: GameState, early: boolean) {
     stranded: objective === "rescue" ? { progress: 0.7, hp: 320 + 50 * s.wave, maxHp: 320 + 50 * s.wave, slow: 0 } : null,
     structureHp: structureMaxHp, structureMaxHp,
     airTotal: queue.filter(u => u.kind === "air").length, airLeaked: 0,
-    mines: [], mineClock: 4, sweep: {}, failed: false,
+    mines: [], mineClock: 4, sweep: {}, failed: false, failReason: null, fatalLeak: null,
   };
   s.spawnRemaining = queue.length;
   s.spawnIndex = 0; s.spawnClock = 0; s.countdown = 15;
@@ -973,7 +996,17 @@ function startWave(s: GameState, early: boolean) {
  *  even with hearts to spare — checklist ۴٫۰. Mirrors the hearts defeat. */
 function objectiveDefeat(s: GameState) {
   if (s.battle) s.battle.mines = [];
-  s.idle.lastBattle = { id: `battle-${s.nextId++}`, wave: s.wave, title: operationInfo(s.wave, s.mode).title, victory: false, stars: 0, cash: 0, xp: 0, chests: 0, destroyed: s.destroyed - s.idle.waveStartKills, seconds: s.elapsed - s.idle.waveStartedAt, hearts: s.hearts, claimed: false };
+  // D-024: the report carries the reason the objective was lost — the
+  // path that set `failed` stamped failReason; the objective type is the
+  // fallback for any path that didn't.
+  const reason: DefeatReason = s.battle?.failReason
+    ?? (s.battle?.objective === "airdef" ? "air-leak"
+      : s.battle?.objective === "escort" ? "escort-lost"
+      : s.battle?.objective === "rescue" ? "rescue-lost"
+      : s.battle?.objective === "structure" ? "structure-lost"
+      : s.battle?.objective === "intercept" ? "intercept-crossed"
+      : "objective-failed");
+  s.idle.lastBattle = { id: `battle-${s.nextId++}`, wave: s.wave, title: operationInfo(s.wave, s.mode).title, victory: false, stars: 0, cash: 0, xp: 0, chests: 0, destroyed: s.destroyed - s.idle.waveStartKills, seconds: s.elapsed - s.idle.waveStartedAt, hearts: s.hearts, claimed: false, reason };
   s.idle.revision++; s.phase = "defeat"; s.enemies = []; s.spawnRemaining = 0; s.pendingImpacts = [];
 }
 function makeEnemy(s: GameState, kind: Enemy["kind"], progress = 0, rev = false): Enemy {
@@ -1487,6 +1520,23 @@ export function waveComposition(wave: number, scenario?: Scenario): WaveUnit[] {
 export function bossEnemy(s: GameState): Enemy | null {
   return s.enemies.find(e => e.kind === "boss" && e.hp > 0) ?? null;
 }
+/** D-024 pre-wave air warning: the incoming wave carries air units and
+ *  the player's anti-air coverage is missing — either ZERO air-capable
+ *  towers at all, or a heavy air wave (≥5 fliers) with no DEDICATED
+ *  anti-air tower (a lone generalist autocannon is exactly the wave-3
+ *  trap of audit-2 C1). During battle the rolled queue is authoritative;
+ *  in peace the deterministic scenario queue answers (generation is
+ *  side-effect-free — peeking registers no phantom run). Game.tsx shows
+ *  the warning in the briefing bulletin. */
+export function antiAirWarning(s: GameState): { airTotal: number; capable: boolean; dedicated: boolean } | null {
+  const queue = s.battle?.queue ?? buildSpawnQueue(s.wave, scenarioForWave(s.wave, s.mode, scenarioContextFor(s)));
+  const airTotal = queue.filter(u => u.kind === "air").length;
+  if (airTotal === 0) return null;
+  const capable = s.towers.some(t => TOWERS[t.kind].targets.includes("air"));
+  const dedicated = s.towers.some(t => t.kind === "air");
+  if (capable && (dedicated || airTotal < 5)) return null;
+  return { airTotal, capable, dedicated };
+}
 /** Safety cap on shots one tower may fire inside a single tick. The
  *  legitimate worst case (CIWS at speed 3 with a hitched 0.25s frame) is
  *  ~11; 32 leaves generous headroom while bounding pathological bursts. */
@@ -1602,6 +1652,20 @@ function tick(s: GameState, delta: number, battlePaused = false) {
   s.oil -= steelBatches * 10; s.fuel -= steelBatches * 2; s.steel += steelBatches * 3;
   const ammoBatches = Math.min(s.fuel / 5, s.steel / 5, stats.output("arms") / 10 * dt * (s.research.includes("ammo") ? 1.4 : 1), Math.max(0, 5000 - s.ammo) / 10);
   s.fuel -= ammoBatches * 5; s.steel -= ammoBatches * 5; s.ammo += ammoBatches * 10;
+  // D-024 spiral pre-alerts (audit-2 I2): track SUSTAINED danger so the
+  // warning fires BEFORE the choke, not as the choke. Fuel: below 60
+  // AND lower than when the run below 60 began (a stable equilibrium at
+  // 55 — refinery output matching the burn — is not a spiral and never
+  // warns). Grid: below 0.9. Both need ~10 s of sustain.
+  if (s.fuel < 60) {
+    if (s.lowFuelStart < 0) { s.lowFuelStart = s.fuel; s.lowFuelTime = 0; }
+    s.lowFuelTime += dt;
+  } else { s.lowFuelStart = -1; s.lowFuelTime = 0; }
+  s.lowGridTime = stats.grid < 0.9 ? s.lowGridTime + dt : 0;
+  s.warnings = {
+    fuel: s.lowFuelTime >= 10 && s.fuel < s.lowFuelStart - 1,
+    power: s.lowGridTime >= 10,
+  };
   s.shots = [];
   s.events = []; // momentary battle events follow the same one-tick lifecycle (MECH-B)
   s.popups = s.popups.map(p => ({ ...p, life: p.life - dt })).filter(p => p.life > 0);
@@ -1977,15 +2041,16 @@ function tick(s: GameState, delta: number, battlePaused = false) {
   // single resolution point below (next to the hearts defeat).
   if (s.battle) {
     const ctx = s.battle;
-    const failObjective = (text: string, x: number, y: number) => {
+    const failObjective = (text: string, x: number, y: number, reason: DefeatReason) => {
       if (ctx.failed) return;
       ctx.failed = true;
+      ctx.failReason = reason; // D-024: the defeat report names this path
       s.popups.push({ id: s.nextId++, x, y, text, life: 2.2 });
     };
     // Intercept (رهگیری ناوگان): no enemy may cross the mid-channel line.
     if (ctx.objective === "intercept") {
       const crosser = s.enemies.find(e => e.hp > 0 && e.progress >= 0.5);
-      if (crosser) { const p = enemyPosition(crosser, s.layout); failObjective("دشمن از خط رهگیری گذشت!", p.x, p.y); }
+      if (crosser) { const p = enemyPosition(crosser, s.layout); failObjective("دشمن از خط رهگیری گذشت!", p.x, p.y, "intercept-crossed"); }
     }
     // Objective ships under fire: live enemies close aboard engage the ship
     // (up to 4 attackers × 6 dmg/s) — keeping them off is the towers' job.
@@ -2000,13 +2065,13 @@ function tick(s: GameState, delta: number, battlePaused = false) {
       ship.slow = Math.max(0, ship.slow - battleDt);
       ship.progress += battleDt / 38 * (ship.slow > 0 ? 0.5 : 1) * (stormActive ? 0.8 : 1);
       ship.hp -= shipFire(objectiveShipPosition(ship, s.layout));
-      if (ship.hp <= 0) { const p = objectiveShipPosition(ship, s.layout); failObjective("کاروان اسکورت نابود شد!", p.x, p.y); }
+      if (ship.hp <= 0) { const p = objectiveShipPosition(ship, s.layout); failObjective("کاروان اسکورت نابود شد!", p.x, p.y, "escort-lost"); }
       else if (ship.progress >= 1) { s.popups.push({ id: s.nextId++, x: 50, y: 30, text: "کاروان سالم به مقصد رسید", life: 2 }); ctx.escort = null; }
     }
     if (ctx.stranded) {
       const ship = ctx.stranded;
       ship.hp -= shipFire(objectiveShipPosition(ship, s.layout));
-      if (ship.hp <= 0) { const p = objectiveShipPosition(ship, s.layout); failObjective("کشتی آسیب‌دیده غرق شد!", p.x, p.y); }
+      if (ship.hp <= 0) { const p = objectiveShipPosition(ship, s.layout); failObjective("کشتی آسیب‌دیده غرق شد!", p.x, p.y, "rescue-lost"); }
     }
     // Enemy mining (مین‌گذاری دشمن): the mines appear on the TRADE lane —
     // the shipping channel is what the enemy mines (ops 10/19 narrative) —
@@ -2047,7 +2112,7 @@ function tick(s: GameState, delta: number, battlePaused = false) {
           ctx.escort.hp -= 130; ctx.escort.slow = 4;
           const pos = objectiveShipPosition(ctx.escort, s.layout);
           s.popups.push({ id: s.nextId++, x: pos.x, y: pos.y, text: "کاروان به مین برخورد کرد!", life: 1.8 });
-          if (ctx.escort.hp <= 0) failObjective("کاروان اسکورت نابود شد!", pos.x, pos.y);
+          if (ctx.escort.hp <= 0) failObjective("کاروان اسکورت نابود شد!", pos.x, pos.y, "escort-lost");
         }
       }
       for (const hero of [s.hero, s.hero2]) {
@@ -2249,19 +2314,28 @@ function tick(s: GameState, delta: number, battlePaused = false) {
       s.hearts = Math.max(0, s.hearts - leakDamage);
       s.security = Math.max(0, s.security - 1);
       if (s.battle) {
+        // D-024: remember which kind's leak zeroed the hearts — a boss
+        // leak (instant 20) is a breakthrough, anything else is the line
+        // collapsing one leak at a time.
+        if (s.hearts <= 0 && !s.battle.fatalLeak) s.battle.fatalLeak = enemy.kind;
         // Air-defense (دفاع هوایی): leaking fliers count against the
-        // threshold — more than 20% of the wave's air arm (min 1) getting
-        // through loses the operation.
+        // threshold — more than 20% of the wave's air arm getting
+        // through loses the operation, and at least TWO leaks are
+        // always tolerated. D-024 tuning: the first air arm is only 6
+        // strong, so the old max(1, …) floor made the second leak an
+        // instant loss at 18/20 hearts before any dedicated AA was
+        // affordable (audit-2 C1); for air arms of 15+ the 20% rule is
+        // unchanged.
         if (enemy.kind === "air") {
           s.battle.airLeaked++;
-          if (s.battle.objective === "airdef" && s.battle.airLeaked > Math.max(1, Math.floor(s.battle.airTotal * 0.2))) s.battle.failed = true;
+          if (s.battle.objective === "airdef" && s.battle.airLeaked > Math.max(2, Math.floor(s.battle.airTotal * 0.2))) { s.battle.failed = true; s.battle.failReason = "air-leak"; }
         }
         // Structure defense (دفاع از سکو / بندر هنگام بارگیری): every leak
         // also pounds the platform / the berthed tanker (30 HP per heart
         // of leak); its destruction loses the operation outright.
         if (s.battle.objective === "structure" && s.battle.structureMaxHp > 0) {
           s.battle.structureHp -= leakDamage * 30;
-          if (s.battle.structureHp <= 0) s.battle.failed = true;
+          if (s.battle.structureHp <= 0) { s.battle.failed = true; s.battle.failReason = "structure-lost"; }
         }
       }
     }
@@ -2269,7 +2343,7 @@ function tick(s: GameState, delta: number, battlePaused = false) {
   s.enemies = s.enemies.filter(e => e.hp > 0 && e.progress < 1);
   if (s.battle?.failed) { objectiveDefeat(s); return; }
   if (s.hearts <= 0) {
-    s.idle.lastBattle = { id:`battle-${s.nextId++}`, wave:s.wave, title:operationInfo(s.wave, s.mode).title, victory:false, stars:0, cash:0, xp:0, chests:0, destroyed:s.destroyed-s.idle.waveStartKills, seconds:s.elapsed-s.idle.waveStartedAt, hearts:0, claimed:false };
+    s.idle.lastBattle = { id:`battle-${s.nextId++}`, wave:s.wave, title:operationInfo(s.wave, s.mode).title, victory:false, stars:0, cash:0, xp:0, chests:0, destroyed:s.destroyed-s.idle.waveStartKills, seconds:s.elapsed-s.idle.waveStartedAt, hearts:0, claimed:false, reason: s.battle?.fatalLeak === "boss" ? "boss-breakthrough" : "line-broken" };
     s.idle.revision++; s.phase = "defeat"; s.enemies = []; s.spawnRemaining = 0; s.pendingImpacts = []; s.enemyMissiles = []; return;
   }
   if (s.spawnRemaining === 0 && s.enemies.every(e => (e.hackTimer ?? 0) > 0)) {
@@ -2527,6 +2601,7 @@ export function gameReducer(state: GameState, action: Action): GameState {
     case "prestige": {
       if (s.cash >= 100000 && s.highestWave >= 10) {
         const fresh=initialGame();s.cash=fresh.cash;s.oil=fresh.oil;s.fuel=fresh.fuel;s.steel=fresh.steel;s.ammo=fresh.ammo;s.buildings=fresh.buildings;s.idle.platforms=[];s.idle.port=fresh.idle.port;s.prestige++;s.phase="peace";s.wave=1;s.hearts=20;s.enemies=[];s.spawnRemaining=0;s.battle=null;
+        s.lowFuelTime=0;s.lowGridTime=0;s.lowFuelStart=-1;s.warnings={fuel:false,power:false}; // D-024: warning history restarts with the economy
         // R7: prestige resets planted towers (research, cards, managers,
         // islands and heroes are kept) — and the harbor bank restarts at
         // 0, NOT the 260 gift that only a brand-new game receives.

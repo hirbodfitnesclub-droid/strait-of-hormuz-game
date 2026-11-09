@@ -3,7 +3,7 @@
 import { ArrowLeft, Award, Check, Clock3, Coins, Gift, PackageOpen, ShieldCheck, Sparkles, Star, Target, TrendingUp, X, Zap } from "lucide-react";
 import type { Dispatch } from "react";
 import { TOWERS, type Action, type GameState, type TowerKind } from "@/lib/game";
-import type { BattleReport, Reward } from "@/lib/progression";
+import { defeatReasonText, type BattleReport, type Reward } from "@/lib/progression";
 import { compact, fa } from "./game-ui";
 import TowerModel from "./TowerModel";
 import { useDialog } from "./useDialog";
@@ -34,7 +34,7 @@ export function BattleResultView({ report, dispatch, autoBattle, feedback, onDev
     <h2 id="battle-result-title">{report.victory?"تنگه امن ماند!":"این نبرد تمام نشده."}</h2><p>{report.title}</p>
     {report.victory&&<div className="result-stars" aria-label={`${report.stars} ستاره از سه`}>{[1,2,3].map(star=><Star key={star} size={39} fill={star<=report.stars?"currentColor":"transparent"} className={star<=report.stars?"earned":""} style={{animationDelay:`${star*.15}s`}}/>)}</div>}
     <div className="result-stats"><span><Target size={15}/><b>{fa(report.destroyed)}</b> هدف منهدم</span><span><Clock3 size={15}/><b>{fa(Math.round(report.seconds))}</b> ثانیه</span><span><ShieldCheck size={15}/><b>{fa(report.hearts)}/۲۰</b> سلامت</span></div>
-    {report.victory?<div className="result-prizes"><div><Coins size={20}/><span>پاداش عملیات</span><strong>+${compact(report.cash)}</strong></div><div><Award size={20}/><span>تجربهٔ فرمانده</span><strong>+{fa(report.xp)}</strong></div>{report.chests>0&&<div><Gift size={20}/><span>صندوقچهٔ غنائم</span><strong>×{fa(report.chests)}</strong></div>}</div>:<div className="defeat-tip"><TrendingUp size={20}/><div><strong>یک ارتقای خوب، ورق را برمی‌گرداند.</strong><p>برجک‌ها و مهمات را تقویت کنید؛ پیشرفت اقتصادی شما محفوظ است.</p></div></div>}
+    {report.victory?<div className="result-prizes"><div><Coins size={20}/><span>پاداش عملیات</span><strong>+${compact(report.cash)}</strong></div><div><Award size={20}/><span>تجربهٔ فرمانده</span><strong>+{fa(report.xp)}</strong></div>{report.chests>0&&<div><Gift size={20}/><span>صندوقچهٔ غنائم</span><strong>×{fa(report.chests)}</strong></div>}</div>:<div className="defeat-tip"><TrendingUp size={20}/><div><strong>{report.reason ? defeatReasonText(report.reason) : "یک ارتقای خوب، ورق را برمی‌گرداند."}</strong><p>{report.reason ? "پیشرفت اقتصادی شما محفوظ است؛ خط دفاع را برای همین تهدید تقویت کنید." : "برجک‌ها و مهمات را تقویت کنید؛ پیشرفت اقتصادی شما محفوظ است."}</p></div></div>}
     {report.victory&&<label className="auto-battle-control"><input type="checkbox" checked={autoBattle} onChange={()=>dispatch({type:"toggle-auto-battle"})}/><span>موج‌های بعدی خودکار شروع شوند</span></label>}
     <button className="primary-action" data-autofocus onClick={report.victory?accept:()=>{accept();onDevelop();}}>{report.victory?"دریافت غنائم و بازگشت":"تقویت خط دفاعی"}<ArrowLeft size={18}/></button>
     <button className="result-next" onClick={next}>{report.victory?"دریافت و رفتن به موج بعدی":"تلاش دوباره با همین برجک‌ها"}<ChevronArrow/></button>

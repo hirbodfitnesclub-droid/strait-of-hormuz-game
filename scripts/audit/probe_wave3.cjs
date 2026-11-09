@@ -73,7 +73,15 @@ function runPlayer(name, allowMissionTowers) {
       if (s.towers.some(t => t.slot === slot)) continue;
       const def = TOWERS[kind];
       if (s.cash >= def.cost && s.steel >= def.steel) {
+        const before = s.towers.length;
         act({ type: 'build-tower', slot, kind });
+        // BALANCE harness fix (assertions untouched): the reducer
+        // refuses builds on locked islands (LINE slots 12/13 = Larak);
+        // an unverified dispatch made `while (buyTower(cap))` spin
+        // forever once the player could afford an unbuildable tower —
+        // the baseline escaped only because steel stayed < 50. Verify
+        // the build landed; if refused, try the next LINE entry.
+        if (s.towers.length === before) continue;
         say(`t=${s.elapsed.toFixed(0)} build ${kind}@${slot} -> cash=${Math.floor(s.cash)} steel=${s.steel}`);
         return true;
       }
