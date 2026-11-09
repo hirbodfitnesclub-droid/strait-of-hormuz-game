@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
 import type { GameState, TowerKind, BuildingId } from '@/lib/game';
 import type { BattleSound } from '@/lib/battle-audio';
+import { DayNightDriver, hourForNightness, type TimeMode } from '../lib/daynight';
 
 const ThreeMap = dynamic(() => import('./ThreeMap'), { ssr: false });
 
@@ -11,7 +12,17 @@ type Props = {
   selectedSlot: number | null;
   targeting: 'strike' | 'hero' | 'hero2' | null;
   targetPreview: { x: number; y: number };
+  /** Legacy phase flag from Game.tsx — no longer drives the map's clock
+   *  (see the VIS2 time driver below); kept in the props until UI2's
+   *  tri-state wiring replaces the caller side. */
   isNight: boolean;
+  /** VIS2 / D-021 contract for UI2's tri-state day/night control:
+   *  'auto' (default) = 900 s day + 900 s night ambient cycle with ~20 s
+   *  dusk/dawn blends; 'day' / 'night' = held phase, reached through the
+   *  same ~20 s blend. Scenario-forced night (battle condition «شب»)
+   *  overrides the mode for the battle and blends in/out the same way.
+   *  The math lives in src/lib/daynight.ts (DayNightDriver). */
+  timeMode?: TimeMode;
   onSlot: (id: number) => void;
   onBuilding: (id: BuildingId) => void;
   onPlatform: (id: number) => void;
@@ -68,10 +79,52 @@ export default function WorldView3D(props: Props) {
     return () => { dead = true; cancelAnimationFrame(raf); };
   }, []);
 
+  // VIS2 (D-021): continuous day/night driver. Replaces the old snap
+  // effect (`setTime(isNight ? 21.5 : 10)` on every parity flip of a
+  // 180 s cycle — instant shadow/lamp toggles, and an XOR manual flag
+  // that permanently inverted later cycles). The driver is fed the
+  // game's own clock (state.elapsed, game-seconds) once per frame and
+  // pushes a continuous hour into the map, so sun, sky, lamps and the
+  // shadow state all blend over ~20 game-seconds. Contract + math:
+  // src/lib/daynight.ts. `window.__hormuzTimeState` is the evidence
+  // hook the audit probes read (same pattern as __gamesync3d).
   useEffect(() => {
-    const m = mapRef.current as { setTime?: (h: number) => void } | null;
-    try { m?.setTime?.(props.isNight ? 21.5 : 10); } catch { /* noop */ }
-  }, [props.isNight]);
+    const driver = new DayNightDriver();
+    const state = { mode: 'auto' as string, source: 'auto' as string, target: 0, display: 0, hour: 10, pin: null as number | null };
+    (window as unknown as { __hormuzTimeState?: unknown }).__hormuzTimeState = state;
+    let raf = 0;
+    let dead = false;
+    let lastHour = Number.NaN;
+    const loop = () => {
+      if (dead) return;
+      raf = requestAnimationFrame(loop);
+      const m = mapRef.current as { setTime?: (h: number) => void } | null;
+      if (!m || typeof m.setTime !== 'function') return;
+      const p = propsRef.current;
+      const g = p.game;
+      const out = driver.update({
+        elapsed: g.elapsed,
+        mode: p.timeMode ?? 'auto',
+        scenarioNight: g.phase === 'battle' && g.battle?.condition === 'شب',
+        manualNight: g.manualNight === true,
+      });
+      let display = out.nightness;
+      // Evidence hook only: probes may pin the blend mid-transition to
+      // capture a dusk/dawn frame. Production code never sets `pin`.
+      if (typeof state.pin === 'number') display = Math.min(1, Math.max(0, state.pin));
+      state.mode = p.timeMode ?? 'auto';
+      state.source = out.source;
+      state.target = out.target;
+      state.display = display;
+      state.hour = hourForNightness(display);
+      if (Math.abs(state.hour - lastHour) > 0.0015 || Number.isNaN(lastHour)) {
+        lastHour = state.hour;
+        try { m.setTime(state.hour); } catch { /* noop */ }
+      }
+    };
+    raf = requestAnimationFrame(loop);
+    return () => { dead = true; cancelAnimationFrame(raf); };
+  }, []);
 
   // PERF (§16.8): calm-render signal for the map loop — outside the battle
   // phase (or while a slot/targeting UI is open) the map may cap at 30fps
@@ -133,9 +186,10 @@ export default function WorldView3D(props: Props) {
           (window as unknown as { __map3d?: unknown }).__map3d = map;
           const p = propsRef.current;
           sync.setState(p.game, { selectedSlot: p.selectedSlot, targeting: p.targeting, targetPreview: p.targetPreview });
-          const mm = map as unknown as { flyTo(x: number, z: number, d: number, dur?: number): void; setTime?: (h: number) => void };
+          const mm = map as unknown as { flyTo(x: number, z: number, d: number, dur?: number): void };
           mm.flyTo(85, -20, 120, 1.4);
-          try { mm.setTime?.(p.isNight ? 21.5 : 10); } catch { /* noop */ }
+          // The VIS2 time driver (effect above) owns the map clock from
+          // its first frame — no setTime snap here anymore.
         }}
       />
     </div>

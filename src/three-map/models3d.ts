@@ -25,6 +25,14 @@ export async function loadModel(url: string): Promise<THREE.Group> {
       mlog('load-start ' + url);
       const g = await loader.loadAsync(url);
       mlog('load-done ' + url);
+      // VIS2 (D-025): GLB models CAST shadows. three.js loads meshes
+      // with castShadow=false and nothing in the placement path ever
+      // set it, so player towers/buildings/ships floated shadowless
+      // even where the sun's shadow pass was on (audit2 team 6). Set
+      // once on the cached scene — every clone inherits the flags.
+      g.scene.traverse(o => {
+        if ((o as THREE.Mesh).isMesh) (o as THREE.Mesh).castShadow = true;
+      });
       return g.scene;
     })());
   }

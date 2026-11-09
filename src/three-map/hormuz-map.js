@@ -1188,7 +1188,84 @@ const C = {
   musandam: hex('#8b725f'),
   musandamDark: hex('#5f4c40')
 };
-function buildTerrainMesh(field, segX = 768) {
+/* VIS2 (D-025): the photo-style terrain treatment that was never
+ * shipped on the 3D path (audit2 team 6): until now the terrain was
+ * raw vertex color (~1.1 units per sample on mobile) multiplied by a
+ * 256px grey noise, which read as uniform "snow" up close and as flat
+ * bands from the theater view. This canvas texture is painted
+ * PROCEDURALLY from the very TerrainField the geometry is sampled
+ * from — every texel is classified by field.sample(), the exact
+ * function that decides land vs water for the mesh — so the paint is
+ * locked inside the land/water masks BY CONSTRUCTION (paint==mask):
+ * no texel can invent a coastline the geometry does not have, and no
+ * island can move (geometry is untouched — the audit gate compares
+ * the terrain position checksum before/after). The texture is a
+ * MODULATION layer over the vertex colors, which keep the regional
+ * palette: land gets sand/rock province variation, two scales of
+ * grain, erosion streaks and a darkened wet band at the waterline;
+ * the submerged side gets quiet seabed variation for the shoreline
+ * blend strip. Stored headroom-scaled (byte 216 ≈ ×1.0) because an
+ * 8-bit canvas cannot hold multipliers above 1 — the shader undoes
+ * the scale. */
+const PHOTO_MOD_MAX = 1.18;
+function buildTerrainPhotoTexture(field) {
+  const TW = 2048;
+  const TH = Math.max(2, Math.round(TW * HEIGHT / WIDTH));
+  const cv = document.createElement('canvas');
+  cv.width = TW;
+  cv.height = TH;
+  const ctx = cv.getContext('2d');
+  const img = ctx.createImageData(TW, TH);
+  const data = img.data;
+  const scale = 255 / PHOTO_MOD_MAX;
+  let p = 0;
+  for (let j = 0; j < TH; j++) {
+    const z = (j / (TH - 1) - 0.5) * HEIGHT;
+    for (let i = 0; i < TW; i++) {
+      const x = (i / (TW - 1) - 0.5) * WIDTH;
+      const d = field.sample(x, z);
+      const g1 = fbm(x * 0.33, z * 0.33, 3);
+      const g2 = fbm(x * 1.35 + 9.2, z * 1.35 - 4.7, 2);
+      let r, g, b;
+      if (d > 0.05) {
+        // LAND (mask: same field.sample the mesh is built from)
+        const patch = fbm(x * 0.045 + 3.1, z * 0.045 - 1.3, 3) * 0.5 + 0.5; // 0..1 provinces
+        const streak = fbm(x * 0.5, z * 0.06, 2); // erosion streaks, stretched along x
+        const lum = 1 + g1 * 0.12 + g2 * 0.06 + streak * 0.045;
+        r = lum * (0.95 + 0.10 * patch); // warm sand provinces
+        g = lum * (0.96 + 0.05 * patch);
+        b = lum * (1.0 - 0.07 * patch); // cooler rock provinces
+        const wk = 1 - (1 - smoothstep(-0.5, 0.45, d)) * 0.22; // wet band at the waterline
+        r *= wk;
+        g *= wk;
+        b *= wk;
+      } else {
+        // SUBMERGED side — seabed variation (only the shoreline blend
+        // strip is ever visible through the water plane's alpha edge)
+        const deep = smoothstep(0, -6, d);
+        const lum = 1 + g1 * 0.08 + g2 * 0.04;
+        r = lum * (0.94 - 0.08 * deep);
+        g = lum * (1.0 - 0.03 * deep);
+        b = lum * (0.99 + 0.03 * deep);
+        const wk = 1 - (1 - smoothstep(-0.5, 0.45, d)) * 0.15;
+        r *= wk;
+        g *= wk;
+        b *= wk;
+      }
+      data[p++] = Math.round(clamp(r, 0.45, PHOTO_MOD_MAX) * scale);
+      data[p++] = Math.round(clamp(g, 0.45, PHOTO_MOD_MAX) * scale);
+      data[p++] = Math.round(clamp(b, 0.45, PHOTO_MOD_MAX) * scale);
+      data[p++] = 255;
+    }
+  }
+  ctx.putImageData(img, 0, 0);
+  const tex = new THREE.CanvasTexture(cv);
+  tex.flipY = false; // painter rows ascend with z; the shader samples by world position
+  tex.wrapS = tex.wrapT = THREE.ClampToEdgeWrapping;
+  return tex;
+}
+
+function buildTerrainMesh(field, segX = 768, maxAniso = 1) {
   const segZ = Math.round(segX * HEIGHT / WIDTH);
   const geo = new THREE.PlaneGeometry(WIDTH, HEIGHT, segX, segZ);
   geo.rotateX(-Math.PI / 2);
@@ -1272,6 +1349,10 @@ function buildTerrainMesh(field, segX = 768) {
   nctx.putImageData(nd, 0, 0);
   const detail = new THREE.CanvasTexture(nc);
   detail.wrapS = detail.wrapT = THREE.RepeatWrapping;
+  detail.anisotropy = Math.min(4, maxAniso); // VIS2 (audit2 team 6): near-free sharpness at the map's oblique angle
+  // VIS2 (D-025): mask-locked photo-style modulation (see painter above)
+  const photo = buildTerrainPhotoTexture(field);
+  photo.anisotropy = Math.min(8, maxAniso);
   const mat = new THREE.MeshStandardMaterial({
     vertexColors: true,
     roughness: 0.96,
@@ -1281,10 +1362,15 @@ function buildTerrainMesh(field, segX = 768) {
     sh.uniforms.uDetail = {
       value: detail
     };
+    sh.uniforms.uPhoto = {
+      value: photo
+    };
     sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nvarying vec3 vWPos;').replace('#include <worldpos_vertex>', '#include <worldpos_vertex>\nvWPos = (modelMatrix * vec4(transformed,1.0)).xyz;');
-    sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nvarying vec3 vWPos;\nuniform sampler2D uDetail;').replace('#include <color_fragment>', `#include <color_fragment>
+    sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nvarying vec3 vWPos;\nuniform sampler2D uDetail;\nuniform sampler2D uPhoto;').replace('#include <color_fragment>', `#include <color_fragment>
+        vec3 ph = texture2D(uPhoto, vec2((vWPos.x + ${(WIDTH / 2).toFixed(3)}) / ${WIDTH.toFixed(3)}, (vWPos.z + ${(HEIGHT / 2).toFixed(3)}) / ${HEIGHT.toFixed(3)})).rgb;
+        diffuseColor.rgb *= ph * ${PHOTO_MOD_MAX.toFixed(3)};
         float dn = texture2D(uDetail, vWPos.xz * 0.9).r * 0.6 + texture2D(uDetail, vWPos.xz * 0.11).r * 0.4;
-        diffuseColor.rgb *= 0.78 + dn * 0.42;`);
+        diffuseColor.rgb *= 0.88 + dn * 0.24;`);
   };
   // PERF2 (D-020): return the terrain as a 4×3 grid of tile meshes instead
   // of one world-spanning mesh. The single mesh's bounding sphere covers
@@ -2307,7 +2393,7 @@ class HormuzMap {
     this.field = new TerrainField(mobile ? 1408 : 1920);
     P('ساخت توپوگرافی ۱۷ جزیره، سواحل جنوب ایران، خلیج فارس و دریای عمان…', 25);
     await nextFrame();
-    const terrain = buildTerrainMesh(this.field, mobile ? 600 : 880);
+    const terrain = buildTerrainMesh(this.field, mobile ? 600 : 880, this.renderer.capabilities.getMaxAnisotropy());
     this.scene.add(terrain);
     P('شبیه‌سازی آب، عمق دریا و امواج ساحلی…', 55);
     await nextFrame();
@@ -2420,7 +2506,7 @@ class HormuzMap {
     const sky = new THREE.Mesh(new THREE.SphereGeometry(2600, 32, 16), this.skyMat);
     sky.renderOrder = -10;
     this.scene.add(sky);
-    this.scene.fog = new THREE.FogExp2('#bfe0f5', 0.0016);
+    this.scene.fog = new THREE.FogExp2('#bfe0f5', 0.0008); // VIS2 (D-025): matches the per-frame base in updateEnvironment
 
     // ocean "table" beyond the map
     const table = new THREE.Mesh(new THREE.PlaneGeometry(6500, 6500), new THREE.ShaderMaterial({
@@ -2445,6 +2531,39 @@ class HormuzMap {
     this.sun.shadow.mapSize.set(1024, 1024); // PERF (§16.5): 1024² shadow map is enough at game scale; 2048² doubled the shadow pass cost
     this.sun.shadow.bias = -0.0004;
     this.sun.shadow.normalBias = 0.02;
+
+    // VIS2 (D-025): image-based fill light — the missing half of the
+    // lighting model (audit2 team 6: `scene.environment` existed
+    // nowhere, so GLB metals up to metalness 0.92 read flat black on
+    // their shadow sides; hemisphere light alone cannot feed metals).
+    // A tiny procedural equirect canvas — sky gradient, warm sun blob
+    // near the day-anchor azimuth, sandy ground bounce matching the
+    // hemisphere ground color — is enough: this is Style-A fill light,
+    // not PBR realism. One static texture, ~zero per-frame cost; its
+    // intensity is faded with the night factor in updateEnvironment.
+    {
+      const ec = document.createElement('canvas');
+      ec.width = 256;
+      ec.height = 128;
+      const ectx = ec.getContext('2d');
+      const grad = ectx.createLinearGradient(0, 0, 0, 128);
+      grad.addColorStop(0, '#7db1e0');
+      grad.addColorStop(0.48, '#cfe6f5');
+      grad.addColorStop(0.56, '#cbb98f');
+      grad.addColorStop(1, '#8a6f4d');
+      ectx.fillStyle = grad;
+      ectx.fillRect(0, 0, 256, 128);
+      const rg = ectx.createRadialGradient(170, 34, 2, 170, 34, 46);
+      rg.addColorStop(0, 'rgba(255,244,220,0.95)');
+      rg.addColorStop(1, 'rgba(255,244,220,0)');
+      ectx.fillStyle = rg;
+      ectx.fillRect(0, 0, 256, 128);
+      const envTex = new THREE.CanvasTexture(ec);
+      envTex.mapping = THREE.EquirectangularReflectionMapping;
+      envTex.colorSpace = THREE.SRGBColorSpace;
+      this.scene.environment = envTex;
+      this.scene.environmentIntensity = 0.5;
+    }
 
     // stars
     const sg = new THREE.BufferGeometry();
@@ -3364,6 +3483,43 @@ class HormuzMap {
       this.cb.onScreenPos?.((v.x * 0.5 + 0.5) * rect.width, (-v.y * 0.5 + 0.5) * rect.height, v.z < 1);
     }
   }
+  /* VIS2 (D-021): night lamps FADE with the day/night blend instead of
+   * popping at the old `night > 0.45` threshold — with the 20 s gradual
+   * transition a hard toggle would be the one remaining snap in the
+   * whole lighting rig. Each registered object's fade-capable materials
+   * are collected once (lazily, cached on the object): sprites and
+   * already-transparent/additive materials — every lamp in the game is
+   * one of those and owns its material (glowSprite / nightLamp /
+   * gamesync attachNightLamps all create per-lamp materials). Base
+   * opacity is stamped on the material the first time it is seen.
+   * An object with no fade-capable material keeps the legacy
+   * visibility toggle as a fallback. Visibility still turns fully off
+   * at fade≈0, so daytime draw cost is unchanged. */
+  applyNightFade(night) {
+    const fade = smoothstep(0.15, 0.8, night);
+    for (const o of this.nightObjs) {
+      if (o.userData.__fadeMats === undefined) {
+        const mats = [];
+        o.traverse(n => {
+          if (!n.material) return;
+          for (const m of Array.isArray(n.material) ? n.material : [n.material]) {
+            if (n.isSprite || m.transparent || m.blending === THREE.AdditiveBlending) {
+              if (m.userData.__nb === undefined) m.userData.__nb = m.opacity;
+              mats.push(m);
+            }
+          }
+        });
+        o.userData.__fadeMats = mats;
+      }
+      const mats = o.userData.__fadeMats;
+      if (mats.length) {
+        for (const m of mats) m.opacity = m.userData.__nb * fade;
+        o.visible = fade > 0.02;
+      } else {
+        o.visible = night > 0.45;
+      }
+    }
+  }
   updateEnvironment(dt, dist) {
     if (this.autoTime) this.hours = (this.hours + dt * 0.4) % 24; // 1 game hour = 2.5 s
     this.storm += (this.stormTarget - this.storm) * Math.min(1, dt * 0.8);
@@ -3384,14 +3540,25 @@ class HormuzMap {
     this.moon.target.position.copy(this.controls.target);
     this.hemi.intensity = lerp(1.0, 0.4, night) * (1 - storm * 0.3) + this.flash * 2.5;
     this.hemi.color.set(night > 0.5 ? '#5a74b5' : '#bfe3ff');
+    // VIS2 (D-025): the procedural env map (buildEnvironment) is a
+    // daylight sky — fade its contribution with the same night factor
+    // so models are not day-lit at midnight.
+    if ('environmentIntensity' in this.scene) this.scene.environmentIntensity = lerp(0.5, 0.12, night);
 
     // shadows follow the camera target; disabled when far.
     // PERF: the frustum is already limited to the current view; quantize its size
     // to 0.5 steps and re-apply at most every 150ms so smooth zooms don't churn
     // the shadow camera (and its projection) every single frame.
-    const S = Math.round(clamp(dist * 0.7, 3, 45) * 2) / 2;
+    const S = Math.round(clamp(dist * 0.7, 3, 60) * 2) / 2;
     const sc = this.sun.shadow.camera;
-    this.sun.castShadow = dist < 80 && night < 0.9;
+    // VIS2 (D-025): cast shadows are ON at the opening framing too
+    // (dist 120). v0.5.0 gated them to dist<80, so the game's default
+    // view had no cast shadows at all and every model floated (audit2
+    // team 6, top visual finding). The shadow window still caps at
+    // ±60 units around the camera target, which bounds the caster
+    // pass; the night gate stays — at full night the sun's intensity
+    // is ~0, so a shadow pass there would buy nothing.
+    this.sun.castShadow = night < 0.9;
     if (sc.right !== S && this.time - this._shadowCamAt > 0.15) {
       this._shadowCamAt = this.time;
       sc.left = -S;
@@ -3422,7 +3589,13 @@ class HormuzMap {
     this.skyMat.uniforms.uHorizon.value.copy(hor);
     const fog = this.scene.fog;
     fog.color.copy(hor);
-    fog.density = 0.0012 + storm * 0.006 * (dist < 120 ? 1 : 0.5);
+    // VIS2 (D-025): base density 0.0012 -> 0.0008. At theater distance
+    // (~700) the old density washed ~50% of the scene to fog color and
+    // the textureless land read as white blobs (audit2 team 6, F5);
+    // now ~27%. Close-range depth cueing is barely affected (at the
+    // 120-unit opening the factor is ~1%) — the strait core reads its
+    // depth from the sky/water gradients, as it already did.
+    fog.density = 0.0008 + storm * 0.006 * (dist < 120 ? 1 : 0.5);
     this.waterU.uFogColor.value.copy(hor);
     this.waterU.uFogDensity.value = fog.density;
     this.waterU.uTime.value = this.time;
@@ -3436,8 +3609,7 @@ class HormuzMap {
     MATS.lamp.emissiveIntensity = night * 2;
     this.cityLights.material.opacity = night * 0.9;
     this.cityLights.material.size = clamp(dist * 0.004, 0.18, 1.1);
-    const showNight = night > 0.45;
-    for (const o of this.nightObjs) o.visible = showNight;
+    this.applyNightFade(night);
     this.renderer.toneMappingExposure = 1.05 + night * 0.25;
 
     // clouds: visible mostly when zoomed out
