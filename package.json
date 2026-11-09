@@ -7,7 +7,8 @@
     "start": "next start",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
-    "test:audit": "python3 scripts/audit/runner.py"
+    "test:audit": "python3 scripts/audit/runner.py",
+    "test:audit2": "python3 scripts/audit/runner2.py"
   },
   "dependencies": {
     "@capacitor/android": "^7.6.10",

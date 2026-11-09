@@ -43,6 +43,55 @@ game's own clock (`state.elapsed`, stamped into FX/dispatch events as
 `g`): intervals in game-seconds are exact regardless of host load. Rates
 that divide two game-clock quantities (economy) are likewise invariant.
 
+## Audit runner v2 — fix program 2 Wave-0 gates (TESTINFRA2)
+
+```bash
+npm run test:audit2                       # all four gates
+python3 scripts/audit/runner2.py --probe amplitude   # one gate
+python3 scripts/audit/runner2.py --probe heat --probe i5
+```
+
+| file | role |
+|---|---|
+| `runner2.py` | Orchestrates the v2 gates on the v1 runner's build/server plumbing; combined output in `scripts/audit/results2.json`. |
+| `probe_amplitude.py` | **D-019 gate (team ANIM).** Seeds all 18 tower configs into a live battle vs parked destroyers and samples the real animation-node transforms on `window.__gamesync3d.towerAnims` over a game-clock window: every config needs a non-empty node set AND measured amplitude > 0; building idle lists (`genericAnims` `bld-` keys) must be non-empty. |
+| `probe_heat.py` | **D-020 gate (team PERF2).** Opening peace view: triangles (budget ≤ 800,000) / draw calls / scene objects / buffer pixels / DPR via `perfInfo()`; battle renders counted through `window.__hormuzFrameHook`; plus a structural check that a 60 fps cap exists on the battle render path (SwiftShader can never exceed 60 wall-fps, so the live rate alone cannot catch a missing cap). |
+| `probe_wave3.cjs` (+ `.py` wrapper) | **D-024 gate (team BALANCE).** Two scripted fresh players follow the mission chain through waves 1–3, differing only in tower purchases: `wave3.opening_line` (team 5's documented cannon+heavy start, no further towers) and `wave3.mission_line` (four-towers mission drives purchases 3–4). Both must survive wave 3. |
+| `probe_i5.py` (+ `probe_i5_ref.cjs`) | **D-020 Wave-0 gate.** Replays team 5's `boss_seed(5)` suspicion on a real frame: browser samples (phase / towers / enemy progress / fireStats / FX / telemetry read two ways) to battle t≥35 game-s, against the identical seed run through `hydrateGame` + raw reducer ticks. A reproduction is a Wave-0 BLOCKER. |
+
+### Expected verdicts on the v0.5.0 build (all four gates red by design)
+
+- `probe_amplitude`: **FAIL ×19** — amplitude exactly 0.000 for all 18
+  configs (GLTFLoader name sanitization empties every anim list) and
+  building idle lists empty.
+- `probe_heat`: **FAIL** — opening view ≈1.19M triangles vs the 800k
+  budget; no battle render cap exists (the loop's only gate is the
+  calm-only 1/30 branch).
+- `probe_wave3`: **FAIL** — `wave3.opening_line` replicates team 5
+  exactly (defeat at wave 3, airLeaked 2/6, hearts 18/20);
+  `wave3.mission_line` PASSES (the four-towers completion forces a
+  second autocannon, which holds the air wave — the wall is a
+  one-autocannon wall).
+- `probe_i5`: **PASS — I5 NOT reproduced.** On a real frame the boss
+  battle fires: browser fireStats reached 154 shots by battle t=26
+  (garrison 90, aadefense 32, autocannon 24, silo 8) with 304 FX events,
+  enemies advancing (max progress 0.65) and 8 destroyed; the reducer
+  reference on the identical hydrated seed fired 193 by t=30. Team 5's
+  zero readings were a window artifact: their windows ended at battle
+  t≈6.7 and t≈11, and on this seed no tower can fire before t≈10.5
+  (spawn + travel time to first range) — both windows closed at or
+  before the first possible shot. No Wave-0 blocker from I5.
+
+### v1 harness defects fixed by TESTINFRA2 (audit-2 جزئی-۱۰)
+
+- `harness.open_seeded_page` ready gate `pads >= 28` was impossible for
+  any towered seed (an occupied slot's pad leaves the map: 29 − N). The
+  gate is now `28 − towers_expected`.
+- `TELEMETRY_SNAPSHOT_JS` read the wrong shape and always returned {}:
+  the real `window.__telemetry` is `{shots: {modelKind: n}, impacts,
+  fizzled, reset()}` (gamesync telemetry field). The reader now reads
+  the `shots` map directly.
+
 ## Expected verdicts on the pre-fix build
 
 - `probe_cadence`: **silo FAIL** (measured ≈0.25 game-s vs 5.0 reference —
