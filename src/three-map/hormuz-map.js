@@ -1286,9 +1286,54 @@ function buildTerrainMesh(field, segX = 768) {
         float dn = texture2D(uDetail, vWPos.xz * 0.9).r * 0.6 + texture2D(uDetail, vWPos.xz * 0.11).r * 0.4;
         diffuseColor.rgb *= 0.78 + dn * 0.42;`);
   };
-  const mesh = new THREE.Mesh(geo, mat);
-  mesh.receiveShadow = true;
-  return mesh;
+  // PERF2 (D-020): return the terrain as a 4×3 grid of tile meshes instead
+  // of one world-spanning mesh. The single mesh's bounding sphere covers
+  // the whole theater, so frustum culling could never drop any of its
+  // ~506k triangles — at build zoom 99.8% of them are off-frame yet still
+  // vertex-processed every frame (audit2 team 6). Tiles share the EXACT
+  // vertices/normals/colors computed above (normals were computed on the
+  // full grid before the split, so tile borders shade seamlessly); only
+  // the draw partitioning changes, so the rendered image is unchanged.
+  // Border vertices are duplicated per tile (~1% extra), draw calls +11.
+  const TILES_X = 4, TILES_Z = 3;
+  const group = new THREE.Group();
+  group.name = 'terrain';
+  const posA = geo.attributes.position, norA = geo.attributes.normal, colA = geo.attributes.color;
+  const idxA = geo.index.array;
+  const buckets = new Map();
+  for (let f = 0; f < idxA.length; f += 3) {
+    const a = idxA[f], b = idxA[f + 1], c = idxA[f + 2];
+    const cx = (posA.getX(a) + posA.getX(b) + posA.getX(c)) / 3;
+    const cz = (posA.getZ(a) + posA.getZ(b) + posA.getZ(c)) / 3;
+    const tx = Math.min(TILES_X - 1, Math.max(0, Math.floor((cx + WIDTH / 2) / WIDTH * TILES_X)));
+    const tz = Math.min(TILES_Z - 1, Math.max(0, Math.floor((cz + HEIGHT / 2) / HEIGHT * TILES_Z)));
+    const key = tx + tz * TILES_X;
+    let bk = buckets.get(key);
+    if (!bk) { bk = { remap: new Map(), pos: [], nor: [], col: [], idx: [] }; buckets.set(key, bk); }
+    for (const vi of [a, b, c]) {
+      let ni = bk.remap.get(vi);
+      if (ni === undefined) {
+        ni = bk.pos.length / 3;
+        bk.remap.set(vi, ni);
+        bk.pos.push(posA.getX(vi), posA.getY(vi), posA.getZ(vi));
+        bk.nor.push(norA.getX(vi), norA.getY(vi), norA.getZ(vi));
+        bk.col.push(colA.getX(vi), colA.getY(vi), colA.getZ(vi));
+      }
+      bk.idx.push(ni);
+    }
+  }
+  for (const bk of buckets.values()) {
+    const tg = new THREE.BufferGeometry();
+    tg.setAttribute('position', new THREE.Float32BufferAttribute(bk.pos, 3));
+    tg.setAttribute('normal', new THREE.Float32BufferAttribute(bk.nor, 3));
+    tg.setAttribute('color', new THREE.Float32BufferAttribute(bk.col, 3));
+    tg.setIndex(bk.idx);
+    const tm = new THREE.Mesh(tg, mat);
+    tm.receiveShadow = true;
+    group.add(tm);
+  }
+  geo.dispose();
+  return group;
 }
 
 // ---------------------------------------------------------------- water
@@ -2288,8 +2333,53 @@ class HormuzMap {
     this.onResize();
     this.setTime(this.hours);
     this.applyLayers();
+    this.freezeStaticScene();
     this.loop();
     this.cb.onReady?.();
+  }
+
+  /* PERF2 (D-020): the built world is ~3,000 objects whose local matrices
+   * never change after construction, yet three.js recomposed every one of
+   * them on every frame (audit2 team 1: matrixAutoUpdate is disabled
+   * nowhere). Freeze every subtree that contains no animated object:
+   * compose its local matrices once, here, and let the renderer reuse them.
+   * The animated registries (clouds, flicker/spin/ewPulse nodes, lane
+   * movers, aiming turrets, build-pop roots, sun/moon + their targets, the
+   * selection rings, rain) keep live matrices — and so do all their
+   * ancestors, because the freeze only lands on subtrees with no animated
+   * descendant. A frozen node's matrix stays valid precisely because
+   * nothing above it moves either. Objects gamesync adds later are frozen
+   * by gamesync itself at placement time. */
+  freezeStaticScene() {
+    const animated = new Set();
+    const add = o => { if (o) animated.add(o); };
+    for (const c of this.clouds ?? []) add(c);
+    for (const f of this.flickers ?? []) add(f);
+    for (const s of this.spinners ?? []) add(s);
+    for (const p of this.ewPulses ?? []) add(p);
+    for (const m of this.movers ?? []) add(m.obj);
+    for (const a of this.aimers ?? []) add(a.obj);
+    add(this.sun); add(this.moon);
+    add(this.sun?.target); add(this.moon?.target);
+    add(this.rangeRing); add(this.previewRing); add(this.rain);
+    // build-pop roots scale in updateAnimations while userData.pop < 1
+    this.scene.traverse(o => { if (o.userData && o.userData.pop !== undefined) animated.add(o); });
+    const hasAnim = new Map();
+    const mark = o => {
+      let h = animated.has(o);
+      for (const c of o.children) h = mark(c) || h;
+      hasAnim.set(o, h);
+      return h;
+    };
+    for (const c of [...this.scene.children]) mark(c);
+    const freeze = o => {
+      if (!hasAnim.get(o)) {
+        o.traverse(n => { n.updateMatrix(); n.matrixAutoUpdate = false; });
+        return;
+      }
+      for (const c of [...o.children]) freeze(c);
+    };
+    for (const c of [...this.scene.children]) freeze(c);
   }
   register(o) {
     o.traverse(c => {
@@ -3169,6 +3259,14 @@ class HormuzMap {
     // movement immediately restores full-rate rendering.
     this._frameAcc += rawDt;
     const calm = window.__hormuzCalmUi === true || window.__hormuzCalmPhase === true;
+    // PERF2 (D-020): hard render ceiling — renders NEVER exceed 60/s in any
+    // phase. In v0.5.0 the non-calm path rendered on every rAF tick, i.e.
+    // at the display's 90/120Hz on high-refresh phones, for the whole
+    // battle (audit2 team 1, top heat cause). The calm 30fps budget below
+    // stays as the tighter cap when it applies; skipped rAF ticks only
+    // accumulate dt — the environment step runs once per RENDERED frame
+    // with the accumulated dt, so animation speed is unchanged.
+    let budget = 1 / 60;
     if (calm) {
       const nowS = performance.now() / 1000;
       const cp = this.camera.position,
@@ -3182,10 +3280,14 @@ class HormuzMap {
         this._camPrev.t.copy(ct);
         this._camStillSince = nowS;
       }
-      if (nowS - this._camStillSince > 0.3 && this._frameAcc < 1 / 30) return;
+      if (nowS - this._camStillSince > 0.3) budget = 1 / 30;
     }
+    if (this._frameAcc < budget) return;
     const dt = Math.min(this._frameAcc, 0.05);
-    this._frameAcc = 0;
+    // Carry the remainder (capped at one budget) so the long-run rate sits
+    // AT the cap (~60/s even on 90Hz panels) instead of quantizing down to
+    // 45/s — and a post-stall accumulator can never burst-render.
+    this._frameAcc = Math.min(this._frameAcc - budget, budget);
     this.time += dt;
     this.tick(dt);
     this.renderer.render(this.scene, this.camera);

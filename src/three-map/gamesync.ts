@@ -391,6 +391,14 @@ export class GameSync3D {
   private dprSteps: number[] = DPR_STEPS;
   private dprIdx = 0;
   private dprEvalAt = 0;
+  /* PERF2 (D-020) ladder state: fps is measured from the renderer's own
+   * rendered-frame counter between evaluation windows (dprLastFrame /
+   * dprLastEvalAt), and a step-up needs dprUpStreak >= 2 consecutive fast
+   * windows — the anti-oscillation hysteresis around the thermal ceiling. */
+  private dprLastFrame = -1;
+  private dprLastEvalAt = 0;
+  private dprUpStreak = 0;
+  private renderFps = 0;
   private towerAnims = new Map<number, TowerAnim>();
   private genericAnims = new Map<string, AnimNode[]>();
   private animTmp = new THREE.Vector3();
@@ -456,13 +464,26 @@ export class GameSync3D {
       for (let i = 0; i <= LANE_SAMPLES; i++) { pts.push(this.curves[n].getPointAt(i / LANE_SAMPLES)); tans.push(this.curves[n].getTangentAt(i / LANE_SAMPLES)); }
       return [n, { pts, tans }];
     })) as Record<LaneName, { pts: THREE.Vector3[]; tans: THREE.Vector3[] }>;
-    // PERF (§16.3): dynamic resolution starts at the step matching the device
-    // cap (<=1.5 on mobile), not at the top step 2.0. The ladder is built
-    // AROUND the cap — [cap, ...steps below it] — so dprIdx 0 is exactly the
-    // ratio the renderer starts with (1.5 on touch). Indexing the raw
-    // DPR_STEPS instead landed on 1.3 while the renderer actually ran at 1.5:
-    // the first step-up was then a no-op and the first step-down skipped 1.3.
-    { const cap = this.dprCap(); this.dprSteps = [cap, ...DPR_STEPS.filter(s => s < cap - 1e-6)]; this.dprIdx = 0; }
+    // PERF (§16.3) built the ladder AROUND the device cap — [cap, ...steps
+    // below it] — so the ratios the ladder can select always match what the
+    // renderer can actually run; PERF2 (D-020) keeps that construction and
+    // changes only WHERE the ladder starts on touch (see inside).
+    { const cap = this.dprCap();
+      if (cap <= 1.5) {
+        // PERF2 (D-020): the touch ladder STARTS at DPR 1.25, one step below
+        // the cap — v0.5.0 started at idx 0 (= the 1.5 cap) and its ladder
+        // stepped UP at fps>57, so the phone rendered at maximum pixels
+        // from the first frame until thermal throttling (audit2 team 1).
+        // 1.5 remains reachable: tuneResolution earns it back only after
+        // two consecutive windows above 58 rendered fps. The renderer's
+        // own start ratio follows the ladder's start step.
+        this.dprSteps = [cap, ...[1.25, 1.1, 1].filter(s => s < cap - 1e-6)];
+        this.dprIdx = this.dprSteps.length > 1 ? 1 : 0;
+        const r = (map as unknown as { renderer?: THREE.WebGLRenderer }).renderer;
+        try { r?.setPixelRatio(Math.min(window.devicePixelRatio || 1, this.dprSteps[this.dprIdx], cap)); } catch { /* noop */ }
+      } else {
+        this.dprSteps = [cap, ...DPR_STEPS.filter(s => s < cap - 1e-6)]; this.dprIdx = 0;
+      } }
     // lane ribbons (subtle, only enemy + trade)
     // lane ribbons (subtle, only enemy + trade). The enemy route is the PRD
     // §2.3 dashed red line: dim at rest, bright pulse for a few seconds when
@@ -475,6 +496,7 @@ export class GameSync3D {
       const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), mat);
       if (n === 'enemy') { line.computeLineDistances(); this.enemyRibbonMat = mat as THREE.LineDashedMaterial; }
       this.statics.add(line);
+      this.freezeStatic(line, false);
     }
     // per-slot tower aim: barrel (+Z native) toward nearest point of the enemy lane
     {
@@ -500,8 +522,26 @@ export class GameSync3D {
     this.raf = requestAnimationFrame(this.loop);
   }
 
+  /* PERF2 (D-020): release one pooled popup's GPU resources. Pool members
+   * are REUSED across battles (bounded at 28 sprites), so this runs only
+   * when a sprite leaves the pool for good — teardown — and guarantees its
+   * 384×112 canvas texture + material do not stay resident on the GPU. */
+  private disposePopup(ps: PopupSprite) {
+    try { this.dyn.remove(ps.sp); } catch { /* already detached */ }
+    ps.tex.dispose();
+    ps.mat.dispose();
+  }
+
   dispose() {
     this.alive = false; cancelAnimationFrame(this.raf);
+    // PERF2 (D-020): drain the popup pool with real GPU disposal — v0.5.0
+    // never disposed a single popup texture (audit2 team 1: the pool grew
+    // to its 28-sprite cap in the first battles and every texture upload
+    // stayed resident for the whole session).
+    for (const ps of this.popupSprites.values()) this.disposePopup(ps);
+    this.popupSprites.clear();
+    for (const ps of this.popupFree) this.disposePopup(ps);
+    this.popupFree = [];
     this.detachFns.forEach(f => f());
     this.map.scene.remove(this.root);
   }
@@ -724,6 +764,30 @@ export class GameSync3D {
     rec.ring.scale.setScalar(rec.ringBase * (1 + band * 0.08));
   }
 
+  /* PERF2 (D-020): placed statics (tower/building/platform models, pads,
+   * tower marks, lane ribbons) never move after placement, but three.js
+   * recomposed their world matrices on every frame (~3,000 scene objects —
+   * audit2 team 1). Freeze each placed subtree once, at placement: compose
+   * every node's local matrix from its final transform and switch off
+   * per-frame recomposition. Two exclusions, both deliberate:
+   *  - the placed ROOT when keepRootLive: the tower placement pop (380ms)
+   *    and the building band evolution both animate the root transform;
+   *    descendants are unaffected (their locals are static).
+   *  - every `anim*` subtree, root and descendants alike: the pack's
+   *    animation nodes (yaw/pitch/recoil/idle — names arrive from the GLB
+   *    raw `anim:…` or sanitized `anim…`) belong to ANIM's runtime, which
+   *    also animates some of their CHILDREN by captured reference
+   *    (anim:mines children, anim:trolley hook), so the whole subtree
+   *    stays live. */
+  private freezeStatic(root: THREE.Object3D, keepRootLive: boolean) {
+    const walk = (o: THREE.Object3D, isRoot: boolean) => {
+      if (o.name && o.name.startsWith('anim')) return;
+      if (!(isRoot && keepRootLive)) { o.updateMatrix(); o.matrixAutoUpdate = false; }
+      for (const c of o.children) walk(c, false);
+    };
+    walk(root, true);
+  }
+
   private towerUrl(t: GameState['towers'][number]): string {
     if (t.branch !== null && t.branch !== undefined) return `/models/towers/${BRANCH_MODEL[t.kind][t.branch]}-L100.glb`;
     return `/models/towers/${TOWER_MODEL[t.kind]}-L${[1, 25, 50, 75][Math.max(0, Math.min(3, t.tier - 1))]}.glb`;
@@ -765,6 +829,7 @@ export class GameSync3D {
         this.towers.set(t.slot, { url, obj: model, born: performance.now(), base: baseScale });
         this.bindTowerAnim(t.slot, url, model);
         this.registerModel(model);
+        this.freezeStatic(model, true); // root stays live: placement pop animates its scale
         // status marks above the tower: jammed (boss-4) / disabled (boss-2 stun)
         const marks = new THREE.Group();
         const jam = glyphSprite('✕', '#c07aff', 2.6); jam.position.set(-1.7, 0, 0); jam.visible = false;
@@ -772,6 +837,7 @@ export class GameSync3D {
         marks.add(jam); marks.add(stun);
         marks.position.set(slot.x, groundY(this.map, slot.x, slot.z) + (fit2.max.y - fit2.min.y) + 2.8, slot.z);
         this.statics.add(marks);
+        this.freezeStatic(marks, false); // children only toggle visibility (jam/stun)
         this.towerMarks.set(t.slot, { grp: marks, jam, stun });
         this.removePad(t.slot);
       } finally { this.placing.delete('tower-' + t.slot); }
@@ -797,6 +863,7 @@ export class GameSync3D {
       pad.add(glyph);
       pad.userData.pickRing = ring;
       this.statics.add(pad); this.pads.set(slot.id, pad);
+      this.freezeStatic(pad, false);
     }
     // buildings (level > 0, parallel loads) — each at its real island/coast
     // position from buildings-3d.json (audit جدید-۵: no longer one decorative
@@ -826,6 +893,7 @@ export class GameSync3D {
           this.applyBuildingBand(nrec, buildingBand(level));
           this.genericAnims.set('bld-' + id, collectAnims(model, id).generic);
           this.registerModel(model);
+          this.freezeStatic(model, true); // root stays live: band evolution rescales/repositions it
         } finally { this.placing.delete('bld-' + id); }
       } else if (level > 0 && rec) {
         const band = buildingBand(level);
@@ -852,6 +920,7 @@ export class GameSync3D {
           this.attachNightLamps(model, fit, pScale, 1);
           this.statics.add(model); this.platforms.set(p.id, model); this.genericAnims.set('plat-' + p.id, collectAnims(model, 'plat' + p.id).generic);
           this.registerModel(model);
+          this.freezeStatic(model, true);
         } finally { this.placing.delete('plat-' + p.id); }
         if (this.pads.has(-100 - p.id)) { this.statics.remove(this.pads.get(-100 - p.id)!); this.pads.delete(-100 - p.id); }
       } else if (!built.has(p.id) && !has && !this.pads.has(-100 - p.id)) {
@@ -860,6 +929,7 @@ export class GameSync3D {
         glyph.userData.pick = { type: 'platform', id: p.id };
         const grp = new THREE.Group(); grp.add(glyph);
         this.statics.add(grp); this.pads.set(-100 - p.id, grp);
+        this.freezeStatic(grp, false);
       }
     }));
   }
@@ -1477,18 +1547,40 @@ export class GameSync3D {
     }
   }
 
-  /** Dynamic resolution: hold frame time near 60fps by stepping the pixel ratio. */
+  /** Dynamic resolution (PERF2 rework, D-020): step the pixel ratio to
+   *  hold the RENDER rate near the 60fps render cap. The fps signal is the
+   *  renderer's own rendered-frame counter across the evaluation window —
+   *  never the rAF cadence: on a 120Hz panel the old EMA read ~120 even
+   *  while renders were the expensive part, and the old ladder stepped UP
+   *  at fps>57 / down only at fps<47, so it parked at maximum quality
+   *  until thermal throttling (audit2 team 1). New rules: step DOWN as
+   *  soon as fps < 55; step UP only after fps > 58 in TWO consecutive
+   *  windows (the hysteresis that stops oscillation around the thermal
+   *  ceiling); 55–58 is a dead zone; never above the device cap (the
+   *  top ladder step). While a calm flag is set, renders are capped at
+   *  30 by design — a low rate there is the cap working, not GPU
+   *  distress — so the ladder holds its step and resets the up-streak. */
   private tuneResolution(dt: number, now: number) {
     this.emaMs = this.emaMs * 0.96 + Math.min(dt, 0.1) * 1000 * 0.04;
     if (now < this.dprEvalAt) return;
     this.dprEvalAt = now + 3000;
-    const steps = this.dprSteps;
     const r = (this.map as unknown as { renderer?: THREE.WebGLRenderer }).renderer;
     if (!r) return;
-    const fps = 1000 / Math.max(1, this.emaMs);
+    const frame = r.info?.render?.frame ?? 0;
+    const elapsed = this.dprLastEvalAt ? (now - this.dprLastEvalAt) / 1000 : 0;
+    const frames = this.dprLastFrame >= 0 ? frame - this.dprLastFrame : 0;
+    this.dprLastEvalAt = now; this.dprLastFrame = frame;
+    if (elapsed < 2 || elapsed > 6 || frames <= 0) return; // first / stretched window: baseline only
+    this.renderFps = frames / elapsed;
+    const w = window as unknown as { __hormuzCalmUi?: boolean; __hormuzCalmPhase?: boolean };
+    if (w.__hormuzCalmUi === true || w.__hormuzCalmPhase === true) { this.dprUpStreak = 0; return; }
+    const steps = this.dprSteps;
     let idx = this.dprIdx;
-    if (fps < 47 && idx < steps.length - 1) idx++;
-    else if (fps > 57 && idx > 0) idx--;
+    if (this.renderFps < 55) { if (idx < steps.length - 1) idx++; this.dprUpStreak = 0; }
+    else if (this.renderFps > 58) {
+      this.dprUpStreak++;
+      if (this.dprUpStreak >= 2 && idx > 0) { idx--; this.dprUpStreak = 0; }
+    } else this.dprUpStreak = 0;
     if (idx !== this.dprIdx) {
       this.dprIdx = idx;
       try { r.setPixelRatio(Math.min(window.devicePixelRatio || 1, steps[idx], this.dprCap())); } catch { /* noop */ }
@@ -1498,7 +1590,10 @@ export class GameSync3D {
   perfInfo() {
     const r = (this.map as unknown as { renderer?: THREE.WebGLRenderer }).renderer;
     const info = r?.info?.render;
-    return { calls: info?.calls ?? -1, tris: info?.triangles ?? -1, dpr: r?.getPixelRatio?.() ?? -1, fps: Math.round(1000 / Math.max(1, this.emaMs)) };
+    // fps reports the ladder's measured RENDER rate once it exists (the
+    // pre-PERF2 EMA read the rAF cadence, which overstates renders on
+    // high-refresh panels); EMA remains only as the pre-first-window value.
+    return { calls: info?.calls ?? -1, tris: info?.triangles ?? -1, dpr: r?.getPixelRatio?.() ?? -1, fps: this.renderFps > 0 ? Math.round(this.renderFps) : Math.round(1000 / Math.max(1, this.emaMs)) };
   }
 
   /* MECH-A: EMP pulse visual — an expanding violet shock ring at the
