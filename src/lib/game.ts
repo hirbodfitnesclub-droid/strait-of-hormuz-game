@@ -688,15 +688,38 @@ export function hydrateGame(raw: unknown): { game: GameState; offline: number } 
     }
     return enemy;
   };
-  const sanitizePirate = (v: unknown): Pirate | null =>
-    isRec(v) ? { id: num(v.id, 0), progress: clampNum(v.progress, 0, 0, 1), hp: num(v.hp, 1) } : null;
-  const sanitizeContraband = (v: unknown): Contraband | null =>
-    isRec(v) ? { id: num(v.id, 0), progress: clampNum(v.progress, 0, 0, 1) } : null;
+  // Wave-2 follow-up (QA-SHIPS advisory): the VIP-escort flag (pirates)
+  // and the D-022 ease-in age (all traffic) are part of the live objects
+  // and must survive a save reload. Dropping vipEscort resurrected
+  // escorts as ordinary traffic pirates — the R6 coast-guard erosion
+  // exemption was lost mid-event — and dropping age reset every
+  // crossing's ease-in ramp. Strict validation, like every neighbouring
+  // field: the flag survives only as the literal `true`, the age only
+  // as a finite number (clamped ≥ 0, the house style for ages); garbage
+  // is dropped to "absent", never trusted raw.
+  const sanitizePirate = (v: unknown): Pirate | null => {
+    if (!isRec(v)) return null;
+    const pirate: Pirate = { id: num(v.id, 0), progress: clampNum(v.progress, 0, 0, 1), hp: num(v.hp, 1) };
+    if (v.vipEscort === true) pirate.vipEscort = true;
+    const age = optNum(v.age);
+    if (age !== undefined) pirate.age = Math.max(0, age);
+    return pirate;
+  };
+  const sanitizeContraband = (v: unknown): Contraband | null => {
+    if (!isRec(v)) return null;
+    const ship: Contraband = { id: num(v.id, 0), progress: clampNum(v.progress, 0, 0, 1) };
+    const age = optNum(v.age);
+    if (age !== undefined) ship.age = Math.max(0, age);
+    return ship;
+  };
   const MERCHANT_KINDS: readonly Merchant["kind"][] = ["barge", "bulk", "container", "tanker"];
-  const sanitizeMerchant = (v: unknown): Merchant | null =>
-    isRec(v) && MERCHANT_KINDS.includes(v.kind as Merchant["kind"])
-      ? { id: num(v.id, 0), progress: clampNum(v.progress, 0, 0, 1), kind: v.kind as Merchant["kind"], reward: Math.max(0, num(v.reward, 0)), paid: v.paid === true }
-      : null;
+  const sanitizeMerchant = (v: unknown): Merchant | null => {
+    if (!isRec(v) || !MERCHANT_KINDS.includes(v.kind as Merchant["kind"])) return null;
+    const ship: Merchant = { id: num(v.id, 0), progress: clampNum(v.progress, 0, 0, 1), kind: v.kind as Merchant["kind"], reward: Math.max(0, num(v.reward, 0)), paid: v.paid === true };
+    const age = optNum(v.age);
+    if (age !== undefined) ship.age = Math.max(0, age);
+    return ship;
+  };
 
   // Buildings are rebuilt from the known ids only: spreading the saved
   // record would carry arbitrary keys (including "__proto__") into the
@@ -1536,6 +1559,33 @@ export function antiAirWarning(s: GameState): { airTotal: number; capable: boole
   const dedicated = s.towers.some(t => t.kind === "air");
   if (capable && (dedicated || airTotal < 5)) return null;
   return { airTotal, capable, dedicated };
+}
+/** D-026 pre-wave intercept warning — the D-024 mechanism's second user.
+ *  An intercept objective («رهگیری ناوگان», first met at wave 4) is
+ *  decided in the lane's first half, before any land slot can engage:
+ *  towers alone cannot hold it (QA-BALANCE kit matrix: every partial
+ *  kit loses, the full kit wins). The only counter is the free,
+ *  permanent kit — hero type 2 (the heavy-ship hunter) + the EMP pulse
+ *  + the Strike spell — and the hero swap is locked once the battle
+ *  starts (R9), so the combo must be taught in the briefing BEFORE the
+ *  wave, not discovered from the defeat screen. Pure peek, exactly like
+ *  antiAirWarning: reads the rolled battle when one exists, else
+ *  derives the incoming wave's objective from its scenario; never
+ *  mutates state. Returns null for every non-intercept wave.
+ *  `heroReady` lets the briefing chip acknowledge a swap already done.
+ *  One trap the peek must avoid: victory leaves the FINISHED battle in
+ *  state (battle.wave is then s.wave - 1, phase intermission), so the
+ *  rolled battle is authoritative only while battle.wave === s.wave —
+ *  otherwise the previous wave's objective would shadow the incoming
+ *  wave's and the warning would stay silent exactly at the doorstep
+ *  where the player plans the swap. */
+export function interceptWarning(s: GameState): { units: number; heroReady: boolean } | null {
+  const scenario = scenarioForWave(s.wave, s.mode, scenarioContextFor(s));
+  const rolled = s.battle && s.battle.wave === s.wave ? s.battle : null;
+  const objective = rolled?.objective ?? objectiveTypeOf(scenario.objective);
+  if (objective !== "intercept") return null;
+  const queue = rolled?.queue ?? buildSpawnQueue(s.wave, scenario);
+  return { units: queue.length, heroReady: s.hero.active === 2 };
 }
 /** Safety cap on shots one tower may fire inside a single tick. The
  *  legitimate worst case (CIWS at speed 3 with a hitched 0.25s frame) is
