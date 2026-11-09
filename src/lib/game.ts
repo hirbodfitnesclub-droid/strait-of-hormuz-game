@@ -113,13 +113,13 @@ export interface BattleContext {
   sweep: Record<number, number>;               // boat-slot → minesweep cooldown
   failed: boolean;                             // objective lost → defeat at the resolution point
 }
-export interface Pirate { id: number; progress: number; hp: number; /** VIP-event escorts (R6): a dedicated attack group, not traffic pirates — while the VIP ship lives they are exempt from the passive coast-guard erosion; hero/tower/boat fire still hits them in full. */ vipEscort?: boolean; }
+export interface Pirate { id: number; progress: number; hp: number; /** VIP-event escorts (R6): a dedicated attack group, not traffic pirates — while the VIP ship lives they are exempt from the passive coast-guard erosion; hero/tower/boat fire still hits them in full. */ vipEscort?: boolean; /** D-022: ship-seconds since spawn, drives the ease-in ramp; absent = already underway (no ramp). */ age?: number; }
 /** The VIP golden supertanker (R6): a real ship on the trade lane with HP.
  *  Pirates engage it while it crosses; a safe crossing pays the old event
  *  reward, destruction fines security instead. */
 export interface VipShip { progress: number; hp: number; maxHp: number; /** Seconds since spawn (frozen while paused); pirates cannot damage the ship during its first 5 s. */ age: number; }
-export interface Contraband { id: number; progress: number; }
-export interface Merchant { id: number; progress: number; kind: "barge" | "bulk" | "container" | "tanker"; reward: number; paid: boolean; }
+export interface Contraband { id: number; progress: number; /** D-022: ship-seconds since spawn (ease-in ramp); absent = underway. */ age?: number; }
+export interface Merchant { id: number; progress: number; kind: "barge" | "bulk" | "container" | "tanker"; reward: number; paid: boolean; /** D-022: ship-seconds since spawn (ease-in ramp); absent = underway. */ age?: number; }
 /** One discrete shot event, emitted the moment a tower (or hero) fires.
  *  Damage is NOT applied here — it lands when the matching PendingImpact
  *  resolves after flightDur battle-seconds. Renderers (gamesync/FX) consume
@@ -1546,6 +1546,22 @@ function pickInterceptor(s: GameState, pos: { x: number; y: number }): Tower | n
 
 function tick(s: GameState, delta: number, battlePaused = false) {
   const dt = Math.max(0, Math.min(1, delta));
+  // D-022 (SHIPS): the ambient traffic layer (merchants / contraband / VIP /
+  // pirates / port-tanker sailing legs) runs on the player's speed
+  // multiplier like the battle layer does (audit-2 F-8: it used raw dt and
+  // ignored the 1/2/3x setting), and every hull eases in from spawn instead
+  // of leaving at full speed (F-2/F-6). Crossing-time budget at 1x, set by
+  // the rates at each use site: merchants 65-80 s, contraband ~62 s,
+  // pirates ~26 s (they were 25/24/11.8 s — the fastest-looking things on
+  // the opening screen, F-2). Damage inside the pirate pass runs on the
+  // same scaled dt, so the fire-exchange per crossing is invariant under
+  // the speed setting; at 1x every damage number is unchanged.
+  const trafficDt = dt * s.speed;
+  const easeIn = (age: number | undefined) => {
+    if (age === undefined) return 1;
+    const t = Math.min(1, Math.max(0, age / 3));
+    return 0.2 + 0.8 * t * t * (3 - 2 * t);
+  };
   s.elapsed += dt; s.eventClock += dt;
   // Rolling 6 h export window (game time): fills with the realized
   // export flow and restarts empty on expiry — avgExportRate reads it.
@@ -1571,7 +1587,7 @@ function tick(s: GameState, delta: number, battlePaused = false) {
   if (port.tanker) {
     const tanker = port.tanker;
     if (tanker.stage === "approach") {
-      tanker.progress = Math.min(1, tanker.progress + dt * 0.04);
+      tanker.progress = Math.min(1, tanker.progress + trafficDt * 0.04);
       if (tanker.progress >= 1) tanker.stage = "loading";
     } else if (tanker.stage === "loading") {
       // R11 / PRD §3: the valve α rules the real flow — loading runs at
@@ -1583,7 +1599,7 @@ function tick(s: GameState, delta: number, battlePaused = false) {
       s.idle.exportWindowDollars = (s.idle.exportWindowDollars ?? 0) + moved * 2 * (s.research.includes("trade") ? 1.5 : 1);
       if (tanker.load >= tankerCapacity - 0.001 || (s.oil <= 0.001 && tanker.load > 0)) tanker.stage = "depart";
     } else {
-      tanker.progress = Math.max(0, tanker.progress - dt * 0.04);
+      tanker.progress = Math.max(0, tanker.progress - trafficDt * 0.04);
       if (tanker.progress <= 0) { port.tanker = null; port.nextIn = 18; port.cycles++; }
     }
   }
@@ -1608,22 +1624,25 @@ function tick(s: GameState, delta: number, battlePaused = false) {
   // A scenario storm IS the storm system (checklist ۴٫۰): same ×0.8 on
   // merchant speed and tower range (getRange) as the dynamic storm event.
   const stormActive = s.event === "storm" || (s.phase === "battle" && s.battle?.condition === "طوفان");
+  // Traffic movement below runs on trafficDt / easeIn (defined at the top
+  // of tick, D-022); the spawn cadence itself stays on raw dt.
   s.trafficClock += dt;
   const interval = 15 - 0.1 * s.security;
   if (s.trafficClock >= interval) {
     s.trafficClock -= interval; s.trafficCount++;
     const kind = s.security >= 80 && s.trafficCount % 7 === 0 ? "tanker" : s.security >= 50 && s.trafficCount % 4 === 0 ? "container" : s.security >= 20 && s.trafficCount % 2 === 0 ? "bulk" : "barge";
     const toll = kind === "tanker" ? 2500 : kind === "container" ? 500 : kind === "bulk" ? 120 : 25;
-    s.merchants.push({ id: s.nextId++, progress: 0, kind, reward: toll, paid: false });
-    if (s.trafficCount % 5 === 0 && !battlePaused) s.pirates.push({ id: s.nextId++, progress: 0, hp: 100 });
+    s.merchants.push({ id: s.nextId++, progress: 0, kind, reward: toll, paid: false, age: 0 });
+    if (s.trafficCount % 5 === 0 && !battlePaused) s.pirates.push({ id: s.nextId++, progress: 0, hp: 100, age: 0 });
     // R5 stage one: the optical outpost building reveals contraband.
     // (Smart-customs research no longer gates the reveal — it raises the
     // inspection reward and tolls instead; see the inspect action.)
-    if ((s.buildings.optical ?? 0) >= 1 && s.trafficCount % 4 === 0) s.contraband.push({ id: s.nextId++, progress: 0 });
+    if ((s.buildings.optical ?? 0) >= 1 && s.trafficCount % 4 === 0) s.contraband.push({ id: s.nextId++, progress: 0, age: 0 });
   }
   for (const ship of s.merchants) {
     const oldProgress = ship.progress;
-    ship.progress += dt / (ship.kind === "tanker" ? 45 : ship.kind === "barge" ? 25 : 34) * (stormActive ? .8 : 1);
+    if (ship.age !== undefined) ship.age += trafficDt;
+    ship.progress += trafficDt / (ship.kind === "tanker" ? 80 : ship.kind === "barge" ? 65 : 70) * (stormActive ? .8 : 1) * easeIn(ship.age);
     if (!ship.paid && oldProgress < .82 && ship.progress >= .82) {
       ship.paid = true;
       const toll = ship.reward * (s.research.includes("smart") ? 1.25 : 1) * (s.research.includes("logistics") ? 1.1 : 1) * (s.research.includes("diplomacy") ? 1.15 : 1);
@@ -1649,7 +1668,10 @@ function tick(s: GameState, delta: number, battlePaused = false) {
     }
   }
   s.merchants = s.merchants.filter(ship => ship.progress < 1);
-  for (const ship of s.contraband) ship.progress += dt / 24;
+  for (const ship of s.contraband) {
+    if (ship.age !== undefined) ship.age += trafficDt;
+    ship.progress += trafficDt / 62 * easeIn(ship.age);
+  }
   s.contraband = s.contraband.filter(ship => ship.progress < 1);
   // VIP golden supertanker (R6): crosses on the trade lane like a merchant
   // (45 s, storm-slowed). Pirates damage it in the pirate pass below; the
@@ -1661,8 +1683,11 @@ function tick(s: GameState, delta: number, battlePaused = false) {
   // risk-free escort (QA round-2 exploit).
   if (s.vipShip && !battlePaused) {
     const vip = s.vipShip;
-    vip.age = (vip.age ?? 0) + dt;
-    vip.progress += dt / 45 * (s.event === "storm" ? .8 : 1);
+    // D-022: the VIP sails on trafficDt too — its age (the pirates' 5 s
+    // grace clock) is measured in ship-seconds so the grace stays the same
+    // fraction of the crossing at any speed setting. At 1x, unchanged.
+    vip.age = (vip.age ?? 0) + trafficDt;
+    vip.progress += trafficDt / 45 * (s.event === "storm" ? .8 : 1) * easeIn(vip.age);
     if (vip.hp <= 0) {
       const pos = vipPosition(vip, s.layout);
       s.security = Math.max(0, s.security - 10);
@@ -1678,20 +1703,25 @@ function tick(s: GameState, delta: number, battlePaused = false) {
   // Coast guard and nearby towers automatically intercept pirates chasing merchant ships.
   // The pirate layer freezes with the battle pause (audit fix: it used to keep fighting and draining ammo).
   for (const pirate of battlePaused ? [] : s.pirates) {
-    pirate.progress += dt * (stormActive ? 0.06 : 0.085);
+    // D-022: crossing ~26 s at 1x (was ~11.8 s); the whole pass — progress,
+    // erosion, hero/tower fire, VIP damage — runs on trafficDt so the
+    // exchange per crossing is speed-invariant (at 1x, damage unchanged).
+    const pdt = trafficDt;
+    if (pirate.age !== undefined) pirate.age += pdt;
+    pirate.progress += pdt * (stormActive ? 0.027 : 0.038) * easeIn(pirate.age);
     const pos = piratePosition(pirate, s.layout);
     // VIP escorts are exempt from the passive coast-guard erosion while
     // their target lives (manager ruling, QA round 3): without this the
     // base 4/s erosion killed both escorts at ~25 s and an undefended
     // VIP crossed with HP to spare. Hero / tower / boat fire below is
     // NOT exempt — escorts die to real fire only.
-    if (!(pirate.vipEscort && s.vipShip)) pirate.hp -= (s.research.includes("coastguard") ? 12 : 4) * dt;
-    if (distance(s.hero, pos) < 18) pirate.hp -= 22 * dt;
+    if (!(pirate.vipEscort && s.vipShip)) pirate.hp -= (s.research.includes("coastguard") ? 12 : 4) * pdt;
+    if (distance(s.hero, pos) < 18) pirate.hp -= 22 * pdt;
     for (const tower of s.towers) {
       const slot = getSlots(s.layout)[tower.slot];
       if (slot && TOWERS[tower.kind].targets.includes("sea") && distance(slot, pos) < getRange(s, tower)) {
-        pirate.hp -= towerDps(s, tower) * dt * (s.ammo > 0 ? 1 : 1 / 3);
-        s.ammo = Math.max(0, s.ammo - TOWERS[tower.kind].rate * dt);
+        pirate.hp -= towerDps(s, tower) * pdt * (s.ammo > 0 ? 1 : 1 / 3);
+        s.ammo = Math.max(0, s.ammo - TOWERS[tower.kind].rate * pdt);
         const mk = modelKindFor(tower.kind, tower.tier, tower.branch);
         s.shots.push({ slot: tower.slot, kind: tower.kind, modelKind: mk, targetId: pirate.id, flightDur: flightTime(mk, distance(slot, pos)), damage: 0, crit: false, interval: 0, x1: slot.x, y1: slot.y, x2: pos.x, y2: pos.y });
       }
@@ -1705,7 +1735,7 @@ function tick(s: GameState, delta: number, battlePaused = false) {
     // (5 s grace + 300 HP / 12 per s) and the event honestly fails.
     if (s.vipShip && Math.abs(pirate.progress - s.vipShip.progress) < 0.08) {
       pirate.progress = s.vipShip.progress - 0.02;
-      if ((s.vipShip.age ?? 0) >= 5) s.vipShip.hp -= 6 * dt;
+      if ((s.vipShip.age ?? 0) >= 5) s.vipShip.hp -= 6 * pdt;
     }
     if (pirate.hp <= 0) {
       // The bounty routes to the harbor bank, but a full bank must not
@@ -1732,7 +1762,7 @@ function tick(s: GameState, delta: number, battlePaused = false) {
       // R6: the VIP event is a real escort — a golden supertanker with HP
       // enters the trade lane and pirates sortie against it.
       s.vipShip = { progress: 0, hp: 300, maxHp: 300, age: 0 };
-      s.pirates.push({ id: s.nextId++, progress: 0, hp: 100, vipEscort: true }, { id: s.nextId++, progress: -0.06, hp: 100, vipEscort: true });
+      s.pirates.push({ id: s.nextId++, progress: 0, hp: 100, vipEscort: true, age: 0 }, { id: s.nextId++, progress: -0.06, hp: 100, vipEscort: true, age: 0 });
     }
   }
   if (s.event && s.event !== "vip" && s.eventClock >= 60) {

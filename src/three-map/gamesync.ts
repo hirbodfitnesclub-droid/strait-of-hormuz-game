@@ -3,7 +3,7 @@ import lanesData from './lanes-3d.json';
 import slotsData from './slots-3d.json';
 import buildingsData from './buildings-3d.json';
 import { loadModel, TOWER_MODEL, BRANCH_MODEL, groundY } from './models3d';
-import { hull } from './ships3d';
+import { makeShip } from './ships3d';
 import { pctTo3d, point3dToPct } from './coords';
 import { getRange, getStats, getSlots, enemyMissilePosition, enemyPosition, distance, type GameState, type Shot } from '@/lib/game';
 import type { BattleSound } from '@/lib/battle-audio';
@@ -211,27 +211,34 @@ function glyphSprite(text: string, color: string, size = 3.4): THREE.Sprite {
 }
 
 function enemyModel(kind: string, boss: number): THREE.Group {
-  if (kind === 'air') {
-    const g = new THREE.Group();
-    const mat = new THREE.MeshStandardMaterial({ color: 0x59636e, roughness: 0.5, metalness: 0.4 });
-    const body = new THREE.Mesh(new THREE.BoxGeometry(3.4, 0.8, 1.6), mat); g.add(body);
-    const tail = new THREE.Mesh(new THREE.BoxGeometry(2.2, 0.4, 0.5), mat); tail.position.x = -2.4; g.add(tail);
-    const wing = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.15, 4.6), mat); g.add(wing);
-    return g;
-  }
-  if (kind === 'boss') {
-    const len = boss === 4 ? 30 : 24;
-    const g = hull(boss === 2 ? 0x2c3844 : 0x4a3428, len, len * 0.24, 'patrol');
-    if (boss === 4) { const deck = new THREE.Mesh(new THREE.BoxGeometry(len * 0.8, 0.5, len * 0.26), new THREE.MeshStandardMaterial({ color: 0x39424c, roughness: 0.8 })); deck.position.y = len * 0.16; g.add(deck); }
-    return g;
-  }
-  if (kind === 'sub') { return hull(0x232a31, 11, 2.4, 'patrol'); }
-  if (kind === 'speed') return hull(0x39424c, 6.5, 2, 'patrol');
-  if (kind === 'corvette') return hull(0x46505c, 10, 2.8, 'patrol');
-  return hull(0x525e6b, 13.5, 3.2, 'patrol'); // destroyer
+  // Air units keep their simple procedural model (D-022 covers ships only).
+  const g = new THREE.Group();
+  const mat = new THREE.MeshStandardMaterial({ color: 0x59636e, roughness: 0.5, metalness: 0.4 });
+  const body = new THREE.Mesh(new THREE.BoxGeometry(3.4, 0.8, 1.6), mat); g.add(body);
+  const tail = new THREE.Mesh(new THREE.BoxGeometry(2.2, 0.4, 0.5), mat); tail.position.x = -2.4; g.add(tail);
+  const wing = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.15, 4.6), mat); g.add(wing);
+  return g;
 }
 
-interface Ent { obj: THREE.Group; bar?: ReturnType<typeof barSprites>; init?: boolean; phase: number; bobAmp: number; wake?: THREE.Mesh; mats?: THREE.Material[]; speed?: number; lastTx?: number; lastTz?: number; ind?: { stun: THREE.Sprite; slow: THREE.Sprite; eye: THREE.Sprite; shield: THREE.Mesh | null } }
+/* D-022: sea enemies are real hulls now (ships3d factory) — an armed
+ * frigate family for destroyer/corvette/bosses, the actual carrier for
+ * boss 4, a diesel submarine, and the Kenney speedboat (boat-speed-a,
+ * previously shipped in the APK unused — audit-2 F-7, now used). Scale
+ * table fixed (F-3): warships sit BELOW the capital cargo hulls
+ * (tanker 18-20u, container/bulk 16u); the hero (12u) no longer outsizes
+ * a destroyer (13u). */
+function enemyShip(kind: string, boss: number): Promise<THREE.Group> {
+  if (kind === 'boss') {
+    if (boss === 4) return makeShip('carrier', { len: 25, arm: 'carrier' });
+    return makeShip('frigate', { len: 21, arm: 'boss', tint: boss === 2 ? 0x2c3844 : 0x4a3428, tintAmt: 0.3 });
+  }
+  if (kind === 'sub') return makeShip('submarine', { len: 11 });
+  if (kind === 'speed') return makeShip('speedboat', { len: 6.5, tint: 0x39424c, tintAmt: 0.3 });
+  if (kind === 'corvette') return makeShip('frigate', { len: 10.5, arm: 'corvette', tint: 0x46505c, tintAmt: 0.3 });
+  return makeShip('frigate', { len: 13, arm: 'destroyer', tint: 0x525e6b, tintAmt: 0.25 }); // destroyer
+}
+
+interface Ent { obj: THREE.Group; bar?: ReturnType<typeof barSprites>; init?: boolean; phase: number; bobAmp: number; wake?: THREE.Mesh; mats?: THREE.Material[]; speed?: number; lastTx?: number; lastTz?: number; /** D-022: ambient-traffic cruise speed (world u/s at 1x) — stepMotion clamps the render chase to it so a hitched frame can no longer teleport a ship. */ cruise?: number; lastTx2?: number; lastTz2?: number; ind?: { stun: THREE.Sprite; slow: THREE.Sprite; eye: THREE.Sprite; shield: THREE.Mesh | null } }
 interface PopupSprite { sp: THREE.Sprite; mat: THREE.SpriteMaterial; tex: THREE.CanvasTexture; cv: HTMLCanvasElement; age: number; dur: number; wx: number; wz: number; baseY: number; w: number }
 interface BldRec { obj: THREE.Object3D; band: number; baseScale: number; groundBase: number; minY: number; local: THREE.Box3; ring: THREE.Mesh; ringBase: number; platform: boolean }
 
@@ -1108,6 +1115,19 @@ export class GameSync3D {
       else {
         o.position.x += (t.pos.x - o.position.x) * kp;
         o.position.z += (t.pos.z - o.position.z) * kp;
+        // D-022 (F-6): ambient-traffic hulls may not outrun their own
+        // cruise speed in the render chase. The chase + the 250 ms tick
+        // clamp used to let a hitched frame teleport a barge up to ~7.6u;
+        // cap the per-frame step at cruise x speed-multiplier x 2.2 (the
+        // factor covers lane curvature and the ease-in ramp), so traffic
+        // visibly sails through hitches instead of jumping.
+        if (ent.cruise) {
+          const maxStep = ent.cruise * Math.max(1, this.state?.speed ?? 1) * 2.2 * dt + 0.02;
+          const sx = o.position.x - (ent.lastTx2 ?? o.position.x), sz = o.position.z - (ent.lastTz2 ?? o.position.z);
+          const sd = Math.hypot(sx, sz);
+          if (sd > maxStep && sd > 0) { const k = maxStep / sd; o.position.x = (ent.lastTx2 ?? o.position.x) + sx * k; o.position.z = (ent.lastTz2 ?? o.position.z) + sz * k; }
+        }
+        ent.lastTx2 = o.position.x; ent.lastTz2 = o.position.z;
         let dh = t.heading - o.rotation.y; dh = Math.atan2(Math.sin(dh), Math.cos(dh));
         o.rotation.y += dh * kh;
       }
@@ -1147,7 +1167,7 @@ export class GameSync3D {
   }
 
   private entPending = new Map<string, Promise<Ent | null>>();
-  private ensureEnt(key: string, make: () => Promise<THREE.Group> | THREE.Group, opts: { bar?: number; bob?: number; wake?: { len: number; wid: number; fwd: 'X' | 'Z' } } = {}): Promise<Ent | null> {
+  private ensureEnt(key: string, make: () => Promise<THREE.Group> | THREE.Group, opts: { bar?: number; bob?: number; wake?: { len: number; wid: number; fwd: 'X' | 'Z' }; cruise?: number } = {}): Promise<Ent | null> {
     const cur = this.ents.get(key);
     if (cur) return Promise.resolve(cur);
     let p = this.entPending.get(key);
@@ -1155,7 +1175,7 @@ export class GameSync3D {
       p = (async () => {
         const obj = await make();
         if (!this.alive || this.entPending.get(key) !== p) return null; // dropped while loading
-        const ent: Ent = { obj, phase: Math.random() * Math.PI * 2, bobAmp: opts.bob ?? 0 };
+        const ent: Ent = { obj, phase: Math.random() * Math.PI * 2, bobAmp: opts.bob ?? 0, cruise: opts.cruise };
         if (opts.bar && opts.bar > 0) { ent.bar = barSprites(opts.bar); ent.bar.group.position.y = 3.4; obj.add(ent.bar.group); }
         if (opts.wake) { const w = makeWake(opts.wake.len, opts.wake.wid, opts.wake.fwd); obj.add(w); ent.wake = w; }
         this.dyn.add(obj); this.ents.set(key, ent);
@@ -1240,8 +1260,8 @@ export class GameSync3D {
       // hull faces its true direction of travel.
       this.setTarget(key, 'enemy', e.rev ? 1 - e.progress : e.progress, y, 'X', !!e.rev);
       // no water wake for air targets (audit: air dragged a wake at altitude)
-      const wakeLen = e.kind === 'air' ? 0 : e.kind === 'boss' ? (e.boss === 4 ? 30 : 24) : e.kind === 'destroyer' ? 13.5 : e.kind === 'sub' ? 0 : e.kind === 'corvette' ? 10 : 6.5;
-      void this.ensureEnt(key, () => enemyModel(e.kind, e.boss), { bar: e.kind === 'boss' ? 10 : 5, bob: e.kind === 'air' ? 0 : 0.09, wake: wakeLen ? { len: wakeLen, wid: wakeLen * 0.55, fwd: 'X' } : undefined });
+      const wakeLen = e.kind === 'air' ? 0 : e.kind === 'boss' ? (e.boss === 4 ? 25 : 21) : e.kind === 'destroyer' ? 13 : e.kind === 'sub' ? 0 : e.kind === 'corvette' ? 10.5 : 6.5;
+      void this.ensureEnt(key, () => e.kind === 'air' ? enemyModel(e.kind, e.boss) : enemyShip(e.kind, e.boss), { bar: e.kind === 'boss' ? 10 : 5, bob: e.kind === 'air' ? 0 : 0.09, wake: wakeLen ? { len: wakeLen, wid: wakeLen * 0.34, fwd: 'X' } : undefined });
       const ent = this.ents.get(key);
       if (ent) {
         if (ent.bar) setBar(ent.bar, e.hp / e.maxHp);
@@ -1263,34 +1283,36 @@ export class GameSync3D {
       this.prevFlash.set(key, e.hitFlash ?? 0);
       this.prevHp.set(key, e.hp);
     }
-    // pirates
+    // pirates — Kenney speedboats (D-022); VIP escorts get a dark-red tint
+    // so the R6 escort group reads as one pack around the golden tanker.
     for (const p of game.pirates) {
       const key = `pirate-${p.id}`; alive.add(key);
       this.entKinds.set(key, 'pirate');
       this.setTarget(key, 'pirate', p.progress, 0.35, 'X');
-      void this.ensureEnt(key, () => hull(0x14181d, 6, 2, 'patrol'), { bar: 5, bob: 0.09, wake: { len: 6, wid: 3.4, fwd: 'X' } });
+      void this.ensureEnt(key, () => makeShip('speedboat', { len: 6, tint: p.vipEscort ? 0x7a2020 : 0x14181d, tintAmt: 0.55 }), { bar: 5, bob: 0.09, wake: { len: 6, wid: 2.2, fwd: 'X' }, cruise: 7.1 });
       const ent = this.ents.get(key);
       if (ent?.bar) setBar(ent.bar, Math.max(0, p.hp) / 120);
       this.prevHp.set(key, p.hp);
     }
-    // merchants
+    // merchants — D-022: one distinct hull per kind (the single Kenney
+    // cargo-a at four scales is gone): Aframax tanker / container ship /
+    // bulk carrier / Kenney tug for the barge. Cruise = lane length over
+    // the game.ts crossing time (761u / 80|70|65 s).
     for (const m of game.merchants) {
       const key = `merchant-${m.id}`; alive.add(key);
-      this.setTarget(key, 'trade', m.progress, 0.3, 'Z');
-      void this.ensureEnt(key, async () => {
-        const g = await loadModel(m.kind === 'barge' ? '/models/kenney/boat-tug-a.glb' : '/models/kenney/ship-cargo-a.glb');
-        const fit = new THREE.Box3().setFromObject(g); const size = new THREE.Vector3(); fit.getSize(size);
-        g.scale.setScalar((m.kind === 'tanker' ? 15 : 12) / Math.max(size.x, size.z, 0.001));
-        const fit2 = new THREE.Box3().setFromObject(g); g.position.y = -fit2.min.y;
-        g.userData.baseY = g.position.y;
-        return g;
-      }, { bob: 0.1, wake: { len: m.kind === 'barge' ? 4.2 : 10.5, wid: m.kind === 'barge' ? 3.4 : 5.2, fwd: 'Z' } });
+      this.setTarget(key, 'trade', m.progress, 0.3, 'X');
+      const spec = m.kind === 'tanker' ? { ship: 'tanker' as const, len: 18, cruise: 9.5 }
+        : m.kind === 'barge' ? { ship: 'tug' as const, len: 9, cruise: 11.7 }
+        : m.kind === 'container' ? { ship: 'container' as const, len: 16, cruise: 10.9 }
+        : { ship: 'bulk' as const, len: 16, cruise: 10.9 };
+      void this.ensureEnt(key, () => makeShip(spec.ship, { len: spec.len }), { bob: 0.1, wake: { len: spec.len, wid: spec.len * 0.3, fwd: 'X' }, cruise: spec.cruise });
     }
-    // contraband (on trade lane, pickable)
+    // contraband (on trade lane, pickable) — the Kenney cargo-a hull now
+    // serves ONLY this smuggler role, dark-tinted (D-022).
     for (const c of game.contraband) {
       const key = `contra-${c.id}`; alive.add(key);
       this.setTarget(key, 'trade', c.progress, 0.35, 'X');
-      void this.ensureEnt(key, () => { const g = hull(0x59452c, 10, 3, 'cargo'); g.traverse(o => { o.userData.pick = { type: 'contraband', id: c.id }; }); return g; }, { bob: 0.09, wake: { len: 10, wid: 4.5, fwd: 'X' } });
+      void this.ensureEnt(key, async () => { const g = await makeShip('cargoship', { len: 10, tint: 0x2a2118, tintAmt: 0.4 }); g.traverse(o => { o.userData.pick = { type: 'contraband', id: c.id }; }); return g; }, { bob: 0.09, wake: { len: 10, wid: 3.2, fwd: 'X' }, cruise: 12.3 });
     }
     // ===== MECH-A: boat entities & minefield (rendered here, logic in game.ts) =====
     // Boats sit on the enemy lane at their station progress plus a
@@ -1309,8 +1331,13 @@ export class GameSync3D {
       const t = this.targets.get(key);
       if (t) { t.pos.set(x, y, z); t.heading = heading; t.y = y; }
       else this.targets.set(key, { pos: new THREE.Vector3(x, y, z), heading, y });
-      void this.ensureEnt(key, () => hull(b.role === 'ghadir' ? 0x37424e : b.role === 'torpedo' ? 0x74553a : 0x546e4a, b.role === 'ghadir' ? 13 : 8, 2.8, 'patrol'),
-        { bar: 4, bob: 0.08, wake: b.role === 'ghadir' ? { len: 4, wid: 2.4, fwd: 'X' } : { len: 7, wid: 3.6, fwd: 'X' } });
+      // D-022: ghadir boats are the diesel submarine running awash;
+      // torpedo boats are pilot boats with tube kitbash; garrison boats
+      // are plain pilot boats — the shared patrol hull() is gone.
+      void this.ensureEnt(key, () => b.role === 'ghadir'
+        ? makeShip('submarine', { len: 11, tint: 0x37424e, tintAmt: 0.3 })
+        : makeShip('pilot', { len: b.role === 'torpedo' ? 7.5 : 7, arm: b.role === 'torpedo' ? 'torpedo' : undefined, tint: b.role === 'torpedo' ? 0x74553a : 0x546e4a, tintAmt: 0.3 }),
+        { bar: 4, bob: 0.08, wake: b.role === 'ghadir' ? { len: 4, wid: 2.2, fwd: 'X' } : { len: 7, wid: 2.6, fwd: 'X' } });
       const ent = this.ents.get(key);
       if (ent?.bar) setBar(ent.bar, Math.max(0, b.hp) / b.maxHp);
     }
@@ -1338,22 +1365,18 @@ export class GameSync3D {
     const battleCtx = game.battle;
     if (battleCtx?.escort) {
       alive.add('obj-escort');
-      this.setTarget('obj-escort', 'trade', battleCtx.escort.progress, 0.3, 'Z');
-      void this.ensureEnt('obj-escort', async () => {
-        const g = await loadModel('/models/kenney/ship-cargo-a.glb');
-        const fit = new THREE.Box3().setFromObject(g); const size = new THREE.Vector3(); fit.getSize(size);
-        g.scale.setScalar(13 / Math.max(size.x, size.z, 0.001));
-        const fit2 = new THREE.Box3().setFromObject(g); g.position.y = -fit2.min.y;
-        g.userData.baseY = g.position.y;
-        return g;
-      }, { bar: 5, bob: 0.1, wake: { len: 10, wid: 5, fwd: 'Z' } });
+      this.setTarget('obj-escort', 'trade', battleCtx.escort.progress, 0.3, 'X');
+      // D-022: the escort target is a ro-ro ferry — a silhouette nothing
+      // else on the map shares, so the caravan reads at a glance.
+      void this.ensureEnt('obj-escort', () => makeShip('ferry', { len: 15 }), { bar: 5, bob: 0.1, wake: { len: 15, wid: 4.6, fwd: 'X' } });
       const ent = this.ents.get('obj-escort');
       if (ent?.bar) setBar(ent.bar, Math.max(0, battleCtx.escort.hp) / Math.max(1, battleCtx.escort.maxHp));
     }
     if (battleCtx?.stranded) {
       alive.add('obj-stranded');
-      this.setTarget('obj-stranded', 'trade', battleCtx.stranded.progress, 0.3, 'Z');
-      void this.ensureEnt('obj-stranded', () => hull(0x8a4b3a, 11, 3.2, 'cargo'), { bar: 5, bob: 0.05, wake: { len: 0, wid: 0, fwd: 'X' } });
+      this.setTarget('obj-stranded', 'trade', battleCtx.stranded.progress, 0.3, 'X');
+      // D-022: the stranded ship is an offshore-supply hull, rust-tinted.
+      void this.ensureEnt('obj-stranded', () => makeShip('supply', { len: 13, tint: 0x8a4b3a, tintAmt: 0.3 }), { bar: 5, bob: 0.05, wake: { len: 0, wid: 0, fwd: 'X' } });
       const ent = this.ents.get('obj-stranded');
       if (ent?.bar) setBar(ent.bar, Math.max(0, battleCtx.stranded.hp) / Math.max(1, battleCtx.stranded.maxHp));
     }
@@ -1368,22 +1391,44 @@ export class GameSync3D {
         return g;
       }, { bob: 0.05 });
     }
-    // port tanker
+    // port tanker — D-022: the real Aframax hull (timing structure of the
+    // port cycle is unchanged; only the mesh was wrong). Own load bar,
+    // same pattern as before.
     const tanker = game.idle.port?.tanker;
     if (tanker) {
       alive.add('tanker');
-      this.setTarget('tanker', 'port', tanker.progress, 0.3, 'Z');
+      this.setTarget('tanker', 'port', tanker.progress, 0.3, 'X');
       void this.ensureEnt('tanker', async () => {
-        const g = await loadModel('/models/kenney/ship-cargo-a.glb');
-        const fit = new THREE.Box3().setFromObject(g); const size = new THREE.Vector3(); fit.getSize(size);
-        g.scale.setScalar(15 / Math.max(size.x, size.z, 0.001));
-        const bar = barSprites(5.5); bar.group.position.y = 5; g.add(bar.group); g.userData.bar = bar;
+        const g = await makeShip('tanker', { len: 18 });
+        const bar = barSprites(5.5); bar.group.position.y = 4.2; g.add(bar.group); g.userData.bar = bar;
         return g;
-      }, { bob: 0.08, wake: { len: 10.5, wid: 5.2, fwd: 'Z' } });
+      }, { bob: 0.08, wake: { len: 18, wid: 5.4, fwd: 'X' }, cruise: 1.4 });
       const ent = this.ents.get('tanker');
       if (ent) {
         const bar = ent.obj.userData.bar as ReturnType<typeof barSprites> | undefined;
         if (bar) { const cap = 500 + game.buildings.dock * 500; setBar(bar, tanker.stage === 'loading' ? tanker.load / cap : tanker.stage === 'depart' ? 1 : 0.05); }
+      }
+    }
+    // ===== D-022 VIP RENDERER (audit-2 F-1, CRITICAL): the golden VIP
+    // supertanker (R6) previously had NO 3D path at all — the escort
+    // mechanic ran invisibly. It now sails the trade lane as a gilded
+    // Aframax with an HP bar and a gold star; its two escort pirates
+    // render in the pirate pass above (dark-red tint) and hold station
+    // alongside it, exactly as the logic clamps them. =====
+    if (game.vipShip) {
+      const vip = game.vipShip;
+      alive.add('vip');
+      this.setTarget('vip', 'trade', vip.progress, 0.3, 'X');
+      void this.ensureEnt('vip', async () => {
+        const g = await makeShip('tanker', { len: 20, gold: true });
+        const bar = barSprites(6); bar.group.position.y = 4.4; g.add(bar.group); g.userData.bar = bar;
+        const star = glyphSprite('✦', '#ffd27a', 3.4); star.position.y = 6.2; g.add(star);
+        return g;
+      }, { bob: 0.08, wake: { len: 20, wid: 6, fwd: 'X' }, cruise: 16.9 });
+      const ent = this.ents.get('vip');
+      if (ent) {
+        const bar = ent.obj.userData.bar as ReturnType<typeof barSprites> | undefined;
+        if (bar) setBar(bar, Math.max(0, vip.hp) / Math.max(1, vip.maxHp));
       }
     }
     // heroes (free-moving: target from % pos, heading from movement delta)
@@ -1391,12 +1436,14 @@ export class GameSync3D {
     if (game.hero2) heroes.push(['hero2', game.hero2]);
     for (const [which, h] of heroes) {
       const key = which; alive.add(key);
-      void this.ensureEnt(key, () => {
-        const g = hull(0x5b6b82, which === 'hero' ? 14 : 12, 3.4, 'patrol');
+      void this.ensureEnt(key, async () => {
+        // D-022: the hero sails the research-vessel hull with a bow
+        // turret — and at 12u it no longer outsizes a destroyer (F-3).
+        const g = await makeShip('research', { len: which === 'hero' ? 12 : 11, arm: 'hero', tint: which === 'hero' ? 0x5b6b82 : 0x6b5b82, tintAmt: 0.22 });
         const star = glyphSprite('✦', '#ffd27a', 3); star.position.y = 5.4; g.add(star);
         g.traverse(o => { o.userData.pick = { type: which }; });
         return g;
-      }, { bob: 0.09, wake: { len: which === 'hero' ? 14 : 12, wid: 5, fwd: 'X' } });
+      }, { bob: 0.09, wake: { len: which === 'hero' ? 12 : 11, wid: 3.8, fwd: 'X' } });
       let [x, z] = pctTo3d(h.x, h.y);
       if (this.map.field && this.map.field.sample(x, z) > 0.2) {
         outer: for (let r = 2; r < 30; r += 2) for (let a = 0; a < 12; a++) {
