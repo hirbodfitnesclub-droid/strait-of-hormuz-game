@@ -52,6 +52,8 @@ export async function preloadModels(onProgress?: (done: number, total: number) =
   for (const pair of Object.values(BRANCH_MODEL)) for (const b of pair) urls.push(`/models/towers/${b}-L100.glb`);
   for (const b of ['platform', 'tankfarm', 'dock', 'refinery', 'steel', 'ammo', 'power', 'desal', 'town', 'welfare', 'customs']) urls.push(`/models/buildings/${b}.glb`);
   urls.push('/models/kenney/ship-cargo-a.glb', '/models/kenney/boat-tug-a.glb', '/models/kenney/boat-speed-a.glb');
+  // D-022 ship hulls (Innerscene CC0, flat-baked + decimated — CREDITS.md)
+  urls.push('/models/ships/frigate.glb', '/models/ships/carrier.glb', '/models/ships/tanker.glb', '/models/ships/container.glb', '/models/ships/bulk.glb', '/models/ships/submarine.glb', '/models/ships/pilot.glb', '/models/ships/research.glb', '/models/ships/supply.glb', '/models/ships/ferry.glb');
   const total = urls.length;
   let done = 0;
   const queue = [...urls];
