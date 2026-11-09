@@ -1,24 +1,45 @@
 "use client";
 
-import { ArrowLeft, Award, Check, ChevronLeft, Coins, Gift, Play, Ship, Sparkles, Star, TrendingUp, UsersRound, Zap } from "lucide-react";
-import { getStats, type GameState } from "@/lib/game";
-import { CONTRACTS, currentChapter, currentMission, missionProgress, rankInfo, type MissionTarget } from "@/lib/progression";
+import { ArrowLeft, Award, ChevronLeft, Coins, Play, Ship, Sparkles, TrendingUp, Zap } from "lucide-react";
+import { getStats, waveComposition, type GameState } from "@/lib/game";
+import { currentChapter, rankInfo } from "@/lib/progression";
+import { scenarioForWave } from "@/lib/news";
+import { scenarioContextFor } from "@/lib/scenario-mechanics";
 import { compact, fa } from "./game-ui";
 
-type Props={game:GameState;hidden:boolean;onCollect:()=>void;onBoost:()=>void;onBattle:()=>void;onMission:(target:MissionTarget)=>void;onClaimMission:(id:string)=>void;onJournal:()=>void;onManagers:()=>void;onDaily:()=>void;onContracts:()=>void;dailyAvailable:boolean;dailyWebOnly?:boolean;};
+type Props={game:GameState;hidden:boolean;focus:boolean;onCollect:()=>void;onBoost:()=>void;onBattle:()=>void;onJournal:()=>void;};
+
+/* The tanker port-cycle stage for the peace essential set (D-023): in
+   focus mode it takes over the idle bar's heading line (the bar carries
+   bank + accumulated + collect and the real export rate beside it).
+   Rates mirror Panels' PortCard (loading 0.04/s). */
+function portStageLine(game: GameState): string {
+  const port = game.idle.port;
+  if (port.tanker) {
+    const tanker = port.tanker;
+    if (tanker.stage === "approach") return `نفتکش در راه بندر است · رسیدن در ${fa(Math.max(1, Math.ceil((1 - tanker.progress) / 0.04)))} ثانیه`;
+    if (tanker.stage === "loading") return tanker.load > 0 ? `نفتکش در حال بارگیری · ${fa(Math.floor(tanker.load))} بشکه بار شده` : "نفتکش پهلو گرفته؛ در انتظار نفت مازاد بر سهم پالایش";
+    return `نفتکش بندر را ترک کرد · ${fa(Math.floor(tanker.load))} بشکه صادر شد`;
+  }
+  return `نفتکش بعدی تا ${fa(Math.max(1, Math.ceil(port.nextIn)))} ثانیهٔ دیگر · ${fa(port.cycles)} سفر کامل‌شده`;
+}
+
 export default function IdleHud(props:Props){
-  const {game}=props,stats=getStats(game),rank=rankInfo(game.idle.xp),chapter=currentChapter(game),mission=currentMission(game),progress=mission?missionProgress(game,mission):null,battle=game.phase==="battle",manager=game.idle.managerLevels.harbor>0;
-  /* Real export $/s (ECO stat, R11) — shown only when it exists; the
-     theoretical dollarRate is no longer presented as live income. */
-  const realRate=(stats as {realExportRate?:number}).realExportRate;
-  const act=()=>{if(!mission)return;if(progress?.complete)props.onClaimMission(mission.id);else props.onMission(mission.navigate);};
+  const {game}=props,stats=getStats(game),rank=rankInfo(game.idle.xp),chapter=currentChapter(game),battle=game.phase==="battle",manager=game.idle.managerLevels.harbor>0;
+  /* Real export $/s (ECO stat, R11) — presented as live income ONLY while a
+     tanker is docked and loading (realExportRate is 0 otherwise); the
+     theoretical dollarRate is never presented as live income. */
+  const realRate=stats.realExportRate;
   const bankCap = Math.max(10000, stats.dollarRate * 6 * 3600);
   const bankFull = Math.min(1, game.idle.bank / bankCap);
+  /* Expanded peace only: the next wave's composition (moved here from the
+     removed wave-hud card; focus mode keeps only the essential set). */
+  const previewUnits = !props.focus && !battle ? waveComposition(game.wave, scenarioForWave(game.wave, game.mode, scenarioContextFor(game))) : [];
   return <>
-    <div className="commander-progress"><button className="rank-medal" onClick={props.onJournal} title={rank.title} aria-label={`رتبه ${rank.title}`}><Award size={26}/><strong>{fa(rank.level)}</strong></button><div><span className="chapter-label">فصل {fa(chapter.index+1)} <i/> {chapter.title}</span><h1>{battle?"از قلمروت دفاع کن.":"بندرت را به یک امپراتوری تبدیل کن."}</h1><div className="commander-xp"><i style={{width:`${rank.progress*100}%`}}/></div><small>{rank.title} <span>{fa(game.idle.xp)} / {fa(rank.next)} تجربه</span></small></div></div>
-    {!props.hidden&&<><div className="daily-manager-shortcuts"><button className={`daily-shortcut ${props.dailyAvailable?"available":""}`} onClick={props.onDaily} aria-label="هدیه روزانه"><img src="/assets/reward-crate.png" alt=""/><span>{props.dailyWebOnly?"هدیهٔ روزانه · نسخهٔ وب":"هدیهٔ روزانه"}</span>{props.dailyAvailable&&<i/>}</button><button className="manager-shortcut" onClick={props.onManagers} aria-label="مدیران"><img src="/assets/managers/harbor.jpg" alt=""/><span>{manager?"مدیر فعال":"استخدام مدیر"}</span>{manager&&<Check size={12}/>}</button>{game.idle.contract&&<button className="contract-shortcut" onClick={props.onContracts} aria-label="قرارداد فعال"><Ship size={17}/><span>{game.idle.contract.elapsed>=CONTRACTS[game.idle.contract.id].duration?"محموله رسید":`${fa(Math.ceil(CONTRACTS[game.idle.contract.id].duration-game.idle.contract.elapsed))} ثانیه`}</span></button>}</div>
-      {mission&&progress&&!battle&&<div className={`mission-hud ${progress.complete?"claimable":""}`}><button className="mission-hud-icon" onClick={props.onJournal} aria-label="همهٔ مأموریت‌ها">{progress.complete?<Check size={20}/>:<Star size={21}/>}</button><div className="mission-hud-content"><span>{progress.complete?"پاداش آمادهٔ دریافت":"هدف بعدی"}<b>{fa(progress.value)} / {fa(progress.target)}</b></span><strong>{mission.title}</strong><div className="mission-hud-track"><i style={{width:`${progress.fraction*100}%`}}/></div></div><button className="mission-hud-cta" onClick={act}>{progress.complete?"دریافت":"انجام بده"}<ArrowLeft size={15}/></button></div>}
-      {!battle&&<div className="idle-command-bar" onPointerDown={e=>e.stopPropagation()} onClick={e=>e.stopPropagation()}><div className="idle-income-block"><div className="idle-income-heading"><span><TrendingUp size={13}/> {game.idle.collectionStreak>0&&<b className="streak-indicator"><Sparkles size={11}/>×{fa(game.idle.collectionStreak)} +{fa(game.idle.collectionStreak*4)}٪</b>} {manager?"درآمد خودکار":"سود آمادهٔ جمع‌آوری"}</span>{typeof realRate==="number"&&<strong>+${fa(realRate,1)}<small>/ث</small></strong>}</div><button className={`collect-income ${game.idle.bank>=1?"has-income":""} ${bankFull>0.85?"bank-near-cap":""}`} disabled={game.idle.bank<1} onClick={props.onCollect} aria-label="جمع‌آوری درآمد"><span className="collect-coin"><Coins size={25}/></span><span><strong>${compact(game.idle.bank)}</strong><small>{manager?"جمع‌آوری زودتر + پاداش زنجیره":"جمع‌آوری درآمد + پاداش زنجیره"}</small></span><ArrowLeft size={19}/><i className="bank-cap-bar" style={{width:`${bankFull*100}%`}}/></button></div><button className={`production-boost ${game.idle.boostRemaining>0?"active":""}`} onClick={props.onBoost} disabled={game.idle.boostCharges<=0&&game.idle.boostRemaining<=0} aria-label="تولید دوبرابر" title="۶۰ ثانیه تولید دوبرابر"><span><Zap size={22} fill="currentColor"/></span><strong>{game.idle.boostRemaining>0?`${fa(Math.ceil(game.idle.boostRemaining))}ث`:"×۲"}</strong><small>{game.idle.boostRemaining>0?"فعال":`${fa(game.idle.boostCharges)} شارژ`}</small></button><div className="idle-control-divider"/><button className="idle-battle-start" onClick={props.onBattle} aria-label="شروع دفاع"><span><Play size={20} fill="currentColor"/></span><strong>{game.phase==="defeat"?"دوباره بجنگ":"دفاع از تنگه"}</strong><small>عملیات {fa(game.wave)} <ChevronLeft size={11}/></small></button></div>}
+    {!props.focus&&<div className="commander-progress"><button className="rank-medal" onClick={props.onJournal} title={rank.title} aria-label={`رتبه ${rank.title}`}><Award size={26}/><strong>{fa(rank.level)}</strong></button><div><span className="chapter-label">فصل {fa(chapter.index+1)} <i/> {chapter.title}</span><h1>{battle?"از قلمروت دفاع کن.":"بندرت را به یک امپراتوری تبدیل کن."}</h1><div className="commander-xp"><i style={{width:`${rank.progress*100}%`}}/></div><small>{rank.title} <span>{fa(game.idle.xp)} / {fa(rank.next)} تجربه</span></small></div></div>}
+    {!props.hidden&&<>
+      {!battle&&previewUnits.length>0&&<div className="wave-preview peace-preview" aria-label="ترکیب موج بعدی">{previewUnits.map(u => <span key={u.kind === "boss" ? `boss-${u.boss}` : u.kind} className={`preview-unit unit-${u.kind}${u.kind === "boss" ? ` boss-${u.boss}` : ""}`} title={u.kind === "boss" ? "غول‌آخر" : u.kind === "speed" ? "تندرو" : u.kind === "corvette" ? "ناوچه" : u.kind === "air" ? "هوایی" : u.kind === "sub" ? "زیردریایی" : "ناوشکن"}>{u.kind === "boss" ? "☠" : u.kind === "air" ? "✈" : u.kind === "sub" ? "⚓" : u.kind === "destroyer" ? "⬢" : u.kind === "corvette" ? "⬣" : "▲"}<b>{fa(u.count)}</b></span>)}</div>}
+      {!battle&&<div className="idle-command-bar" onPointerDown={e=>e.stopPropagation()} onClick={e=>e.stopPropagation()}><div className="idle-income-block"><div className="idle-income-heading"><span>{props.focus?<><Ship size={12}/> {portStageLine(game)}</>:<><TrendingUp size={13}/> {game.idle.collectionStreak>0&&<b className="streak-indicator"><Sparkles size={11}/>×{fa(game.idle.collectionStreak)} +{fa(game.idle.collectionStreak*4)}٪</b>} {manager?"درآمد خودکار":"سود آمادهٔ جمع‌آوری"}</>}</span>{realRate>0&&<strong>+${fa(realRate,1)}<small>/ث</small></strong>}</div><button className={`collect-income ${game.idle.bank>=1?"has-income":""} ${bankFull>0.85?"bank-near-cap":""}`} disabled={game.idle.bank<1} onClick={props.onCollect} aria-label="جمع‌آوری درآمد"><span className="collect-coin"><Coins size={25}/></span><span><strong>${compact(game.idle.bank)}</strong><small>{manager?"جمع‌آوری زودتر + پاداش زنجیره":"جمع‌آوری درآمد + پاداش زنجیره"}</small></span><ArrowLeft size={19}/><i className="bank-cap-bar" style={{width:`${bankFull*100}%`}}/></button></div>{!props.focus&&<><button className={`production-boost ${game.idle.boostRemaining>0?"active":""}`} onClick={props.onBoost} disabled={game.idle.boostCharges<=0&&game.idle.boostRemaining<=0} aria-label="تولید دوبرابر" title="۶۰ ثانیه تولید دوبرابر"><span><Zap size={22} fill="currentColor"/></span><strong>{game.idle.boostRemaining>0?`${fa(Math.ceil(game.idle.boostRemaining))}ث`:"×۲"}</strong><small>{game.idle.boostRemaining>0?"فعال":`${fa(game.idle.boostCharges)} شارژ`}</small></button><div className="idle-control-divider"/></>}<button className="idle-battle-start" onClick={props.onBattle} aria-label="شروع دفاع"><span><Play size={20} fill="currentColor"/></span><strong>{game.phase==="defeat"?"دوباره بجنگ":"دفاع از تنگه"}</strong><small>{game.phase==="intermission"?"فراخوان زودهنگام · +۲۵٪ پاداش":<>عملیات {fa(game.wave)} <ChevronLeft size={11}/></>}</small></button></div>}
     </>}
   </>;
 }

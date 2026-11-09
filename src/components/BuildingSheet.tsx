@@ -10,6 +10,23 @@ import { useDialog } from "./useDialog";
 
 type Props = { id:BuildingId; game:GameState; dispatch:Dispatch<Action>; close:()=>void; notify:(message:string)=>void; feedback:()=>void; onEconomy:()=>void; onManagers:()=>void };
 const tiers=["پایه","صنعتی","مدرن","پیشرفته","فناوری آینده"];
+/* «روی چیا اثر داره» (D-023): one short effect summary per building,
+   derived from the economy code by audit round 2 (team 3, §6) — shown
+   verbatim in the sheet so a player sees what a building FEEDS before
+   paying for an upgrade. */
+const BUILDING_EFFECTS: Record<BuildingId,string> = {
+  oil: "نفت خام تولید می‌کند — خوراک صادرات و پالایش؛ هر سطح ۵ مگاوات برق مصرف می‌کند.",
+  tank: "سقف ذخیرهٔ نفت را بالا می‌برد (هر سطح ۵۰۰ بشکه)؛ مخزن پر یعنی توقف تولید و از دست رفتن صادرات.",
+  dock: "سقف سرعت بارگیری نفتکش را تعیین می‌کند؛ صادرات واقعی هرگز از ظرفیت اسکله بالاتر نمی‌رود.",
+  refinery: "از سهم غیرصادراتی نفت سوخت می‌سازد (هر ۱۰ نفت → ۵ سوخت)؛ سوخت نیروگاه و ناوگان از اینجاست و هر سطح ۱۵ مگاوات برق و آب مصرف می‌کند.",
+  steel: "فولاد تولید می‌کند — مادهٔ ساخت و ارتقای برجک‌ها؛ پرمصرف‌ترین ساختمان برقی است (هر سطح ۲۵ مگاوات).",
+  arms: "مهمات تولید می‌کند — هر شلیک برجک مهمات مصرف می‌کند و با اتمام مهمات، آتش متوقف می‌شود؛ هر سطح ۳۰ مگاوات برق می‌خواهد.",
+  power: "برق شبکه را تأمین می‌کند (هر سطح ۶۰ مگاوات)؛ کمبود برق، تولید همهٔ ساختمان‌ها و آسیب همهٔ برجک‌ها را به همان نسبت کم می‌کند و بدون سوخت، نیروگاه به ۲۰٪ توان می‌افتد.",
+  water: "آب شهرک و پالایشگاه را تأمین می‌کند؛ کمبود آب مستقیماً پایداری را پایین می‌کشد.",
+  city: "جمعیت می‌سازد و تا ۳۰ واحد از پایداری را تأمین می‌کند؛ در عوض آب و برق مصرف می‌کند.",
+  welfare: "هر سطح +۴ پایداری می‌دهد (تا سقف +۲۰)؛ پایداری بالاتر یعنی ضریب تولید بیشتر برای همهٔ ساختمان‌ها.",
+  optical: "هر سطح +۳٪ به برد همهٔ برجک‌ها اضافه می‌کند و از همان سطح ۱، کشتی‌های قاچاق را روی نقشه آشکار می‌کند.",
+};
 function outputFor(game:GameState,id:BuildingId){const stats=getStats(game);return id==="tank"?stats.oilCapacity:id==="power"?stats.powerProduced:id==="water"?stats.waterProduced:id==="city"?game.buildings.city*50:stats.output(id);}
 export default function BuildingSheet({id,game,dispatch,close,notify,feedback,onEconomy,onManagers}:Props){
   const ref=useDialog<HTMLElement>(close),[quantity,setQuantity]=useState<UpgradeQuantity>(1);
@@ -22,7 +39,7 @@ export default function BuildingSheet({id,game,dispatch,close,notify,feedback,on
   return <div className="tower-sheet-backdrop" onClick={close}><section className="building-sheet idle-building-sheet" ref={ref} role="dialog" aria-modal="true" aria-labelledby="building-sheet-title" tabIndex={-1} onClick={e=>e.stopPropagation()}>
     <div className="sheet-handle"/><header className="tower-sheet-header"><div><span className="sheet-eyebrow">زیرساخت ملی · {tiers[tier-1]}</span><h2 id="building-sheet-title">{definition.name}</h2></div><button className="close-control" onClick={close} aria-label="بستن پنجره ساختمان"><X size={19}/></button></header>
     <div className="building-showcase"><div className="building-showcase-light"/><BuildingModel id={id} level={level}/><span className="showcase-level">سطح {fa(level)}</span><span className="showcase-tier"><Sparkles size={13}/>{tiers[tier-1]}</span>{game.idle.boostRemaining>0&&<span className="showcase-boost"><Zap size={12}/> تولید ×۲</span>}</div>
-    <div className="building-sheet-copy"><p>{definition.description}</p><div className="upgrade-comparison"><div><span>{id==="tank"?"ظرفیت فعلی":"تولید فعلی"}</span><strong>{compact(output)}<small>{definition.unit}</small></strong></div><ArrowLeft size={19}/><div><span>بعد از ارتقا {gain>0&&<b>+{fa(gain)}٪</b>}</span><strong className="green-text">{compact(next)}<small>{definition.unit}</small></strong></div></div>
+    <div className="building-sheet-copy"><p>{definition.description}</p><div className="building-effect"><span className="building-effect-label"><Sparkles size={12}/>روی چیا اثر داره؟</span><p>{BUILDING_EFFECTS[id]}</p></div><div className="upgrade-comparison"><div><span>{id==="tank"?"ظرفیت فعلی":"تولید فعلی"}</span><strong>{compact(output)}<small>{definition.unit}</small></strong></div><ArrowLeft size={19}/><div><span>بعد از ارتقا {gain>0&&<b>+{fa(gain)}٪</b>}</span><strong className="green-text">{compact(next)}<small>{definition.unit}</small></strong></div></div>
       <div className="evolution-heading"><span>تکامل بعدی</span><strong>{level>=100?"بالاترین سطح":`سطح ${fa(nextMilestone)}`}</strong></div><div className="evolution-meter"><i style={{width:`${level>=100?100:Math.max(4,level/nextMilestone*100)}%`}}/></div><div className="evolution-reward-note"><GiftIcon/><span>{milestoneCrossed?"این ارتقا ظاهر تازه و یک صندوقچه باز می‌کند!":`در سطح ${fa(nextMilestone)}: مدل تکامل‌یافته + صندوقچه`}</span></div>
       {manager&&<button className={`building-manager-row ${managerLevel>0?"active":""}`} onClick={onManagers}><img src={MANAGERS[manager].image} alt=""/><span><strong>{managerLevel>0?MANAGERS[manager].name:"یک متخصص استخدام کنید"}</strong><small>{managerLevel>0?`${MANAGERS[manager].role} · سطح ${fa(managerLevel)}`:MANAGERS[manager].effect}</small></span>{managerLevel>0?<Check size={16}/>:<ArrowLeft size={16}/>}</button>}
       {stats.grid<.9&&<div className="upgrade-grid-warning"><Zap size={14}/> راندمان برق {fa(stats.grid*100)}٪ است؛ نیروگاه را تقویت کنید.</div>}

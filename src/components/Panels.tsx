@@ -12,7 +12,7 @@ import {
   type Action, type BuildingId, type GameState, type Mode, type TowerKind,
   powerBreakdown,
 } from "@/lib/game";
-import { compact, fa, TargetTypes, TowerGlyph } from "./game-ui";
+import { compact, fa, stabilityBreakdown, TargetTypes, TowerGlyph } from "./game-ui";
 import { useDialog } from "./useDialog";
 import BuildingModel from "./BuildingModel";
 import TowerModel from "./TowerModel";
@@ -129,8 +129,14 @@ function City({ game, dispatch, notify, onSelectBuilding }: Props) {
     <div className="drawer-intro"><div className="intro-icon teal"><BatteryCharging size={23} /></div><div><strong>پشتوانه یک تنگه قدرتمند</strong><p>برق، آب و رفاه، راندمان صنعت و پدافند را تعیین می‌کنند.</p></div></div>
     <div className="summary-grid three"><div><span>تراز برق</span><strong className={stats.powerProduced >= stats.powerUsed ? "green-text" : "red-text"}>{stats.powerProduced >= stats.powerUsed ? "+" : ""}{fa(stats.powerProduced - stats.powerUsed)} <small>MW</small></strong></div><div><span>تراز آب</span><strong className="green-text">+{fa(stats.waterProduced - stats.waterUsed)}</strong></div><div><span>پایداری ملی</span><strong>{fa(stats.stability)}٪</strong></div></div>
     {(() => { const pb = powerBreakdown(game); const max = Math.max(1, ...pb.consumers.map(c => c.mw)); return <section className="grid-breakdown"><div className="grid-breakdown-head"><strong>مصرف شبکهٔ برق</strong><span>تولید {fa(pb.produced)} · مصرف {fa(pb.used)} MW</span></div>{pb.consumers.length === 0 ? <p className="grid-empty">هنوز مصرف‌کننده‌ای ساخته نشده است.</p> : pb.consumers.map(c => <div className="grid-row" key={c.id}><span>{c.name}</span><div className="grid-bar"><i style={{ width: `${Math.max(4, (c.mw / max) * 100)}%` }} className={pb.produced >= pb.used ? "" : "over"} /></div><b>{fa(c.mw)} MW</b></div>)}{pb.produced < pb.used && <p className="grid-warn">مصرف از تولید بیشتر است — راندمان شبکه به {fa(pb.grid * 100)}٪ افت کرده؛ نیروگاه بسازید یا مصرف را کم کنید.</p>}</section>; })()}
+    {/* Stability components (D-023): the breakdown that used to hide in
+        the wave-hud popover lives here now, next to the power breakdown. */}
+    <section className="grid-breakdown stab-breakdown"><div className="grid-breakdown-head"><strong>اجزای پایداری ملی</strong><span>{fa(Math.round(stats.stability))} از ۱۰۰</span></div>{stabilityBreakdown(game, stats).map(row => <div className={`stab-row${row.value < 0 ? " stab-cap" : ""}`} key={row.label}><span>{row.label}</span><div className="stab-bar"><i style={{ width: `${Math.max(0, Math.min(100, (row.value / row.max) * 100))}%` }} /></div><b>{row.value < 0 ? `−${fa(-row.value, 1)}` : `+${fa(row.value, 1)}`}</b></div>)}<p className="grid-empty">پایداری روی راندمان همهٔ تولید اثر می‌گذارد؛ ضعیف‌ترین جزء را تقویت کنید.</p></section>
     <div className="drawer-section-heading"><div><strong>زیرساخت‌های حیاتی</strong><p>راندمان شبکه برق: {fa(stats.grid * 100)}٪</p></div></div>
-    <div className="building-list">{(["power", "water", "city"] as BuildingId[]).map(id => <BuildingCard key={id} id={id} game={game} dispatch={dispatch} notify={notify} inspect={onSelectBuilding} />)}</div>
+    {/* welfare + optical (D-023): previously upgradeable ONLY by tapping
+        the 3D model — they now sit in the city panel like every other
+        building (BuildingCard handles any BuildingId). */}
+    <div className="building-list">{(["power", "water", "city", "welfare", "optical"] as BuildingId[]).map(id => <BuildingCard key={id} id={id} game={game} dispatch={dispatch} notify={notify} inspect={onSelectBuilding} />)}</div>
     <div className="drawer-section-heading space-top"><div><strong>گسترش قلمرو</strong><p>جزایر جدید، جایگاه‌های تاکتیکی بیشتری آزاد می‌کنند.</p></div></div>
     <div className="island-grid">{ISLANDS.filter(i => i.cost > 0).map(island => <div className="island-card" key={island.id}><Mountain size={19} /><strong>{island.name}</strong><button disabled={game.islands.includes(island.id)} onClick={() => {
       if (game.cash < island.cost) { notify("دلار کافی برای آزادسازی جزیره ندارید."); return; }
