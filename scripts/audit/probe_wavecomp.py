@@ -38,7 +38,7 @@ WAVES = [1, 3, 5, 10]
 EXPECTED_COMPOSITIONS: dict[int, tuple[dict[str, int], int]] = {
     1: ({"speed": 6}, 6),                                            # op 1 سپر ساحل (pirates rewritten as speed)
     3: ({"speed": 2, "air": 6}, 8),                                  # op 3 چشم بیدار (drone wave, air-heavy)
-    5: ({"air": 4, "destroyer": 2, "speed": 4, "boss": 1}, 11),      # op 5 دیوار آتش (+ boss 1)
+    5: ({"air": 4, "corvette": 2, "destroyer": 2, "speed": 2, "boss": 1}, 11),  # op 5 دیوار آتش (+ boss 1) — re-pinned 2026-11-09 with the D-024 boss-5 retune (destroyer share .10→.20 shifted distributor rounding: speed 4→2, corvette 0→2); measured 3× through startWave by QA-BALANCE
     10: ({"sub": 6, "destroyer": 4, "corvette": 3, "speed": 2, "boss": 1}, 16),  # op 10 نگهبان شعله (+ boss 2)
 }
 
