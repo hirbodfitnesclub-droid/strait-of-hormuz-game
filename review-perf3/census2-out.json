@@ -1,0 +1,572 @@
+{
+ "children": [
+  {
+   "i": 0,
+   "name": "",
+   "type": "Group",
+   "kids": 2,
+   "shadow_delta_base": 783178.5,
+   "main_delta_base": 773768.0,
+   "shadow_tris": 10896.5,
+   "total_tris_when_hidden": 20307.0
+  },
+  {
+   "i": 1,
+   "name": "",
+   "type": "Group",
+   "kids": 2,
+   "shadow_delta_base": 779068.0,
+   "main_delta_base": 779186.0,
+   "shadow_tris": 15007.0,
+   "total_tris_when_hidden": 14889.0
+  },
+  {
+   "i": 2,
+   "name": "",
+   "type": "Group",
+   "kids": 15,
+   "shadow_delta_base": 780782.0,
+   "main_delta_base": 780782.0,
+   "shadow_tris": 13293.0,
+   "total_tris_when_hidden": 13293.0
+  },
+  {
+   "i": 3,
+   "name": "",
+   "type": "Group",
+   "kids": 9,
+   "shadow_delta_base": 788276.0,
+   "main_delta_base": 781948.0,
+   "shadow_tris": 5799.0,
+   "total_tris_when_hidden": 12127.0
+  },
+  {
+   "i": 4,
+   "name": "",
+   "type": "Group",
+   "kids": 216,
+   "shadow_delta_base": 787523.0,
+   "main_delta_base": 787523.0,
+   "shadow_tris": 6552.0,
+   "total_tris_when_hidden": 6552.0
+  },
+  {
+   "i": 5,
+   "name": "",
+   "type": "Group",
+   "kids": 61,
+   "shadow_delta_base": 792631.0,
+   "main_delta_base": 792631.0,
+   "shadow_tris": 1444.0,
+   "total_tris_when_hidden": 1444.0
+  },
+  {
+   "i": 6,
+   "name": "",
+   "type": "Group",
+   "kids": 24,
+   "shadow_delta_base": 792631.0,
+   "main_delta_base": 792631.0,
+   "shadow_tris": 1444.0,
+   "total_tris_when_hidden": 1444.0
+  },
+  {
+   "i": 7,
+   "name": "",
+   "type": "Group",
+   "kids": 46,
+   "shadow_delta_base": 792759.0,
+   "main_delta_base": 792749.0,
+   "shadow_tris": 1316.0,
+   "total_tris_when_hidden": 1326.0
+  },
+  {
+   "i": 8,
+   "name": "",
+   "type": "Group",
+   "kids": 28,
+   "shadow_delta_base": 792759.0,
+   "main_delta_base": 792759.0,
+   "shadow_tris": 1316.0,
+   "total_tris_when_hidden": 1316.0
+  },
+  {
+   "i": 9,
+   "name": "terrain",
+   "type": "Group",
+   "kids": 12,
+   "shadow_delta_base": 794791.0,
+   "main_delta_base": 340711.0,
+   "shadow_tris": -716.0,
+   "total_tris_when_hidden": 453364.0
+  },
+  {
+   "i": 10,
+   "name": "",
+   "type": "Mesh",
+   "kids": 0,
+   "shadow_delta_base": 794791.0,
+   "main_delta_base": 794789.0,
+   "shadow_tris": -716.0,
+   "total_tris_when_hidden": -714.0
+  },
+  {
+   "i": 11,
+   "name": "",
+   "type": "Mesh",
+   "kids": 0,
+   "shadow_delta_base": 794791.0,
+   "main_delta_base": 793819.0,
+   "shadow_tris": -716.0,
+   "total_tris_when_hidden": 256.0
+  },
+  {
+   "i": 12,
+   "name": "",
+   "type": "Mesh",
+   "kids": 0,
+   "shadow_delta_base": 794779.0,
+   "main_delta_base": 794775.0,
+   "shadow_tris": -704.0,
+   "total_tris_when_hidden": -700.0
+  },
+  {
+   "i": 15,
+   "name": "",
+   "type": "Object3D",
+   "kids": 0,
+   "shadow_delta_base": 794765.0,
+   "main_delta_base": 795873.0,
+   "shadow_tris": -690.0,
+   "total_tris_when_hidden": -1798.0
+  },
+  {
+   "i": 17,
+   "name": "",
+   "type": "Points",
+   "kids": 0,
+   "shadow_delta_base": 797301.0,
+   "main_delta_base": 797301.0,
+   "shadow_tris": -3226.0,
+   "total_tris_when_hidden": -3226.0
+  },
+  {
+   "i": 18,
+   "name": "",
+   "type": "LineSegments",
+   "kids": 0,
+   "shadow_delta_base": 797755.0,
+   "main_delta_base": 797755.0,
+   "shadow_tris": -3680.0,
+   "total_tris_when_hidden": -3680.0
+  },
+  {
+   "i": 19,
+   "name": "",
+   "type": "Mesh",
+   "kids": 0,
+   "shadow_delta_base": 749755.0,
+   "main_delta_base": 701755.0,
+   "shadow_tris": 44320.0,
+   "total_tris_when_hidden": 92320.0
+  },
+  {
+   "i": 20,
+   "name": "",
+   "type": "Points",
+   "kids": 0,
+   "shadow_delta_base": 797755.0,
+   "main_delta_base": 797755.0,
+   "shadow_tris": -3680.0,
+   "total_tris_when_hidden": -3680.0
+  },
+  {
+   "i": 21,
+   "name": "",
+   "type": "Group",
+   "kids": 20,
+   "shadow_delta_base": 797479.0,
+   "main_delta_base": 795996.0,
+   "shadow_tris": -3404.0,
+   "total_tris_when_hidden": -1921.0
+  },
+  {
+   "i": 22,
+   "name": "",
+   "type": "Group",
+   "kids": 24,
+   "shadow_delta_base": 800019.0,
+   "main_delta_base": 798671.0,
+   "shadow_tris": -5944.0,
+   "total_tris_when_hidden": -4596.0
+  },
+  {
+   "i": 23,
+   "name": "",
+   "type": "Group",
+   "kids": 24,
+   "shadow_delta_base": 800721.0,
+   "main_delta_base": 800721.0,
+   "shadow_tris": -6646.0,
+   "total_tris_when_hidden": -6646.0
+  },
+  {
+   "i": 24,
+   "name": "",
+   "type": "Group",
+   "kids": 24,
+   "shadow_delta_base": 800964.0,
+   "main_delta_base": 800963.0,
+   "shadow_tris": -6889.0,
+   "total_tris_when_hidden": -6888.0
+  },
+  {
+   "i": 25,
+   "name": "",
+   "type": "Group",
+   "kids": 24,
+   "shadow_delta_base": 800963.0,
+   "main_delta_base": 800963.0,
+   "shadow_tris": -6888.0,
+   "total_tris_when_hidden": -6888.0
+  },
+  {
+   "i": 26,
+   "name": "",
+   "type": "Group",
+   "kids": 24,
+   "shadow_delta_base": 800963.0,
+   "main_delta_base": 800963.0,
+   "shadow_tris": -6888.0,
+   "total_tris_when_hidden": -6888.0
+  },
+  {
+   "i": 27,
+   "name": "",
+   "type": "Group",
+   "kids": 20,
+   "shadow_delta_base": 800963.0,
+   "main_delta_base": 800963.0,
+   "shadow_tris": -6888.0,
+   "total_tris_when_hidden": -6888.0
+  },
+  {
+   "i": 28,
+   "name": "",
+   "type": "Group",
+   "kids": 3,
+   "shadow_delta_base": 800963.0,
+   "main_delta_base": 800963.0,
+   "shadow_tris": -6888.0,
+   "total_tris_when_hidden": -6888.0
+  }
+ ],
+ "page_errors": [],
+ "baseline": 794075.0,
+ "kids": [
+  {
+   "i": 0,
+   "name": "",
+   "type": "Group",
+   "kids": 2,
+   "isMesh": false,
+   "isLight": false
+  },
+  {
+   "i": 1,
+   "name": "",
+   "type": "Group",
+   "kids": 2,
+   "isMesh": false,
+   "isLight": false
+  },
+  {
+   "i": 2,
+   "name": "",
+   "type": "Group",
+   "kids": 15,
+   "isMesh": false,
+   "isLight": false
+  },
+  {
+   "i": 3,
+   "name": "",
+   "type": "Group",
+   "kids": 9,
+   "isMesh": false,
+   "isLight": false
+  },
+  {
+   "i": 4,
+   "name": "",
+   "type": "Group",
+   "kids": 216,
+   "isMesh": false,
+   "isLight": false
+  },
+  {
+   "i": 5,
+   "name": "",
+   "type": "Group",
+   "kids": 61,
+   "isMesh": false,
+   "isLight": false
+  },
+  {
+   "i": 6,
+   "name": "",
+   "type": "Group",
+   "kids": 24,
+   "isMesh": false,
+   "isLight": false
+  },
+  {
+   "i": 7,
+   "name": "",
+   "type": "Group",
+   "kids": 46,
+   "isMesh": false,
+   "isLight": false
+  },
+  {
+   "i": 8,
+   "name": "",
+   "type": "Group",
+   "kids": 28,
+   "isMesh": false,
+   "isLight": false
+  },
+  {
+   "i": 9,
+   "name": "terrain",
+   "type": "Group",
+   "kids": 12,
+   "isMesh": false,
+   "isLight": false
+  },
+  {
+   "i": 10,
+   "name": "",
+   "type": "Mesh",
+   "kids": 0,
+   "isMesh": true,
+   "isLight": false
+  },
+  {
+   "i": 11,
+   "name": "",
+   "type": "Mesh",
+   "kids": 0,
+   "isMesh": true,
+   "isLight": false
+  },
+  {
+   "i": 12,
+   "name": "",
+   "type": "Mesh",
+   "kids": 0,
+   "isMesh": true,
+   "isLight": false
+  },
+  {
+   "i": 13,
+   "name": "",
+   "type": "HemisphereLight",
+   "kids": 0,
+   "isMesh": false,
+   "isLight": true
+  },
+  {
+   "i": 14,
+   "name": "",
+   "type": "DirectionalLight",
+   "kids": 0,
+   "isMesh": false,
+   "isLight": true
+  },
+  {
+   "i": 15,
+   "name": "",
+   "type": "Object3D",
+   "kids": 0,
+   "isMesh": false,
+   "isLight": false
+  },
+  {
+   "i": 16,
+   "name": "",
+   "type": "DirectionalLight",
+   "kids": 0,
+   "isMesh": false,
+   "isLight": true
+  },
+  {
+   "i": 17,
+   "name": "",
+   "type": "Points",
+   "kids": 0,
+   "isMesh": false,
+   "isLight": false
+  },
+  {
+   "i": 18,
+   "name": "",
+   "type": "LineSegments",
+   "kids": 0,
+   "isMesh": false,
+   "isLight": false
+  },
+  {
+   "i": 19,
+   "name": "",
+   "type": "Mesh",
+   "kids": 0,
+   "isMesh": true,
+   "isLight": false
+  },
+  {
+   "i": 20,
+   "name": "",
+   "type": "Points",
+   "kids": 0,
+   "isMesh": false,
+   "isLight": false
+  },
+  {
+   "i": 21,
+   "name": "",
+   "type": "Group",
+   "kids": 20,
+   "isMesh": false,
+   "isLight": false
+  },
+  {
+   "i": 22,
+   "name": "",
+   "type": "Group",
+   "kids": 24,
+   "isMesh": false,
+   "isLight": false
+  },
+  {
+   "i": 23,
+   "name": "",
+   "type": "Group",
+   "kids": 24,
+   "isMesh": false,
+   "isLight": false
+  },
+  {
+   "i": 24,
+   "name": "",
+   "type": "Group",
+   "kids": 24,
+   "isMesh": false,
+   "isLight": false
+  },
+  {
+   "i": 25,
+   "name": "",
+   "type": "Group",
+   "kids": 24,
+   "isMesh": false,
+   "isLight": false
+  },
+  {
+   "i": 26,
+   "name": "",
+   "type": "Group",
+   "kids": 24,
+   "isMesh": false,
+   "isLight": false
+  },
+  {
+   "i": 27,
+   "name": "",
+   "type": "Group",
+   "kids": 20,
+   "isMesh": false,
+   "isLight": false
+  },
+  {
+   "i": 28,
+   "name": "",
+   "type": "Group",
+   "kids": 3,
+   "isMesh": false,
+   "isLight": false
+  },
+  {
+   "i": 29,
+   "name": "",
+   "type": "Group",
+   "kids": 21,
+   "isMesh": false,
+   "isLight": false
+  },
+  {
+   "i": 30,
+   "name": "",
+   "type": "Group",
+   "kids": 19,
+   "isMesh": false,
+   "isLight": false
+  },
+  {
+   "i": 31,
+   "name": "",
+   "type": "Group",
+   "kids": 19,
+   "isMesh": false,
+   "isLight": false
+  },
+  {
+   "i": 32,
+   "name": "",
+   "type": "Group",
+   "kids": 21,
+   "isMesh": false,
+   "isLight": false
+  },
+  {
+   "i": 33,
+   "name": "",
+   "type": "Group",
+   "kids": 21,
+   "isMesh": false,
+   "isLight": false
+  },
+  {
+   "i": 34,
+   "name": "",
+   "type": "Group",
+   "kids": 21,
+   "isMesh": false,
+   "isLight": false
+  },
+  {
+   "i": 35,
+   "name": "",
+   "type": "Group",
+   "kids": 21,
+   "isMesh": false,
+   "isLight": false
+  },
+  {
+   "i": 36,
+   "name": "",
+   "type": "Group",
+   "kids": 19,
+   "isMesh": false,
+   "isLight": false
+  },
+  {
+   "i": 37,
+   "name": "gamesync-root",
+   "type": "Group",
+   "kids": 2,
+   "isMesh": false,
+   "isLight": false
+  }
+ ]
+}

@@ -1381,7 +1381,13 @@ function buildTerrainMesh(field, segX = 768, maxAniso = 1) {
   // full grid before the split, so tile borders shade seamlessly); only
   // the draw partitioning changes, so the rendered image is unchanged.
   // Border vertices are duplicated per tile (~1% extra), draw calls +11.
-  const TILES_X = 4, TILES_Z = 3;
+  // PERF3 (D-020 gate B-1): grid raised 4×3 → 8×6. Same faces, same shared
+  // vertices/normals/colors — only the draw partitioning gets finer, so the
+  // rendered image is identical; smaller per-tile bounding spheres let
+  // frustum culling drop far more of the terrain at the opening framing
+  // (tile simulation at the opening camera: ~454k drawn at 4×3 → ~204k at
+  // 8×6). Draw calls +36 in the worst case (all tiles on screen).
+  const TILES_X = 8, TILES_Z = 6;
   const group = new THREE.Group();
   group.name = 'terrain';
   const posA = geo.attributes.position, norA = geo.attributes.normal, colA = geo.attributes.color;
