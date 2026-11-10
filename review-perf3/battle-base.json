@@ -1,0 +1,51 @@
+{
+ "tag": "base",
+ "serve": "/home/hatch/workspace/wt2-intrun/out",
+ "page_errors": [],
+ "camera_settled_pos": [
+  85,
+  68.96121815663888,
+  78.205653555956
+ ],
+ "phase": null,
+ "samples": [
+  {
+   "calls": 1978,
+   "tris": 856266,
+   "dpr": 1,
+   "fps": 0
+  },
+  {
+   "calls": 1971,
+   "tris": 855624,
+   "dpr": 1,
+   "fps": 0
+  },
+  {
+   "calls": 1976,
+   "tris": 856046,
+   "dpr": 1,
+   "fps": 0
+  },
+  {
+   "calls": 1978,
+   "tris": 856128,
+   "dpr": 1,
+   "fps": 0
+  },
+  {
+   "calls": 1995,
+   "tris": 859874,
+   "dpr": 1,
+   "fps": 0
+  },
+  {
+   "calls": 2000,
+   "tris": 856252,
+   "dpr": 1,
+   "fps": 0
+  }
+ ],
+ "median_tris": 856190.0,
+ "median_calls": 1978.0
+}

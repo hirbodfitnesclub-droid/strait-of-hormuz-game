@@ -1,0 +1,51 @@
+{
+ "tag": "after",
+ "serve": "/home/hatch/workspace/wt2-perf3/out",
+ "page_errors": [],
+ "camera_settled_pos": [
+  85,
+  68.96121815663888,
+  78.205653555956
+ ],
+ "phase": null,
+ "samples": [
+  {
+   "calls": 1980,
+   "tris": 603584,
+   "dpr": 1,
+   "fps": 0
+  },
+  {
+   "calls": 1949,
+   "tris": 593911,
+   "dpr": 1,
+   "fps": 0
+  },
+  {
+   "calls": 1948,
+   "tris": 593371,
+   "dpr": 1,
+   "fps": 0
+  },
+  {
+   "calls": 1920,
+   "tris": 585019,
+   "dpr": 1,
+   "fps": 0
+  },
+  {
+   "calls": 1910,
+   "tris": 584743,
+   "dpr": 1,
+   "fps": 0
+  },
+  {
+   "calls": 1911,
+   "tris": 584401,
+   "dpr": 1,
+   "fps": 0
+  }
+ ],
+ "median_tris": 589195.0,
+ "median_calls": 1934.0
+}

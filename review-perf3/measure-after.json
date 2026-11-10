@@ -1,0 +1,71 @@
+{
+ "tag": "after",
+ "page_errors": [],
+ "camera_settled_pos": [
+  85,
+  68.96121815663888,
+  78.205653555956
+ ],
+ "perf_samples": [
+  {
+   "calls": 1282,
+   "tris": 544193,
+   "dpr": 1,
+   "fps": 0
+  },
+  {
+   "calls": 1299,
+   "tris": 544557,
+   "dpr": 1,
+   "fps": 0
+  },
+  {
+   "calls": 1269,
+   "tris": 540369,
+   "dpr": 1,
+   "fps": 1
+  },
+  {
+   "calls": 1215,
+   "tris": 523052,
+   "dpr": 1,
+   "fps": 1
+  },
+  {
+   "calls": 1215,
+   "tris": 523052,
+   "dpr": 1,
+   "fps": 1
+  },
+  {
+   "calls": 1212,
+   "tris": 522880,
+   "dpr": 1,
+   "fps": 1
+  }
+ ],
+ "perf_median_tris": 531710.5,
+ "facehash": {
+  "tiles": 48,
+  "tris": 1089440,
+  "hash": "1194464356/1227585802",
+  "chars": 63027524
+ },
+ "tile_checksum": {
+  "count": 557616,
+  "tris": 1089440,
+  "s1": 42054694295.995
+ },
+ "sun_cast": true,
+ "frame_png": "/home/hatch/workspace/wt2-perf3/review-perf3/frame-after.png",
+ "shadow_ab_got": [
+  true,
+  true
+ ],
+ "shadow_delta": {
+  "pixels": 192960,
+  "pctChanged": 39.65,
+  "pctChangedGt10": 4.09,
+  "meanAbsDRGB": 0.79
+ }
+}

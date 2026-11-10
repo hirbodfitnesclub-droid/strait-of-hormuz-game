@@ -1,0 +1,153 @@
+{
+ "generated_at": "2026-11-10T01:37:38",
+ "base_url": "http://localhost:3428",
+ "probes": [
+  {
+   "probe": "probe_heat",
+   "section": "§heat budget (D-020)",
+   "assertions": [
+    {
+     "section": "§heat budget (D-020)",
+     "id": "heat.tris_budget",
+     "name": "opening peace view triangle budget (D-020)",
+     "status": "pass",
+     "expected": "<= 800000 tris",
+     "actual": {
+      "tris": 522359,
+      "calls": 1390,
+      "objects": 4105,
+      "buffer_px": 192960,
+      "dpr": 1
+     },
+     "detail": "renderer.info on the merged build, median of 6 perfInfo samples"
+    },
+    {
+     "section": "§heat budget (D-020)",
+     "id": "heat.dpr_cap",
+     "name": "pixel ratio never above 1.5",
+     "status": "pass",
+     "expected": "0 < dpr <= 1.5",
+     "actual": 1,
+     "detail": "wave-0 PERF cap, re-asserted as a heat input"
+    },
+    {
+     "section": "§heat budget (D-020)",
+     "id": "heat.battle_render_rate",
+     "name": "rendered frames per wall second in battle (live count)",
+     "status": "pass",
+     "expected": "<= 60.5 renders/wall-s",
+     "actual": {
+      "renders_per_wall_s": 0.45,
+      "renders_per_game_s": 6.5
+     },
+     "detail": "counted via window.__hormuzFrameHook; NOTE: SwiftShader renders far below 60 wall-fps, so this live rate passes vacuously here — the structural check below is the real cap gate"
+    },
+    {
+     "section": "§heat budget (D-020)",
+     "id": "heat.battle_cap_structure",
+     "name": "a 60 fps render cap exists on the battle path (D-020)",
+     "status": "pass",
+     "expected": "frame-rate gate applying during battle (not calm-only)",
+     "actual": {
+      "patterns": {
+       "1\\s*/\\s*60": true,
+       "1000\\s*/\\s*60": false,
+       "fpsCap": false,
+       "maxFps": false,
+       "frameCap": false,
+       "BATTLE_FPS": false,
+       "battleCap": false,
+       "capBattleFps": false
+      },
+      "calm_30_gate_present": true
+     },
+     "detail": "v0.5.0: the map loop's only gate is the 1/30 calm branch, and calm is false during battle -> unbounded rAF"
+    }
+   ],
+   "meta": {
+    "page_errors": [],
+    "peace_samples": [
+     {
+      "calls": 368,
+      "tris": 531412,
+      "dpr": 1,
+      "fps": 0,
+      "objects": 3182,
+      "bufW": 360,
+      "bufH": 536,
+      "phase": "peace"
+     },
+     {
+      "calls": 318,
+      "tris": 501572,
+      "dpr": 1,
+      "fps": 0,
+      "objects": 3182,
+      "bufW": 360,
+      "bufH": 536,
+      "phase": "peace"
+     },
+     {
+      "calls": 295,
+      "tris": 478382,
+      "dpr": 1,
+      "fps": 0,
+      "objects": 3182,
+      "bufW": 360,
+      "bufH": 536,
+      "phase": "peace"
+     },
+     {
+      "calls": 452,
+      "tris": 513306,
+      "dpr": 1,
+      "fps": 1,
+      "objects": 4105,
+      "bufW": 360,
+      "bufH": 536,
+      "phase": "peace"
+     },
+     {
+      "calls": 1396,
+      "tris": 588369,
+      "dpr": 1,
+      "fps": 0,
+      "objects": 4105,
+      "bufW": 360,
+      "bufH": 536,
+      "phase": "peace"
+     },
+     {
+      "calls": 1390,
+      "tris": 565146,
+      "dpr": 1,
+      "fps": 0,
+      "objects": 4105,
+      "bufW": 360,
+      "bufH": 536,
+      "phase": "peace"
+     }
+    ],
+    "battle_page_errors": [],
+    "battle_window": {
+     "frames": 65,
+     "wall_s": 144.61,
+     "game_s": 10.0,
+     "phase": "battle"
+    }
+   }
+  }
+ ],
+ "sections": {
+  "§heat budget (D-020)": {
+   "pass": 4,
+   "fail": 0,
+   "skip": 0
+  }
+ },
+ "total": {
+  "pass": 4,
+  "fail": 0,
+  "skip": 0
+ }
+}
