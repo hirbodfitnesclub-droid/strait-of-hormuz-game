@@ -1,0 +1,154 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Vazirmatn", "Tahoma", system-ui, sans-serif;
+  --color-abyss: #050a16;
+  --color-hull: #0a1226;
+  --color-deck: #0f1b36;
+  --color-gold: #f5b942;
+  --color-brass: #d99a2b;
+  --color-seafoam: #38e1c6;
+  --color-radar: #4ade80;
+  --color-alarm: #ff4d5e;
+  --color-plasma: #a78bfa;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  font-family: "Vazirmatn", Tahoma, system-ui, sans-serif;
+  background: #050a16;
+  color: #e8eefb;
+  overflow-x: hidden;
+}
+
+::selection {
+  background: #f5b942;
+  color: #050a16;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: #0a1226;
+}
+::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, #f5b942, #7a4d12);
+  border-radius: 8px;
+}
+
+.hud-grid-bg {
+  background-image:
+    linear-gradient(rgba(56, 225, 198, 0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(56, 225, 198, 0.05) 1px, transparent 1px);
+  background-size: 44px 44px;
+}
+
+.sonar-bg {
+  background:
+    radial-gradient(circle at 50% 0%, rgba(245, 185, 66, 0.14), transparent 55%),
+    radial-gradient(circle at 85% 90%, rgba(56, 225, 198, 0.1), transparent 50%),
+    radial-gradient(circle at 10% 80%, rgba(167, 139, 250, 0.1), transparent 50%),
+    #050a16;
+}
+
+.gold-text {
+  background: linear-gradient(135deg, #ffe9b8 0%, #f5b942 40%, #d99a2b 70%, #ffe9b8 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.panel {
+  background: linear-gradient(160deg, rgba(20, 32, 61, 0.92), rgba(8, 14, 30, 0.96));
+  border: 1px solid rgba(120, 160, 220, 0.16);
+  backdrop-filter: blur(12px);
+}
+
+.panel-glow {
+  box-shadow: 0 0 0 1px rgba(245, 185, 66, 0.12), 0 20px 60px -20px rgba(0, 0, 0, 0.8);
+}
+
+.corner-brackets {
+  position: relative;
+}
+.corner-brackets::before,
+.corner-brackets::after {
+  content: "";
+  position: absolute;
+  width: 22px;
+  height: 22px;
+  border-color: #f5b942;
+  border-style: solid;
+  opacity: 0.9;
+  pointer-events: none;
+}
+.corner-brackets::before {
+  top: -1px;
+  right: -1px;
+  border-width: 2px 2px 0 0;
+  border-start-end-radius: 10px;
+}
+.corner-brackets::after {
+  bottom: -1px;
+  left: -1px;
+  border-width: 0 0 2px 2px;
+  border-end-start-radius: 10px;
+}
+
+@keyframes scanline {
+  0% { transform: translateY(-100%); }
+  100% { transform: translateY(400%); }
+}
+.scanline::after {
+  content: "";
+  position: absolute;
+  inset-inline: 0;
+  top: 0;
+  height: 25%;
+  background: linear-gradient(180deg, transparent, rgba(56, 225, 198, 0.08), transparent);
+  animation: scanline 4s linear infinite;
+  pointer-events: none;
+}
+
+@keyframes radar-sweep {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+.radar-sweep {
+  animation: radar-sweep 3.2s linear infinite;
+}
+
+@keyframes float-y {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-10px); }
+}
+.float-y {
+  animation: float-y 4s ease-in-out infinite;
+}
+
+@keyframes blink-red {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.25; }
+}
+.blink-red {
+  animation: blink-red 1.2s ease-in-out infinite;
+}
+
+@keyframes marquee {
+  from { transform: translateX(0); }
+  to { transform: translateX(50%); }
+}
+
+.tick-label {
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+}
+
+canvas {
+  touch-action: none;
+}
