@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
+import { batchStatics } from './batch-statics';
 import slotsData from './slots-3d.json';
 import buildingsData from './buildings-3d.json';
 
@@ -33,11 +34,18 @@ export async function loadModel(url: string): Promise<THREE.Group> {
       g.scene.traverse(o => {
         if ((o as THREE.Mesh).isMesh) (o as THREE.Mesh).castShadow = true;
       });
+      batchStatics(g.scene);
       return g.scene;
     })());
   }
-  const scene = await cache.get(url)!;
+  let scene: THREE.Group;
+  try { scene = await cache.get(url)!; } catch (error) { cache.delete(url); throw error; }
   return scene.clone(true);
+}
+
+/** Tall offshore derricks must not obscure adjacent lanes in the portrait view. */
+export function buildingScale(size: THREE.Vector3, offshore: boolean): number {
+  return Math.min((offshore ? 7 : 9.5) / Math.max(size.x, size.z, 0.001), 8.5 / Math.max(size.y, 0.001));
 }
 
 function fitWidth(obj: THREE.Object3D, target: number) {
@@ -56,9 +64,8 @@ interface FieldLike { height(x: number, z: number): number }
 /** Preload every model the game can place, so nothing decodes/compiles mid-battle. */
 export async function preloadModels(onProgress?: (done: number, total: number) => void): Promise<void> {
   const urls: string[] = [];
-  for (const base of Object.values(TOWER_MODEL)) for (const st of [1, 25, 50, 75]) urls.push(`/models/towers/${base}-L${st}.glb`);
-  for (const pair of Object.values(BRANCH_MODEL)) for (const b of pair) urls.push(`/models/towers/${b}-L100.glb`);
-  for (const b of ['platform', 'tankfarm', 'dock', 'refinery', 'steel', 'ammo', 'power', 'desal', 'town', 'welfare', 'customs']) urls.push(`/models/buildings/${b}.glb`);
+  for (const base of Object.values(TOWER_MODEL)) for (const st of [1]) urls.push(`/models/towers/${base}-L${st}.glb`);
+  for (const b of ['platform', 'tankfarm', 'dock', 'refinery', 'steel', 'ammo', 'power', 'desal', 'town', 'welfare', 'customs']) urls.push(`/models/buildings/${b}-T1.glb`);
   urls.push('/models/kenney/ship-cargo-a.glb', '/models/kenney/boat-tug-a.glb', '/models/kenney/boat-speed-a.glb');
   // D-022 ship hulls (Innerscene CC0, flat-baked + decimated — CREDITS.md)
   urls.push('/models/ships/frigate.glb', '/models/ships/carrier.glb', '/models/ships/tanker.glb', '/models/ships/container.glb', '/models/ships/bulk.glb', '/models/ships/submarine.glb', '/models/ships/pilot.glb', '/models/ships/research.glb', '/models/ships/supply.glb', '/models/ships/ferry.glb');
@@ -73,7 +80,7 @@ export async function preloadModels(onProgress?: (done: number, total: number) =
       onProgress?.(done, total);
     }
   };
-  await Promise.all(Array.from({ length: 6 }, worker));
+  await Promise.all(Array.from({ length: 2 }, worker));
 }
 
 export function groundY(map: { field?: FieldLike }, x: number, z: number): number {

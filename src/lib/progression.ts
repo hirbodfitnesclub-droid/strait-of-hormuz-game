@@ -1,3 +1,4 @@
+import { BALANCE } from "./balance";
 import type { BuildingId, GameState, Mode, TowerKind } from "./game";
 import { scenarioForWave } from "./news";
 
@@ -97,7 +98,7 @@ export const MANAGERS: Record<ManagerId, { name: string; role: string; descripti
 };
 export function managerCost(id: ManagerId, level: number) { return Math.round(MANAGERS[id].price * Math.pow(2, level)); }
 export function rankInfo(xp: number) {
-  const thresholds = [0, 150, 400, 800, 1400, 2200, 3400, 5000, 7500, 11000, 16000];
+  const thresholds: readonly number[] = BALANCE.progression.rankXp;
   let index = thresholds.findIndex((value, i) => i > 0 && value > xp) - 1;
   if (index < 0) index = thresholds.length - 1;
   const current = thresholds[index], next = thresholds[index + 1] ?? current + 5000;

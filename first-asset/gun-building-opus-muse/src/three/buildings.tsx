@@ -1003,7 +1003,7 @@ function HQ({ tier, k }: P) {
 const LAND: BuildingKind[] = ["tankfarm", "refinery", "steel", "ammo", "power", "town", "welfare", "research", "hq"];
 const SHORE: BuildingKind[] = ["desal", "customs", "coastguard"];
 
-export default function BuildingModel({ kind, tier, colors, gi, scale = 1 }: { kind: BuildingKind; tier: number; colors: C; gi: number; scale?: number }) {
+export default function BuildingModel({ kind, tier, colors, gi, scale = 1, terrainBase = true }: { kind: BuildingKind; tier: number; colors: C; gi: number; scale?: number; terrainBase?: boolean }) {
   const k = useKit(colors.base, colors.accent, colors.glow, gi);
   const root = useRef<THREE.Group>(null);
   const p: P = { tier, k, c: colors };
@@ -1011,8 +1011,8 @@ export default function BuildingModel({ kind, tier, colors, gi, scale = 1 }: { k
   const isShore = SHORE.includes(kind);
   return (
     <group ref={root} scale={scale}>
-      {isLand && <Island r={3.3} pos={[0, 0, 0]} seed={kind.length * 2} />}
-      {isShore && <Island r={3.0} pos={[0, 0, -0.9]} seed={kind.length * 3} />}
+      {terrainBase && isLand && <Island r={3.3} pos={[0, 0, 0]} seed={kind.length * 2} />}
+      {terrainBase && isShore && <Island r={3.0} pos={[0, 0, -0.9]} seed={kind.length * 3} />}
       <group position={isShore ? [0, 0, -0.9] : [0, 0, 0]}>
         {kind === "platform" && <Platform {...p} />}
         {kind === "tankfarm" && <TankFarm {...p} />}

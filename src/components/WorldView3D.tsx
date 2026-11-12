@@ -38,6 +38,7 @@ type Props = {
 // All HUD/panels stay DOM (Game.tsx); this component owns only the world.
 export default function WorldView3D(props: Props) {
   const syncRef = useRef<import('../three-map/gamesync').GameSync3D | null>(null);
+  useEffect(() => () => { syncRef.current?.dispose(); syncRef.current = null; }, []);
   const [loadPct, setLoadPct] = useState<number | null>(null);
 
   // Preload all placeable models behind a loading veil (Phase 3): no mid-battle decode hitches.
@@ -59,24 +60,16 @@ export default function WorldView3D(props: Props) {
   const propsRef = useRef(props);
   propsRef.current = props;
 
-  // small FPS meter (owner's 60fps acceptance check) — counts rAF over 500ms windows
+  const [showMetrics, setShowMetrics] = useState(false);
   useEffect(() => {
-    let frames = 0; let last = performance.now(); let raf = 0; let dead = false;
-    const loop = (now: number) => {
-      if (dead) return;
-      raf = requestAnimationFrame(loop);
-      frames++;
-      if (now - last >= 500) {
-        const fps = Math.round((frames * 1000) / (now - last));
-        if (fpsRef.current) {
-          fpsRef.current.textContent = `${fps} FPS`;
-          fpsRef.current.style.color = fps >= 55 ? '#53d769' : fps >= 30 ? '#ffb340' : '#ff5040';
-        }
-        frames = 0; last = now;
-      }
-    };
-    raf = requestAnimationFrame(loop);
-    return () => { dead = true; cancelAnimationFrame(raf); };
+    const enabled = new URLSearchParams(location.search).has('fpslog');
+    setShowMetrics(enabled);
+    if (!enabled) return;
+    const timer = setInterval(() => {
+      const fps = syncRef.current?.perfInfo().fps ?? 0;
+      if (fpsRef.current) fpsRef.current.textContent = `${fps} FPS`;
+    }, 1000);
+    return () => clearInterval(timer);
   }, []);
 
   // VIS2 (D-021): continuous day/night driver. Replaces the old snap
@@ -159,7 +152,7 @@ export default function WorldView3D(props: Props) {
 
   return (
     <div style={{ position: 'absolute', inset: 0 }}>
-      <div ref={fpsRef} style={{ position: 'absolute', left: 8, top: '47%', zIndex: 40, padding: '3px 8px', borderRadius: 8, background: 'rgba(6,24,38,0.72)', fontFamily: 'ui-monospace, monospace', fontSize: 11, fontWeight: 700, letterSpacing: '0.04em', pointerEvents: 'none' }}>— FPS</div>
+      {showMetrics && <div ref={fpsRef} style={{ position: 'absolute', left: 8, top: '47%', zIndex: 40, padding: '3px 8px', borderRadius: 8, background: 'rgba(6,24,38,0.72)', fontFamily: 'ui-monospace, monospace', fontSize: 11, fontWeight: 700, letterSpacing: '0.04em', pointerEvents: 'none' }}>— FPS</div>}
       {loadPct !== null && <div style={{ position: 'absolute', inset: 0, zIndex: 45, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 12, background: 'linear-gradient(180deg, rgba(4,18,30,0.88), rgba(4,18,30,0.72))', color: '#dceefb', transition: 'opacity .4s' }}>
         <div style={{ fontSize: 15, fontWeight: 800 }}>در حال آماده‌سازی تنگه</div>
         <div style={{ width: 'min(260px, 70%)', height: 8, borderRadius: 4, background: 'rgba(147,197,253,0.18)', overflow: 'hidden' }}><div style={{ width: `${loadPct}%`, height: '100%', borderRadius: 4, background: 'linear-gradient(90deg,#53d769,#9be15d)', transition: 'width .25s' }} /></div>

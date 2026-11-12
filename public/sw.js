@@ -1,5 +1,5 @@
 /* Static-only offline cache. Player data and daily rewards always use the network. */
-const CACHE = 'hormuz-static-v4';
+const CACHE = 'hormuz-static-v5';
 const CORE = ['/', '/manifest.webmanifest', '/app-icon-192.png', '/app-icon-512.png'];
 const MODEL_ASSETS = [
   ...['cannon','heavy','missile','air','ew','boat'].flatMap(kind => ['1','2','3','a','b'].map(level => `/assets/models/towers/${kind}-${level}.png`)),
@@ -47,7 +47,7 @@ self.addEventListener('fetch', event => {
     }).catch(async () => (await caches.match('/')) || Response.error()));
     return;
   }
-  if (url.pathname.startsWith('/_next/static/') || url.pathname.startsWith('/assets/') || url.pathname.startsWith('/images/') || url.pathname.startsWith('/app-icon') || url.pathname === '/manifest.webmanifest') {
+  if (url.pathname.startsWith('/_next/static/') || url.pathname.startsWith('/models/') || url.pathname.startsWith('/assets/') || url.pathname.startsWith('/images/') || url.pathname.startsWith('/app-icon') || url.pathname === '/manifest.webmanifest') {
     event.respondWith(caches.match(request).then(cached => cached || fetch(request).then(response => remember(request, response))));
   }
 });

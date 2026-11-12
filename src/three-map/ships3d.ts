@@ -113,10 +113,10 @@ export interface ShipOpts {
 }
 
 const flatMatCache = new Map<string, THREE.MeshStandardMaterial>();
-function flatMat(color: THREE.Color): THREE.MeshStandardMaterial {
-  const key = color.getHexString();
+function flatMat(color: THREE.Color, source?: THREE.MeshStandardMaterial): THREE.MeshStandardMaterial {
+  const key = `${source?.uuid ?? "plain"}:${color.getHexString()}`;
   let m = flatMatCache.get(key);
-  if (!m) { m = new THREE.MeshStandardMaterial({ color: color.clone(), roughness: 0.85, metalness: 0.05, flatShading: true }); flatMatCache.set(key, m); }
+  if (!m) { m = source?.isMeshStandardMaterial ? source.clone() : new THREE.MeshStandardMaterial({ roughness: 0.7, metalness: 0.1 }); m.color.copy(color); flatMatCache.set(key, m); }
   return m;
 }
 const gunmetal = new THREE.MeshStandardMaterial({ color: 0x2b3138, roughness: 0.6, metalness: 0.35, flatShading: true });
@@ -172,10 +172,9 @@ export async function makeShip(key: ShipModelKey, opts: ShipOpts): Promise<THREE
     if (!mesh.isMesh) return;
     const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
     const conv = mats.map(m => {
-      const c = geo.mono !== undefined ? new THREE.Color(geo.mono)
-        : m && (m as THREE.MeshStandardMaterial).color ? (m as THREE.MeshStandardMaterial).color.clone() : new THREE.Color(0x8a939c);
+      const c = m && (m as THREE.MeshStandardMaterial).color ? (m as THREE.MeshStandardMaterial).color.clone() : new THREE.Color(0x8a939c);
       if (tintC) c.lerp(tintC, amt);
-      return flatMat(c);
+      return flatMat(c, m as THREE.MeshStandardMaterial);
     });
     mesh.material = Array.isArray(mesh.material) ? conv : conv[0];
   });

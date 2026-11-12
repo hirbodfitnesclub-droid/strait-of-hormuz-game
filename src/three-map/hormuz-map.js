@@ -3377,6 +3377,7 @@ class HormuzMap {
     if (this.disposed) return;
     requestAnimationFrame(this.loop);
     const rawDt = Math.min(this.clock.getDelta(), 0.05);
+    if (document.hidden) { this._frameAcc = 0; return; }
     // PERF (§16.8): calm mode — no active battle, or a panel/sheet is open
     // (flags set by Game.tsx / WorldView3D.tsx) — AND the camera has been still
     // for >0.3s: render at 30fps instead of full rate. Environment animations

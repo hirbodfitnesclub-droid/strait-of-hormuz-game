@@ -72,6 +72,10 @@ export class BattleAudio {
     }
   }
 
+  suspend() {
+    if (this.context?.state === "running") void this.context.suspend();
+  }
+
   dispose() {
     if (this.context) void this.context.close();
     this.context = null; this.noise = null;

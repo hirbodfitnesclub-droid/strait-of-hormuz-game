@@ -1,3 +1,4 @@
+import { BALANCE } from "./balance";
 import { initialIdle, MISSIONS, MANAGERS, CONTRACTS, currentMission, missionProgress, managerCost, operationInfo, previewChest, advanceLootSeed, DEFEAT_REASONS, type IdleState, type ManagerId, type ContractId, type UpgradeQuantity, type Reward, type DefeatReason } from "./progression";
 import { findWaterRoute, getLane, nearestWater, sampleLane, type MapLayout, type Point } from "./navigation";
 import { weaponSpec, modelKindFor, specInterval, flightTime, salvoCycleSeconds, type ModelKind } from "./weapons-spec";
@@ -393,7 +394,7 @@ export function initialGame(): GameState {
  *  the exponent sits on the destination step, so the first build costs
  *  exactly the PRD base cost (the old 1.15^(level−1) ran one step behind
  *  and made first builds ~13% cheaper than the PRD table). */
-export function upgradeCost(id: BuildingId, level: number) { return Math.ceil(BUILDINGS[id].baseCost * Math.pow(1.15, level)); }
+export function upgradeCost(id: BuildingId, level: number) { return Math.ceil(BUILDINGS[id].baseCost * Math.pow(BALANCE.economy.buildingCostGrowth, level)); }
 export function towerUpgradeCost(tower: Tower) {
   const def = TOWERS[tower.kind];
   return { cash: Math.ceil(def.cost * Math.pow(1.55, tower.tier)), steel: Math.ceil(def.steel * (1 + tower.tier * 0.6)) };
@@ -521,14 +522,14 @@ export function heroPower(s: GameState) {
   return dps(s.hero) + (s.hero2 ? dps(s.hero2) : 0);
 }
 export function getOfflineReward(s: GameState, now: number) {
-  const seconds = Math.max(0, Math.min(12 * 3600, (now - (s.lastSavedAt || now)) / 1000));
+  const seconds = Math.max(0, Math.min(BALANCE.economy.offlineHours * 3600, (now - (s.lastSavedAt || now)) / 1000));
   const defense = s.towers.reduce((sum, t) => sum + towerDps(s, t), 0) + heroPower(s);
   const ratio = Math.min(1, defense / (100 + s.wave * 25));
   // Offline income is paid on the REALIZED export rate (R11) — what the
   // port actually earned per second — never the theoretical dollarRate.
   const rate = getStats(s).avgExportRate;
-  const managerBonus = s.idle.managerLevels.harbor > 0 ? 1.2 : 1;
-  return { seconds, ratio, amount: seconds > 30 ? rate * seconds * .5 * ratio * managerBonus : 0 };
+  const managerBonus = s.idle.managerLevels.harbor > 0 ? BALANCE.economy.harborOfflineBonus : 1;
+  return { seconds, ratio, amount: seconds > BALANCE.economy.offlineGraceSeconds ? rate * seconds * BALANCE.economy.offlineEfficiency * ratio * managerBonus : 0 };
 }
 function advanceOfflineTimers(s: GameState, seconds: number) {
   s.idle.boostRemaining = Math.max(0, s.idle.boostRemaining - seconds);
@@ -2504,9 +2505,18 @@ export function cloneForTick(state: GameState): GameState {
   };
 }
 
-export function gameReducer(state: GameState, action: Action): GameState {
+export function gameReducer(state: GameState, action: Action | {type:"advance";steps:number;battlePaused:boolean}): GameState {
   if (action.type === "hydrate") return action.game;
   if (action.type === "reset") { const fresh = initialGame(); fresh.layout = state.layout; fresh.idle.appliedDailyIds = state.idle.appliedDailyIds; fresh.idle.revision = state.idle.revision + 1; return fresh; }
+  if (action.type === "advance") {
+    let next = state;
+    const shots: GameState['shots'] = [], events: GameState['events'] = [];
+    for (let i = 0; i < Math.min(4, action.steps); i++) {
+      next = gameReducer(next, {type:"tick",dt:0.125,battlePaused:action.battlePaused});
+      shots.push(...next.shots); events.push(...next.events);
+    }
+    return {...next, shots, events};
+  }
   if (action.type === "tick") { const s = cloneForTick(state); tick(s, action.dt, action.battlePaused); return s; }
   const s = structuredClone(state);
   // Shot records are one-render FX events: a non-tick action must not let

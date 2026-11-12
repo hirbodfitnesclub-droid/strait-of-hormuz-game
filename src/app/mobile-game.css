@@ -1,0 +1,53 @@
+/* Portrait game viewport. The world owns the screen; HUD owns only its edges. */
+html,body{overscroll-behavior:none;background:#071820}
+.game-shell{position:relative;width:100%;height:100dvh;max-width:600px;margin-inline:auto;isolation:isolate;user-select:none;-webkit-user-select:none}
+.game-shell .game-map{position:absolute;inset:0;--map-safe-bottom:154px}
+.game-shell .app-header{position:absolute;top:env(safe-area-inset-top,0px);inset-inline:10px;height:58px;padding:6px 0;display:block;background:none;border:0;pointer-events:none;z-index:29}
+.game-shell .app-brand,.game-shell .header-utilities{display:none}
+.game-shell .essential-resources{display:grid;grid-template-columns:1.3fr 1fr 1fr 1fr;gap:5px;pointer-events:auto;width:100%;height:46px}
+.game-shell .resource-pill{min-width:0;min-height:44px;padding:5px 8px;gap:5px;justify-content:center;background:#0b2531ed;border:1px solid #a9c1be40;border-radius:10px;box-shadow:0 2px 4px #0003}
+.game-shell .resource-pill:nth-child(3){display:none}
+.game-shell .resource-pill strong{font-size:14px;line-height:1.3;font-variant-numeric:tabular-nums}
+.game-shell .resource-pill small{display:none}
+.game-shell .resource-pill em{display:none}
+.game-shell .resource-pill svg{width:16px;flex-shrink:0}
+.game-shell .money{color:#f2d48d}
+.game-shell .hud-controls{top:calc(env(safe-area-inset-top,0px) + 68px);left:10px;gap:5px;flex-direction:column;align-items:flex-start}
+.game-shell .hud-control-btn{min-width:44px;min-height:44px;background:#102d37e8;border-radius:12px;border:1px solid #9fbdba40}
+.game-shell .time-mode-btn span{display:none}
+.game-shell .bottom-navigation{position:absolute;bottom:calc(env(safe-area-inset-bottom,0px) + 8px);width:calc(100% - 20px);height:58px;max-width:none;padding:4px;gap:4px;border-radius:16px;background:#0a2430f5;border:1px solid #a9c1be40;backdrop-filter:none;box-shadow:0 4px 12px #0004}
+.game-shell .nav-item{flex:1;min-width:0;min-height:48px;padding:5px;gap:3px;border-radius:10px}
+.game-shell .nav-item span{font-size:11px}
+.game-shell .idle-command-bar{bottom:calc(env(safe-area-inset-bottom,0px) + 75px);width:calc(100% - 20px);min-height:64px;padding:6px;gap:8px;border-radius:14px;background:#0a2430ed;box-shadow:none;backdrop-filter:none}
+.game-shell .idle-income-heading{display:none}
+.game-shell .collect-income{height:50px;border-radius:10px;gap:5px}
+.game-shell .collect-income strong{font-size:19px}
+.game-shell .collect-income small{font-size:10px}
+.game-shell .collect-income>svg{display:none}
+.game-shell .idle-battle-start{min-height:50px;min-width:98px;display:grid;grid-template-columns:22px 1fr;gap:1px 4px;background:#427065;border:1px solid #b2d6bb55}
+.game-shell .idle-battle-start>span{grid-row:1/3;align-self:center}
+.game-shell .idle-battle-start strong{font-size:11px}
+.game-shell .idle-battle-start small{font-size:10px}
+.game-shell .quick-coach{bottom:calc(env(safe-area-inset-bottom,0px) + 150px);max-width:calc(100% - 24px);background:#102d37ed;border:1px solid #a9c1be40;box-shadow:none}
+.game-shell .quick-coach button{min-height:44px;min-width:44px}
+.game-shell .quick-coach p b{font-size:12px}
+.game-shell .context-alert{top:calc(env(safe-area-inset-top,0px) + 66px);right:10px;max-width:calc(100% - 74px);font-size:10px}
+.game-shell .command-bar{bottom:calc(env(safe-area-inset-bottom,0px) + 75px);width:calc(100% - 20px);padding:6px;border-radius:14px;gap:5px;background:#0a2430f5;backdrop-filter:none}
+.game-shell .support-button{min-width:44px;min-height:54px}
+.game-shell .main-battle-action{min-width:44px;min-height:54px;padding:6px}
+.game-shell .main-battle-action small{display:none}
+.game-shell .battle-speed{min-width:44px;min-height:54px}
+.game-shell .war-essentials{top:calc(env(safe-area-inset-top,0px) + 64px);right:10px;left:64px;width:auto}
+.game-shell .war-strip{background:#0b2531ed;backdrop-filter:none}
+.game-shell .peace-preview{top:122px;right:10px}
+.game-shell .drawer,.game-shell .tower-sheet,.game-shell .building-sheet,.game-shell .more-menu{max-height:calc(100dvh - env(safe-area-inset-top,0px) - 24px);overscroll-behavior:contain}
+.game-shell .more-menu{overflow-y:auto}
+.game-shell .more-grid>button{min-height:90px}
+.game-shell .close-control,.game-shell .icon-close{min-width:44px;min-height:44px}
+.game-shell .news-bulletin{max-height:65dvh;overflow-y:auto;overscroll-behavior:contain}
+.game-shell .compact-dialog-backdrop,.game-shell .drawer-backdrop{backdrop-filter:none;background:#030e19ad}
+.exit-dialog{width:min(380px,calc(100% - 32px));padding:24px;background:#102d37;border:1px solid #a9c1be40;border-radius:20px;box-shadow:0 20px 80px #0008}
+.exit-dialog h2{font-size:19px}.exit-dialog p{line-height:1.9;font-size:13px;color:#bcd0ce}
+.exit-dialog button{min-height:48px;width:100%;margin-top:12px;border-radius:10px}
+@media(min-width:701px){.game-shell{box-shadow:0 0 100px #0009}.game-shell .app-header{inset-inline:12px}.game-shell .resource-pill{height:46px}.game-shell .bottom-navigation{left:50%}}
+@media(prefers-reduced-motion:reduce){.game-shell *, .game-shell *::before,.game-shell *::after{animation:none!important;transition:none!important}}

@@ -1,8 +1,10 @@
+import { worldLane } from './world-lane';
+import { TapGesture } from '../lib/tap-gesture';
 import * as THREE from 'three';
 import lanesData from './lanes-3d.json';
 import slotsData from './slots-3d.json';
 import buildingsData from './buildings-3d.json';
-import { loadModel, TOWER_MODEL, BRANCH_MODEL, groundY } from './models3d';
+import { loadModel, TOWER_MODEL, BRANCH_MODEL, groundY, buildingScale } from './models3d';
 import { makeShip } from './ships3d';
 import { pctTo3d, point3dToPct } from './coords';
 import { getRange, getStats, getSlots, enemyMissilePosition, enemyPosition, distance, type GameState, type Shot } from '@/lib/game';
@@ -229,7 +231,8 @@ function enemyModel(kind: string, boss: number): THREE.Group {
  * a destroyer (13u). */
 function enemyShip(kind: string, boss: number): Promise<THREE.Group> {
   if (kind === 'boss') {
-    if (boss === 4) return makeShip('carrier', { len: 25, arm: 'carrier' });
+    if (boss === 4) return makeShip('carrier', { len: 22, arm: 'carrier' });
+    if (boss === 2) return makeShip('submarine', { len: 18, tint: 0x263544, tintAmt: 0.25 });
     return makeShip('frigate', { len: 21, arm: 'boss', tint: boss === 2 ? 0x2c3844 : 0x4a3428, tintAmt: 0.3 });
   }
   if (kind === 'sub') return makeShip('submarine', { len: 11 });
@@ -377,7 +380,7 @@ export class GameSync3D {
   private statics = new THREE.Group();
   private dyn = new THREE.Group();
   static { /* names set in ctor for debugging */ }
-  private curves: Record<LaneName, THREE.CatmullRomCurve3>;
+  private curves: Record<LaneName, ReturnType<typeof worldLane>>;
   private laneCache: Record<LaneName, { pts: THREE.Vector3[]; tans: THREE.Vector3[] }>;
   private lanePosTmp = new THREE.Vector3();
   private laneTanTmp = new THREE.Vector3();
@@ -476,7 +479,7 @@ export class GameSync3D {
     map.scene.add(this.root); this.root.add(this.statics); this.root.add(this.dyn); this.dyn.add(this.fx.group);
     // cheaper shadow filtering (PCF instead of PCFSoft) — same look at game scale, less GPU
     try { (map as unknown as { renderer?: THREE.WebGLRenderer }).renderer!.shadowMap.type = THREE.PCFShadowMap; } catch { /* noop */ }
-    this.curves = Object.fromEntries((Object.keys(LANES) as LaneName[]).map(n => [n, new THREE.CatmullRomCurve3(LANES[n].map(([x, z]) => new THREE.Vector3(x, 0.35, z)), false, 'centripetal')])) as Record<LaneName, THREE.CatmullRomCurve3>;
+    this.curves = Object.fromEntries((Object.keys(LANES) as LaneName[]).map(n => [n, worldLane(n)])) as Record<LaneName, ReturnType<typeof worldLane>>;
     // PERF: sample every lane's points + tangents ONCE into a fixed-resolution
     // cache. setTarget used to call curve.getPointAt/getTangentAt (arc-length
     // reparam each call) for every entity on every frame.
@@ -510,7 +513,7 @@ export class GameSync3D {
     // §2.3 dashed red line: dim at rest, bright pulse for a few seconds when
     // a wave starts (phase transition observed in setState).
     for (const n of ['enemy', 'trade'] as LaneName[]) {
-      const pts = LANES[n].map(([x, z]) => new THREE.Vector3(x, 0.3, z));
+      const pts = this.laneCache[n].pts.map(p => p.clone().setY(0.3));
       const mat = n === 'enemy'
         ? new THREE.LineDashedMaterial({ color: 0xff5040, transparent: true, opacity: 0.28, dashSize: 3.4, gapSize: 2.4 })
         : new THREE.LineBasicMaterial({ color: 0x53d769, transparent: true, opacity: 0.28 });
@@ -771,16 +774,15 @@ export class GameSync3D {
     }
   }
 
-  /** PRD §2.2 visual evolution: stepped scale growth + procedural add-ons on
-   *  the same GLB + a base ring tinted by band (grey/bronze/silver/gold/teal). */
+  /** Authored tier replacement retains a band-colored footprint ring. */
   private applyBuildingBand(rec: BldRec, band: number) {
     rec.band = band;
-    const m = 1 + band * 0.1;
+    const m = 1;
     rec.obj.scale.setScalar(rec.baseScale * m);
     rec.obj.position.y = rec.groundBase - rec.minY * m;
     const old = rec.obj.getObjectByName('vis-evo');
     if (old) rec.obj.remove(old);
-    if (band > 0) rec.obj.add(buildEvoGroup(band, rec.local, rec.platform));
+    // Each tier now uses the authored model; no generic rooftop attachments.
     (rec.ring.material as THREE.MeshBasicMaterial).color.setHex(BLD_BAND_COLORS[band]);
     rec.ring.scale.setScalar(rec.ringBase * (1 + band * 0.08));
   }
@@ -892,14 +894,14 @@ export class GameSync3D {
     await Promise.all(Object.entries(BUILDINGS).map(async ([id, b]) => {
       const level = (game.buildings as Record<string, number>)[id] ?? 0;
       const rec = this.buildings.get(id);
-      if (level > 0 && !rec) {
+      if (level > 0 && (!rec || rec.band !== buildingBand(level))) {
         if (this.placing.has('bld-' + id)) return;
         this.placing.add('bld-' + id);
         try {
-          const model = await loadModel(`/models/buildings/${b.glb}.glb`);
+          const model = await loadModel(`/models/buildings/${b.glb}-T${buildingBand(level) + 1}.glb`);
           model.traverse(o => { o.userData.pick = { type: 'building', id }; });
           const fit = new THREE.Box3().setFromObject(model); const size = new THREE.Vector3(); fit.getSize(size);
-          const baseScale = (b.glb === 'platform' ? 13 : 9.5) / Math.max(size.x, size.z, 0.001);
+          const baseScale = buildingScale(size, b.glb === 'platform');
           model.scale.setScalar(baseScale);
           const fit2 = new THREE.Box3().setFromObject(model);
           const groundBase = b.water ? 0 : groundY(this.map, b.x, b.z);
@@ -908,6 +910,7 @@ export class GameSync3D {
           const ringBase = Math.max(size.x, size.z) * baseScale * 0.62;
           const ring = new THREE.Mesh(new THREE.RingGeometry(0.9, 1.02, 48), new THREE.MeshBasicMaterial({ color: BLD_BAND_COLORS[0], transparent: true, opacity: 0.5, side: THREE.DoubleSide, depthWrite: false }));
           ring.rotation.x = -Math.PI / 2; ring.position.set(b.x, groundBase + 0.22, b.z); ring.scale.setScalar(ringBase);
+          if (rec) { this.unregisterModel(rec.obj); this.statics.remove(rec.obj); this.statics.remove(rec.ring); }
           this.statics.add(model); this.statics.add(ring);
           const nrec: BldRec = { obj: model, band: -1, baseScale, groundBase, minY: fit2.min.y, local: fit.clone(), ring, ringBase, platform: b.glb === 'platform' };
           this.buildings.set(id, nrec);
@@ -932,9 +935,9 @@ export class GameSync3D {
         if (this.placing.has('plat-' + p.id)) return;
         this.placing.add('plat-' + p.id);
         try {
-          const model = await loadModel('/models/buildings/platform.glb');
+          const model = await loadModel('/models/buildings/platform-T1.glb');
           const fit = new THREE.Box3().setFromObject(model); const size = new THREE.Vector3(); fit.getSize(size);
-          const pScale = 12 / Math.max(size.x, size.z, 0.001);
+          const pScale = buildingScale(size, true);
           model.scale.setScalar(pScale);
           const fit2 = new THREE.Box3().setFromObject(model);
           model.position.set(p.x, -fit2.min.y, p.z);
@@ -1040,14 +1043,16 @@ export class GameSync3D {
   private bindPointer() {
     const el = (this.map as unknown as { canvas?: HTMLCanvasElement }).canvas ?? this.map.renderer?.domElement;
     if (!el) return;
-    const down = (e: PointerEvent) => { this.downPos = { x: e.clientX, y: e.clientY, t: performance.now() }; };
+    const gesture = new TapGesture();
+    const down = (e: PointerEvent) => gesture.down(e.pointerId, e.clientX, e.clientY, performance.now());
+    const cancel = (e: PointerEvent) => { gesture.up(e.pointerId, e.clientX, e.clientY, performance.now(), true); };
     const move = (e: PointerEvent) => {
+      gesture.move(e.clientX, e.clientY);
       if (!this.targeting || e.pointerType === 'touch') return;
       const p = this.groundPoint(e, el); if (p) this.cb.onGroundHover(p[0], p[1]);
     };
     const up = (e: PointerEvent) => {
-      const d = this.downPos; this.downPos = null;
-      if (!d || Math.hypot(e.clientX - d.x, e.clientY - d.y) > 8 || performance.now() - d.t > 600) return;
+      if (!gesture.up(e.pointerId, e.clientX, e.clientY, performance.now())) return;
       if (this.targeting) { const p = this.groundPoint(e, el); if (p) this.cb.onGroundPoint(p[0], p[1]); return; }
       const pick = this.pick(e, el);
       if (!pick) return;
@@ -1058,8 +1063,8 @@ export class GameSync3D {
       else if (pick.type === 'hero2') this.cb.onHero2();
       else if (pick.type === 'contraband') this.cb.onInspect(pick.id as number);
     };
-    el.addEventListener('pointerdown', down); el.addEventListener('pointermove', move); el.addEventListener('pointerup', up);
-    this.detachFns.push(() => { el.removeEventListener('pointerdown', down); el.removeEventListener('pointermove', move); el.removeEventListener('pointerup', up); });
+    el.addEventListener('pointerdown', down); el.addEventListener('pointermove', move); el.addEventListener('pointerup', up); el.addEventListener('pointercancel', cancel);
+    this.detachFns.push(() => { el.removeEventListener('pointerdown', down); el.removeEventListener('pointermove', move); el.removeEventListener('pointerup', up); el.removeEventListener('pointercancel', cancel); });
   }
 
   private ndc(e: PointerEvent, el: HTMLElement): THREE.Vector2 {
@@ -1087,20 +1092,13 @@ export class GameSync3D {
     // PERF: read position/tangent from the fixed-resolution lane cache
     // (sampled once in the constructor), linearly interpolated — no per-frame
     // CatmullRom arc-length evaluation and no per-call Vector3 allocations.
-    const cache = this.laneCache[lane];
     const u = Math.max(0, Math.min(1, progress));
-    const f = u * LANE_SAMPLES;
-    const i0 = Math.min(LANE_SAMPLES - 1, Math.floor(f));
-    const fr = f - i0;
-    const pos = this.lanePosTmp.copy(cache.pts[i0]).lerp(cache.pts[i0 + 1], fr);
-    const tan = this.laneTanTmp.copy(cache.tans[i0]).lerp(cache.tans[i0 + 1], fr);
+    const pos = this.curves[lane].getPointAt(u);
+    const tan = this.curves[lane].getTangentAt(u);
     const heading = (fwd === 'X' ? Math.atan2(-tan.z, tan.x) : Math.atan2(tan.x, tan.z) + (this.kenneyRev ? Math.PI : 0)) + (flip ? Math.PI : 0);
     const t = this.targets.get(key);
     if (t) {
-      const dx = pos.x - t.pos.x, dz = pos.z - t.pos.z;
-      const d = Math.hypot(dx, dz);
-      if (d > this.targetStep && d > 0) { const k = this.targetStep / d; t.pos.x += dx * k; t.pos.z += dz * k; }
-      else { t.pos.x = pos.x; t.pos.z = pos.z; }
+      t.pos.x = pos.x; t.pos.z = pos.z;
       t.pos.y = y; t.heading = heading; t.y = y;
     }
     else this.targets.set(key, { pos: new THREE.Vector3(pos.x, y, pos.z), heading, y });
@@ -1166,6 +1164,7 @@ export class GameSync3D {
     }
   }
 
+  private heroModels = new Map<string, number>();
   private entPending = new Map<string, Promise<Ent | null>>();
   private ensureEnt(key: string, make: () => Promise<THREE.Group> | THREE.Group, opts: { bar?: number; bob?: number; wake?: { len: number; wid: number; fwd: 'X' | 'Z' }; cruise?: number } = {}): Promise<Ent | null> {
     const cur = this.ents.get(key);
@@ -1248,7 +1247,7 @@ export class GameSync3D {
     if (!this.alive) return;
     this.raf = requestAnimationFrame(this.loop);
     const dt = Math.min(0.05, (now - this.last) / 1000); this.last = now;
-    const game = this.state; if (!game) return;
+    const game = this.state; if (!game || document.hidden) return;
     const alive = new Set<string>();
     // enemies
     for (const e of game.enemies) {
@@ -1436,10 +1435,11 @@ export class GameSync3D {
     if (game.hero2) heroes.push(['hero2', game.hero2]);
     for (const [which, h] of heroes) {
       const key = which; alive.add(key);
+      if(this.heroModels.get(key) !== h.active) { this.dropEnt(key); this.heroModels.set(key,h.active); }
       void this.ensureEnt(key, async () => {
         // D-022: the hero sails the research-vessel hull with a bow
         // turret — and at 12u it no longer outsizes a destroyer (F-3).
-        const g = await makeShip('research', { len: which === 'hero' ? 12 : 11, arm: 'hero', tint: which === 'hero' ? 0x5b6b82 : 0x6b5b82, tintAmt: 0.22 });
+        const g = await makeShip(h.active === 2 ? 'submarine' : h.active === 1 ? 'carrier' : 'frigate', { len: h.active === 1 ? 13 : 10, arm: h.active === 2 ? undefined : h.active === 1 ? 'carrier' : 'hero', tint: which === 'hero' ? 0x5b6b82 : 0x6b5b82, tintAmt: 0.22 });
         const star = glyphSprite('✦', '#ffd27a', 3); star.position.y = 5.4; g.add(star);
         g.traverse(o => { o.userData.pick = { type: which }; });
         return g;

@@ -1,0 +1,20 @@
+// Emulates native platform detection only; hardware plugins need device QA.
+require('node:fs').mkdirSync('review/mobile',{recursive:true});
+const {chromium}=require('playwright');
+const assert=require('node:assert/strict');
+(async()=>{const b=await chromium.launch({executablePath:process.env.AUDIT_CHROMIUM || '/usr/lib/chromium/chromium',args:['--no-sandbox','--use-gl=swiftshader','--enable-unsafe-swiftshader']});try{const p=await b.newPage({viewport:{width:390,height:844},isMobile:true,hasTouch:true});
+await p.addInitScript(()=>{window.androidBridge={postMessage(){}};});
+const errors=[];p.on('pageerror',e=>errors.push(e.message));
+await p.goto(process.env.TEST_URL || 'http://127.0.0.1:3310',{waitUntil:'domcontentloaded'});
+await p.waitForFunction(()=>window.__gamesync3d?.perfInfo().calls>0,null,{timeout:180000});
+await p.waitForTimeout(35000);
+await p.screenshot({path:'review/mobile/03-after.png'});
+assert.equal(await p.locator('.nav-item').count(),4);
+assert.equal(await p.locator('.game-map').evaluate(e=>Math.round(e.getBoundingClientRect().height)),844);
+console.log('PERF',await p.evaluate(()=>window.__gamesync3d.perfInfo()));
+await p.locator('.nav-item').filter({hasText:'اقتصاد'}).click();await p.locator('.drawer').waitFor();await p.waitForTimeout(1000);await p.screenshot({path:'review/mobile/04-economy.png'});
+await p.keyboard.press('Escape');await p.locator('.nav-item').filter({hasText:'بیشتر'}).click();await p.locator('.more-menu').waitFor();await p.waitForTimeout(600);await p.screenshot({path:'review/mobile/05-command.png'});
+await p.getByRole('button',{name:/هدیهٔ روزانه/}).last().click();await p.waitForTimeout(600);console.log('DAILY',await p.locator('button').allTextContents());
+await p.getByRole('button',{name:'دریافت هدیهٔ امروز'}).click();await p.locator('.reward-daily').waitFor();await p.screenshot({path:'review/mobile/06-daily.png'});
+assert.ok(await p.evaluate(()=>localStorage.getItem('hormuz-daily-v1')));assert.deepEqual(errors,[]);console.log('PASS mobile layout, economy, command navigation and native daily claim');
+}finally{await b.close()}})().catch(e=>{console.error(e);process.exit(1)});

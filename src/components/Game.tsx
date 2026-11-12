@@ -25,7 +25,11 @@ import { currentMission, operationInfo, defeatReasonText, type MissionTarget } f
 import { scenarioForWave, loadDiary, appendDiary, type DiaryEntry, type Scenario } from "@/lib/news";
 import { scenarioContextFor } from "@/lib/scenario-mechanics";
 import type { DailyStatus } from "@/lib/daily";
-import { serverApiEnabled } from "@/lib/runtime";
+import { App } from "@capacitor/app";
+import { Haptics, ImpactStyle } from "@capacitor/haptics";
+import { SimulationClock } from "@/lib/simulation-clock";
+import { localDailyStatus, readDailyReceipt } from "@/lib/local-daily";
+import { isNativeRuntime, serverApiEnabled } from "@/lib/runtime";
 
 const SAVE_KEY = "hormuz-game-v1", PLAYER_KEY = "hormuz-player-id", PREFERENCES_KEY = "hormuz-preferences-v2", DIARY_KEY = "hormuz-war-diary-v1";
 // On a save conflict (409) the server's current state is backed up here
@@ -42,8 +46,7 @@ const spells: { id: Spell; name: string; short: string; icon: typeof Rocket; coo
    in the More menu. */
 const navigation: { id: PanelName | "more"; label: string; icon: typeof MapIcon }[] = [
   { id:"economy",label:"اقتصاد",icon:Factory }, { id:"defense",label:"برجک‌ها",icon:Shield },
-  { id:"city",label:"شهر",icon:Home }, { id:"research",label:"فناوری",icon:FlaskConical },
-  { id:"war",label:"اتاق جنگ",icon:Swords }, { id:"more",label:"بیشتر",icon:MoreHorizontal },
+  { id:"war",label:"عملیات",icon:Swords }, { id:"more",label:"بیشتر",icon:MoreHorizontal },
 ];
 
 export default function Game() {
@@ -58,9 +61,11 @@ export default function Game() {
   // can never load: the panel and its shortcut show an honest "web only"
   // status instead of a claim button stuck on "connecting…" (S-2).
   const [dailyWebOnly, setDailyWebOnly] = useState(false);
-  useEffect(() => { setDailyWebOnly(!serverApiEnabled()); }, []);
+  useEffect(() => { setDailyWebOnly(false); }, []);
   const [incomeBurst, setIncomeBurst] = useState<{id:number;cash:number}|null>(null);
   const incomeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const nativeHidden = useRef(false);
+  const [exitOpen, setExitOpen] = useState(false);
   const hiddenAt = useRef<number | null>(null);
   const [selectedSlot, setSelectedSlot] = useState<number | null>(null);
   const [sheetSlot, setSheetSlot] = useState<number | null>(null);
@@ -123,7 +128,7 @@ export default function Game() {
   // included — FREEZES the battle, and the bulletin queue never overlaps
   // the battle-result view (the render gate below shows the result first;
   // the bulletin waits in state until the report is claimed).
-  const battlePaused = paused || interfacePaused || bulletin !== null || diaryOpen;
+  const battlePaused = exitOpen || paused || interfacePaused || bulletin !== null || diaryOpen;
   const pauseRef = useRef(battlePaused);
   const interfaceRef = useRef(interfacePaused);
   interfaceRef.current = interfacePaused;
@@ -153,6 +158,24 @@ export default function Game() {
     }
     rawDispatch(action);
   }, []);
+  const backAction = useRef(() => {});
+  backAction.current = () => {
+    if (exitOpen) { setExitOpen(false); return; }
+    if (targeting) { setTargeting(null); return; }
+    if (sheetSlot !== null) { setSheetSlot(null); return; }
+    if (selectedSlot !== null) { setSelectedSlot(null); return; }
+    if (selectedBuilding !== null) { setSelectedBuilding(null); return; }
+    if (panel || progressPanel || moreOpen || helpOpen || diaryOpen) {
+      setPanel(null); setProgressPanel(null); setMoreOpen(false); setHelpOpen(false); setDiaryOpen(false); return;
+    }
+    setPaused(true); setExitOpen(true);
+  };
+  useEffect(() => {
+    if (!isNativeRuntime()) return;
+    const listener = App.addListener("backButton", () => backAction.current());
+    void listener.catch(() => {});
+    return () => { void listener.then(h => h.remove()).catch(() => {}); };
+  }, []);
   const stats = getStats(game);
   /* Real export $/s from the ECO team's stat (R11). Consumed defensively:
      until getStats provides it, every "real rate" display stays hidden
@@ -168,7 +191,7 @@ export default function Game() {
      elapsed parity). Game.tsx resolves the boolean and passes ONLY `isNight`
      to WorldView3D, exactly as before — VIS2 owns the 900s phase length and
      the gradual ~20s transition behind this boolean in the map layer. */
-  const ambientNight = game.manualNight !== (Math.floor(game.elapsed / 180) % 2 === 1);
+  const ambientNight = game.manualNight !== (Math.floor(game.elapsed / 900) % 2 === 1);
   const isNight = scenarioNight || timeMode === "night" || (timeMode === "auto" && ambientNight);
 
   const notify = useCallback((message: string) => {
@@ -215,7 +238,7 @@ export default function Game() {
   }, []);
 
   const feedback = useCallback(() => {
-    if (vibrationRef.current && typeof navigator !== "undefined" && "vibrate" in navigator) navigator.vibrate(12);
+    if (vibrationRef.current) { if (isNativeRuntime()) void Haptics.impact({ style: ImpactStyle.Light }).catch(() => {}); else if ("vibrate" in navigator) navigator.vibrate(12); }
     if (audioRef.current) { audioRef.current.enabled = soundRef.current; audioRef.current.unlock(); audioRef.current.play("click"); }
   }, []);
 
@@ -246,14 +269,33 @@ export default function Game() {
   }, [notify]);
 
   const reloadDaily = useCallback(async () => {
-    if(!playerRef.current||!serverApiEnabled())return;
+    if(!playerRef.current)return;
+    if (!serverApiEnabled()) {
+      const status = localDailyStatus(readDailyReceipt(localStorage.getItem("hormuz-daily-v1")), Date.now());
+      setDaily(status);
+      if (status.reward && !gameRef.current.idle.appliedDailyIds.includes(status.reward.id)) dispatch({type:"apply-daily", reward:status.reward});
+      return;
+    }
     setDailyBusy(true);setDailyError(false);
     try { const response=await fetch(`/api/rewards?id=${encodeURIComponent(playerRef.current)}`);if(!response.ok)throw new Error("unavailable");const status=await response.json() as DailyStatus;setDaily(status);if(status.reward&&!gameRef.current.idle.appliedDailyIds.includes(status.reward.id))dispatch({type:"apply-daily",reward:status.reward}); }
     catch { setDailyError(true); }
     finally { setDailyBusy(false); }
   }, []);
   const claimDaily = async () => {
-    if(dailyBusy||!daily?.available||!serverApiEnabled())return;
+    if(dailyBusy||!daily?.available)return;
+    if (!serverApiEnabled()) {
+      try {
+        const now = Date.now();
+        const status = localDailyStatus(readDailyReceipt(localStorage.getItem("hormuz-daily-v1")), now);
+        if (!status.available) return;
+        const receipt = {day:Math.floor(now / 86400000), step:status.step, id:`local-daily-${Math.floor(now / 86400000)}`};
+        localStorage.setItem("hormuz-daily-v1", JSON.stringify(receipt));
+        const claimed = localDailyStatus(receipt, now);
+        if(claimed.reward) dispatch({type:"apply-daily",reward:claimed.reward});
+        setDaily(claimed);setProgressPanel(null);feedback();
+      } catch { setDailyError(true); }
+      return;
+    }
     setDailyBusy(true);setDailyError(false);feedback();
     try { const response=await fetch("/api/rewards",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({id:playerRef.current})});if(!response.ok)throw new Error("unavailable");const status=await response.json() as DailyStatus;setDaily(status);if(status.reward&&!gameRef.current.idle.appliedDailyIds.includes(status.reward.id))dispatch({type:"apply-daily",reward:status.reward});setProgressPanel(null); }
     catch { setDailyError(true); }
@@ -286,10 +328,11 @@ export default function Game() {
 
   useEffect(() => {
     if (!loaded) return;
-    let previous = performance.now();
+    const clock = new SimulationClock();
+    clock.reset(performance.now());
     const timer = setInterval(() => {
-      const now = performance.now(), dt = (now - previous) / 1000; previous = now;
-      if (!document.hidden) dispatch({ type: "tick", dt: Math.min(dt, 0.25), battlePaused: pauseRef.current });
+      const steps = clock.advance(performance.now(), document.hidden || nativeHidden.current).length;
+      if (steps) dispatch({ type: "advance", steps, battlePaused: pauseRef.current });
     }, 125);
     return () => clearInterval(timer);
   }, [loaded]);
@@ -333,11 +376,14 @@ export default function Game() {
     }
     const timer = setInterval(() => { if (!document.hidden) saveAll(); }, 8000);
     const onVisibility = () => {
-      if (document.hidden) { hiddenAt.current=Date.now();saveAll(); }
-      else if(hiddenAt.current){const now=Date.now(),seconds=(now-hiddenAt.current)/1000;hiddenAt.current=null;if(seconds>30)dispatch({type:"offline-elapsed",seconds,now});void reloadDaily();}
+      if (document.hidden || nativeHidden.current) { hiddenAt.current ??= Date.now();audioRef.current?.suspend();saveAll(); if(gameRef.current.phase === "battle") setPaused(true); }
+      else if(hiddenAt.current){audioRef.current?.unlock();const now=Date.now(),seconds=(now-hiddenAt.current)/1000;hiddenAt.current=null;if(seconds>30)dispatch({type:"offline-elapsed",seconds,now});void reloadDaily();}
     };
-    window.addEventListener("beforeunload", saveLocal); document.addEventListener("visibilitychange", onVisibility);
-    return () => { clearInterval(timer); window.removeEventListener("beforeunload", saveLocal); document.removeEventListener("visibilitychange", onVisibility); };
+    let stopped = false;
+    const nativeListener = isNativeRuntime() ? App.addListener("appStateChange", ({ isActive }) => { nativeHidden.current = !isActive; onVisibility(); }) : null;
+    nativeListener?.then(handle => { if(stopped) void handle.remove(); }).catch(() => {});
+    window.addEventListener("pagehide", saveLocal); window.addEventListener("beforeunload", saveLocal); document.addEventListener("visibilitychange", onVisibility);
+    return () => { stopped = true; void nativeListener?.then(handle => handle.remove()).catch(() => {}); clearInterval(timer); window.removeEventListener("pagehide", saveLocal); window.removeEventListener("beforeunload", saveLocal); document.removeEventListener("visibilitychange", onVisibility); };
   }, [loaded,reloadDaily]);
 
   useEffect(() => {
@@ -536,6 +582,7 @@ export default function Game() {
   const goMap = () => { setPanel(null); setProgressPanel(null); setMoreOpen(false); setTargeting(null); setSelectedSlot(null); setSelectedBuilding(null); feedback(); };
 
   return <div className={`game-shell ${activeBattle ? "in-battle" : ""} ${focus ? "focus-on" : "focus-off"} ${cinematic ? "cinematic" : "effects-light"} ${reducedMotion ? "reduce-motion" : ""} ${coachTarget ? `coach-${coachTarget}` : ""} ${coachStep === 3 ? "coach-spell" : ""} ${game.hearts <= 5 && activeBattle ? "danger-low" : ""}`} dir="rtl">
+    {exitOpen && <div className="compact-dialog-backdrop"><section className="exit-dialog" role="alertdialog" aria-modal="true" aria-label="خروج از بازی"><h2>فرمانده، استراحت می‌کنی؟</h2><p>پیشرفتت ذخیره می‌شود. نبرد تا بازگشتت متوقف می‌ماند.</p><button className="primary-action" autoFocus onClick={() => {setExitOpen(false);setPaused(false);}}>ادامهٔ بازی</button><button onClick={() => {try {localStorage.setItem(SAVE_KEY, JSON.stringify({...gameRef.current,shots:[],popups:[],lastSavedAt:Date.now()}));void App.exitApp();}catch{notify("ذخیره انجام نشد؛ بازی را باز نگه دارید.");}}}>ذخیره و خروج</button></section></div>}
     <header className="app-header">
       <div className="app-brand"><span className="brand-symbol"><Anchor size={22} /></span><div><strong>هرمز</strong><span>فرماندهی آب‌های آزاد</span></div></div>
       <div className="essential-resources" aria-label="منابع اصلی">
@@ -624,13 +671,15 @@ function MoreMenu({ game, close, open, openProgress, goMap }: { game: ReturnType
   const ref = useDialog<HTMLElement>(close);
   const items: { key: string; icon: typeof Shield; title: string; sub: string; badge?: string; act: () => void }[] = [
     { key: "map", icon: MapIcon, title: "نقشهٔ تنگه", sub: "بازگشت به نمای زنده", act: goMap },
+    { key: "city", icon: Home, title: "شهر و زیرساخت", sub: "برق، آب و پایداری", act: () => open("city") },
+    { key: "research", icon: FlaskConical, title: "پژوهشگاه", sub: "فناوری و دکترین دفاع", act: () => open("research") },
     { key: "missions", icon: ClipboardList, title: "مأموریت‌ها", sub: "هدف‌ها و پاداش فصل", act: () => openProgress("missions") },
     { key: "managers", icon: UsersRound, title: "مدیران", sub: "خودکارسازی بندر و تولید", act: () => openProgress("managers") },
     { key: "hero", icon: Award, title: "فرماندهان", sub: "انتخاب یگان ویژه", act: () => open("hero") },
     { key: "events", icon: Bell, title: "گزارش‌های تنگه", sub: "رویدادها و امنیت", badge: game.event ? "جدید" : undefined, act: () => open("events") },
     { key: "settings", icon: Settings2, title: "تنظیمات", sub: "صدا، جلوه‌ها و ذخیره", act: () => open("settings") },
   ];
-  return <div className="compact-dialog-backdrop" onClick={close}><section className="more-menu" ref={ref} role="dialog" aria-modal="true" aria-labelledby="more-title" tabIndex={-1} onClick={e => e.stopPropagation()}><div className="sheet-handle" /><header><div><span className="sheet-eyebrow">مرکز فرماندهی</span><h2 id="more-title">همه‌چیز، همین‌جاست.</h2></div><button className="close-control" onClick={close} aria-label="بستن منو"><X size={19} /></button></header><div className="more-grid">{items.map(item => <button key={item.key} onClick={item.act}><span className="more-icon"><item.icon size={22} /></span><strong>{item.title}</strong><small>{item.sub}</small>{item.badge && <span className="more-badge">{item.badge}</span>}<ArrowLeft size={14} className="more-arrow" /></button>)}</div><div className="more-business-links"><button onClick={()=>openProgress("contracts")}><ShipIcon/> قراردادهای تجاری <ArrowLeft size={14}/></button><button onClick={()=>openProgress("daily")}><Gift size={18}/> هدیهٔ روزانه <ArrowLeft size={14}/></button></div><p className="menu-save-note"><Check size={12} /> پیشرفت شما خودکار ذخیره می‌شود.</p></section></div>;
+  return <div className="compact-dialog-backdrop" onClick={close}><section className="more-menu" ref={ref} role="dialog" aria-modal="true" aria-labelledby="more-title" tabIndex={-1} onClick={e => e.stopPropagation()}><div className="sheet-handle" /><header><div><span className="sheet-eyebrow">مرکز فرماندهی</span><h2 id="more-title">فرماندهی تنگه</h2></div><button className="close-control" onClick={close} aria-label="بستن منو"><X size={19} /></button></header><div className="more-grid">{items.map(item => <button key={item.key} onClick={item.act}><span className="more-icon"><item.icon size={22} /></span><strong>{item.title}</strong><small>{item.sub}</small>{item.badge && <span className="more-badge">{item.badge}</span>}<ArrowLeft size={14} className="more-arrow" /></button>)}</div><div className="more-business-links"><button onClick={()=>openProgress("contracts")}><ShipIcon/> قراردادهای تجاری <ArrowLeft size={14}/></button><button onClick={()=>openProgress("daily")}><Gift size={18}/> هدیهٔ روزانه <ArrowLeft size={14}/></button></div><p className="menu-save-note"><Check size={12} /> پیشرفت شما خودکار ذخیره می‌شود.</p></section></div>;
 }
 
 function QuickGuide({ close }: { close: () => void }) {
