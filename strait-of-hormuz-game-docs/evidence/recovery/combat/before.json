@@ -1,0 +1,19 @@
+{
+  "shots": 77,
+  "maxLaunchError": 109.87099109662687,
+  "cannonShots": 5,
+  "maxYawErrorDeg": 4.887900079794489,
+  "families": {
+    "autocannon": {
+      "draws": 44,
+      "maxWorldDelta": 0.12052165216908861
+    },
+    "dock": {
+      "draws": 10,
+      "maxWorldDelta": 0.7922832976972813
+    }
+  },
+  "phase": "battle",
+  "battleSeconds": 18.5,
+  "pageErrors": []
+}

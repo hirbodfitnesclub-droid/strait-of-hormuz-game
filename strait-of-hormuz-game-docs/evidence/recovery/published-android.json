@@ -1,0 +1,15 @@
+{
+  "0.7.0": {
+    "apkBytes": 170313871,
+    "apkSha256": "4a350103eb292cc3b352c7e62ecdeafaaacbbef169fcd0d4844d8a22afc29509",
+    "certificateDN": "C=US, O=Android, CN=Android Debug",
+    "certificateSha256": "fff77af5dde72633c6e07a612b1df09b8560f0579d8744133d2087378ea51b6a"
+  },
+  "0.7.1": {
+    "apkBytes": 170336620,
+    "apkSha256": "b5c2b6c8976dd0598b8762ff1796d454ed9df935784ee9fe838b95b74bd6541f",
+    "certificateDN": "C=US, O=Android, CN=Android Debug",
+    "certificateSha256": "4e228452c70eca41d55071a0824234413f5e7718867057bd7cb2bc02b30f1be1"
+  },
+  "verification": "Downloaded both GitHub release assets and independently checked APK signatures and hashes. Different certificates for the same applicationId prevent an in-place update."
+}

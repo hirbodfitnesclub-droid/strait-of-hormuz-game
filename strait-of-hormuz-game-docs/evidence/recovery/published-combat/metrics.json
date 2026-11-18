@@ -1,0 +1,38 @@
+{
+  "shots": 65,
+  "maxLaunchError": 0,
+  "cannonShots": 1,
+  "maxYawErrorDeg": 0,
+  "sinkingShips": 3,
+  "sinkingFrames": 22,
+  "families": {
+    "autocannon": {
+      "draws": 57,
+      "maxWorldDelta": 0.15150266270721602
+    },
+    "dock": {
+      "draws": 11,
+      "maxWorldDelta": 0.5083524216410353
+    }
+  },
+  "phase": "battle",
+  "battleSeconds": 17.625,
+  "scripts": [
+    "/_next/static/chunks/00npdm7cl-f0g.js",
+    "/_next/static/chunks/04mxn_hbvduxn.js",
+    "/_next/static/chunks/0cz1d0mv5g_q7.js",
+    "/_next/static/chunks/0gx9u-_49gwww.js",
+    "/_next/static/chunks/0wfurka9errm3.js",
+    "/_next/static/chunks/0yz0oxanetv6p.js",
+    "/_next/static/chunks/1pe513anv6r42.js",
+    "/_next/static/chunks/24p3m0cpnl_3r.js",
+    "/_next/static/chunks/2g2ojvlr0rcsq.js",
+    "/_next/static/chunks/2i26981w0rmn3.js",
+    "/_next/static/chunks/2ydl0nv0naeg0.js",
+    "/_next/static/chunks/3-qm-kp53c0zp.js",
+    "/_next/static/chunks/39_j1bdzreq0m.js",
+    "/_next/static/chunks/3ul9vsxlzshkk.js",
+    "/_next/static/chunks/turbopack-2u1d16houkiyo.js"
+  ],
+  "pageErrors": []
+}

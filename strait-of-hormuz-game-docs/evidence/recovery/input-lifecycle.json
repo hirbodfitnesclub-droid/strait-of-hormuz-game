@@ -1,0 +1,58 @@
+{
+  "checks": [
+    "scripts/test-input-recovery.cjs",
+    "scripts/test-world-init.cjs",
+    "scripts/test-lifecycle.cjs"
+  ],
+  "scope": "Chromium 390x844 desktop software WebGL / real WebAudio graph / DOM controls; replayed Capacitor App listener callbacks. These tests do not measure sound at a physical speaker, phone GPU, OS plugin delivery, or device heat.",
+  "status": "VERIFIED within browser test scope",
+  "before": {
+    "bundleSha256": "71a106b2de48bedee77fc96dc6351508427c9fe947d3b03613d58f27cbcd3f2d",
+    "input": {
+      "before": 119.99999999999997,
+      "zoomIn": 119.99999999999997,
+      "zoomOut": 119.99999999999997,
+      "reset": 119.99999999999997,
+      "battleAfterCancel": 1,
+      "overwrittenBackgroundMs": 13445,
+      "errors": []
+    },
+    "audioForegroundWithoutGesture": {
+      "contextsBefore": 0,
+      "contextsAfter": 1
+    },
+    "restoreAfterFailedInitialization": {
+      "remainsFailed": false,
+      "syncCreated": false
+    },
+    "battleClockAfterWebGLContextLoss": {
+      "whenErrorVisible": 2.5,
+      "after1_5s": 2.875
+    }
+  },
+  "after": {
+    "bundleSha256": "511267b0e019c22ea272f4601359e91ba3ed60c00af1ee1e6454d3ddf778fc18",
+    "input": {
+      "audioBeforeGesture": null,
+      "toneSources": 2,
+      "before": 119.99999999999997,
+      "zoomIn": 79.99999999999997,
+      "zoomOut": 119.99999999999997,
+      "reset": 119.99999999999997,
+      "battleAfterCancel": 0,
+      "overwrittenBackgroundMs": 0,
+      "errors": []
+    },
+    "restoreAfterFailedInitialization": {
+      "remainsFailed": true,
+      "syncCreated": false
+    },
+    "lifecycleIntegration": "PASS load pause, no duplicate briefing, WebGL lifecycle events freeze/resume, backup export, invalid/valid restore, narrow layout and daily panel after reset",
+    "audioGraph": [
+      "no context before first gesture",
+      "running on UI interaction",
+      "suspended on background event",
+      "running on foreground event"
+    ]
+  }
+}

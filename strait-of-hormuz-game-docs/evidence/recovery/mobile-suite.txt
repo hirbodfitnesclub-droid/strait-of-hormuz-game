@@ -1,0 +1,28 @@
+
+> strait-of-hormuz-game@0.7.1 test:mobile
+> node scripts/test-auto-resume.cjs && node scripts/test-mobile-ui.cjs && node scripts/test-offline.cjs && node scripts/test-lifecycle.cjs && node scripts/test-input-recovery.cjs && node scripts/test-world-init.cjs
+
+PASS opted-in intermission reload enters battle after world becomes ready { phase: 'battle', wave: 1, auto: true }
+PERF { calls: 291, tris: 358083, dpr: 1, fps: 0.9 }
+DAILY [
+  'دلار نفتی۱٬۲۰۰+۱۰٫۱/ث', 'نفت خام۴۹۹',
+  'سوخت۱۷۵',               'فولاد · بدون تولید۱۵۰',
+  'مهمات۳۰۰',              '',
+  '',                      '',
+  '',                      '',
+  'خودکار',                '',
+  '',                      'مخزن نفت پر شده است',
+  'اقتصاد',                'برجک‌ها',
+  'عملیات',                'بیشتر',
+  '',                      'دریافت هدیهٔ امروز'
+]
+PASS mobile layout, economy, 25-operation grid, challenge preparation and tower action, command navigation and native daily claim
+PASS 95 bundled asset requests; no network/service worker; corrupt-primary backup recovery; offline reward once; contract/boost timers; reload and 3D rendering
+PASS load pause, no duplicate briefing, WebGL lifecycle events freeze/resume, backup export, invalid/valid restore, narrow layout and daily panel after reset
+{"audioBeforeGesture":null,"toneSources":2,"before":119.99999999999997,"zoomIn":79.99999999999997,"zoomOut":119.99999999999997,"reset":119.99999999999997,"battleAfterCancel":0,"overwrittenBackgroundMs":0,"errors":[]}
+{"remainsFailed":true,"syncCreated":false}
+npm notice
+npm notice New major version of npm available! 11.9.0 -> 12.2.3
+npm notice Changelog: https://github.com/npm/cli/releases/tag/v12.2.3
+npm notice To update run: npm install -g npm@12.2.3
+npm notice

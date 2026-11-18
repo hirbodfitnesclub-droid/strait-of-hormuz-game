@@ -1,0 +1,48 @@
+{
+  "lanes": {
+    "enemy": {
+      "samples": 2001,
+      "centersOnLand": 0,
+      "hullsOnLand": 0,
+      "minHullClearance": 4.126
+    },
+    "trade": {
+      "samples": 2001,
+      "centersOnLand": 0,
+      "hullsOnLand": 0,
+      "minHullClearance": 2.076
+    },
+    "pirate": {
+      "samples": 2001,
+      "centersOnLand": 0,
+      "hullsOnLand": 0,
+      "minHullClearance": 4.27
+    },
+    "port": {
+      "samples": 2001,
+      "centersOnLand": 0,
+      "hullsOnLand": 0,
+      "minHullClearance": 3.999
+    }
+  },
+  "tower": {
+    "mounds": 0,
+    "foundationGap": 0,
+    "groundMeshGap": -0.005661208188554312,
+    "url": "/models/towers/autocannon-L1.glb"
+  },
+  "slotCount": 29,
+  "minimumSlotClearance": 1.833,
+  "navigation": {
+    "x": 40.22408441567621,
+    "y": -0.030844474646962012,
+    "z": -32.92994644158728,
+    "shore": -8.542127101894222
+  },
+  "shipAfter": {
+    "x": 42.263252410087325,
+    "y": 0.0730104293608524,
+    "z": -33.37887615832398,
+    "shore": -8.463084358552194
+  }
+}

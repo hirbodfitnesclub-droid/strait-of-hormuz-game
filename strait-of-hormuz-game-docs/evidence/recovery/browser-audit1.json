@@ -1,0 +1,391 @@
+{
+  "generated_at": "2026-11-18T10:14:08",
+  "base_url": "http://localhost:3476",
+  "probes": [
+    {
+      "probe": "probe_cadence",
+      "section": "§0-§1 combat cadence",
+      "assertions": [
+        {
+          "section": "§0-§1 combat cadence",
+          "id": "cadence.silo",
+          "name": "silo fire interval",
+          "status": "pass",
+          "expected": "5.0 game-s ±band[0.6x,1.8x]",
+          "actual": 4.667,
+          "detail": "3 dispatches on slot 9, source=telemetry[silo], engaged=True"
+        },
+        {
+          "section": "§0-§1 combat cadence",
+          "id": "cadence.autocannon",
+          "name": "autocannon fire interval",
+          "status": "pass",
+          "expected": "0.2 game-s ±band[0.6x,1.8x]",
+          "actual": 0.192,
+          "detail": "75 dispatches on slot 2, source=telemetry[autocannon], engaged=True"
+        },
+        {
+          "section": "§0-§1 combat cadence",
+          "id": "cadence.ew",
+          "name": "EW fires no projectiles",
+          "status": "pass",
+          "expected": 0,
+          "actual": 0,
+          "detail": "22 EW dispatches on slot 8, engaged=True (audit critical-7: EW must be aura/pulse only)"
+        },
+        {
+          "section": "§0-§1 combat cadence",
+          "id": "cadence.laser",
+          "name": "laser beam is continuous while engaged",
+          "status": "pass",
+          "expected": "rail re-trigger median <= 0.5 game-s",
+          "actual": 0,
+          "detail": "116 beam events over 116 dispatches, engaged=True"
+        },
+        {
+          "section": "§0-§1 combat cadence",
+          "id": "cadence.mlrs",
+          "name": "MLRS salvo has a reload pause",
+          "status": "pass",
+          "expected": ">=12 rockets and a >=1.0 game-s gap between salvos",
+          "actual": {
+            "rockets": 42,
+            "max_gap_game_s": 3.5
+          },
+          "detail": "engaged=True (audit critical-5: burst 12 + pause)"
+        }
+      ],
+      "meta": {
+        "silo": {
+          "family": "silo",
+          "slot": 9,
+          "page_errors": [],
+          "fx_probe": "installed",
+          "dispatch_probe": "installed",
+          "game_window_s": 14.0,
+          "hp_delta": 180,
+          "dispatch_events": 3,
+          "telemetry_present": true,
+          "family_dispatches": 3,
+          "interval_source": "telemetry[silo]"
+        },
+        "autocannon": {
+          "family": "autocannon",
+          "slot": 2,
+          "page_errors": [],
+          "fx_probe": "installed",
+          "dispatch_probe": "installed",
+          "game_window_s": 14.0,
+          "hp_delta": 3159,
+          "dispatch_events": 75,
+          "telemetry_present": true,
+          "family_dispatches": 75,
+          "interval_source": "telemetry[autocannon]"
+        },
+        "ew": {
+          "family": "ew",
+          "slot": 8,
+          "page_errors": [],
+          "fx_probe": "installed",
+          "dispatch_probe": "installed",
+          "game_window_s": 14.5,
+          "hp_delta": 295.0819672131911,
+          "dispatch_events": 22,
+          "telemetry_present": true,
+          "family_dispatches": 22
+        },
+        "laser": {
+          "family": "laser",
+          "slot": 12,
+          "page_errors": [],
+          "fx_probe": "installed",
+          "dispatch_probe": "installed",
+          "game_window_s": 14,
+          "hp_delta": 3562.500000000233,
+          "dispatch_events": 116,
+          "telemetry_present": true,
+          "family_dispatches": 116
+        },
+        "mlrs": {
+          "family": "mlrs",
+          "slot": 5,
+          "page_errors": [],
+          "fx_probe": "installed",
+          "dispatch_probe": "installed",
+          "game_window_s": 14.0,
+          "hp_delta": 6744,
+          "dispatch_events": 37,
+          "telemetry_present": true,
+          "family_dispatches": 37
+        }
+      }
+    },
+    {
+      "probe": "probe_wavecomp",
+      "section": "§2-§3 enemies & waves",
+      "assertions": [
+        {
+          "section": "§2-§3 enemies & waves",
+          "id": "wavecomp.w1",
+          "name": "wave 1 composition",
+          "status": "pass",
+          "expected": {
+            "speed": 6
+          },
+          "actual": {
+            "speed": 6
+          },
+          "detail": "total=6 spawned kinds observed live"
+        },
+        {
+          "section": "§2-§3 enemies & waves",
+          "id": "wavecomp.w1.interval",
+          "name": "wave 1 spawn interval",
+          "status": "pass",
+          "expected": "1.35 game-s",
+          "actual": 1.0,
+          "detail": "5 spawn gaps on the game clock"
+        },
+        {
+          "section": "§2-§3 enemies & waves",
+          "id": "wavecomp.w3",
+          "name": "wave 3 composition",
+          "status": "pass",
+          "expected": {
+            "speed": 2,
+            "air": 6
+          },
+          "actual": {
+            "speed": 2,
+            "air": 6
+          },
+          "detail": "total=8 spawned kinds observed live"
+        },
+        {
+          "section": "§2-§3 enemies & waves",
+          "id": "wavecomp.w3.interval",
+          "name": "wave 3 spawn interval",
+          "status": "pass",
+          "expected": "1.35 game-s",
+          "actual": 1.5,
+          "detail": "7 spawn gaps on the game clock"
+        },
+        {
+          "section": "§2-§3 enemies & waves",
+          "id": "wavecomp.w5",
+          "name": "wave 5 composition",
+          "status": "pass",
+          "expected": {
+            "air": 4,
+            "corvette": 2,
+            "destroyer": 2,
+            "speed": 2,
+            "boss": 1
+          },
+          "actual": {
+            "air": 4,
+            "corvette": 2,
+            "destroyer": 2,
+            "speed": 2,
+            "boss": 1
+          },
+          "detail": "total=11 spawned kinds observed live"
+        },
+        {
+          "section": "§2-§3 enemies & waves",
+          "id": "wavecomp.w5.interval",
+          "name": "wave 5 spawn interval",
+          "status": "pass",
+          "expected": "1.35 game-s",
+          "actual": 1.25,
+          "detail": "10 spawn gaps on the game clock"
+        },
+        {
+          "section": "§2-§3 enemies & waves",
+          "id": "wavecomp.w10",
+          "name": "wave 10 composition",
+          "status": "pass",
+          "expected": {
+            "sub": 6,
+            "destroyer": 4,
+            "corvette": 3,
+            "speed": 2,
+            "boss": 1
+          },
+          "actual": {
+            "sub": 6,
+            "destroyer": 4,
+            "corvette": 3,
+            "speed": 2,
+            "boss": 1
+          },
+          "detail": "total=16 spawned kinds observed live"
+        },
+        {
+          "section": "§2-§3 enemies & waves",
+          "id": "wavecomp.w10.interval",
+          "name": "wave 10 spawn interval",
+          "status": "pass",
+          "expected": "1.35 game-s",
+          "actual": 1.5,
+          "detail": "15 spawn gaps on the game clock"
+        }
+      ],
+      "meta": {}
+    },
+    {
+      "probe": "probe_economy",
+      "section": "§7 economy",
+      "assertions": [
+        {
+          "section": "§7 economy",
+          "id": "eco.integrity",
+          "name": "hydrate preserves rich seed",
+          "status": "pass",
+          "expected": "buildings/research/managers/platforms identical",
+          "actual": {
+            "buildings": {
+              "oil": 12,
+              "tank": 20,
+              "dock": 8,
+              "refinery": 6,
+              "steel": 5,
+              "arms": 5,
+              "power": 8,
+              "water": 5,
+              "city": 4,
+              "welfare": 3,
+              "optical": 4
+            },
+            "managers": {
+              "harbor": 2,
+              "energy": 2,
+              "supply": 1
+            },
+            "platforms": [
+              0,
+              1,
+              4
+            ],
+            "research_n": 17
+          },
+          "detail": "seed research_n=17"
+        },
+        {
+          "section": "§7 economy",
+          "id": "eco.oil_rate",
+          "name": "net oil production rate",
+          "status": "pass",
+          "expected": 362.4,
+          "actual": 359.8,
+          "detail": "Δoil=3014 over 8.4 game-sec"
+        },
+        {
+          "section": "§7 economy",
+          "id": "eco.manager_collect",
+          "name": "harbor manager auto-collects",
+          "status": "pass",
+          "expected": ">=1 auto-collection by window end (s0 is post-settle, not a baseline)",
+          "actual": {
+            "collections": [
+              1,
+              1
+            ],
+            "bank": [
+              0,
+              825
+            ]
+          },
+          "detail": "managerClock seeded at 9.5s of the 10s cycle"
+        },
+        {
+          "section": "§7 economy",
+          "id": "eco.contract_timer",
+          "name": "contract timer advances",
+          "status": "pass",
+          "expected": "+8.4s",
+          "actual": 8.4,
+          "detail": "regional contract elapsed 35 -> 43.375"
+        }
+      ],
+      "meta": {
+        "expected_net_oil_rate": 362.4
+      }
+    },
+    {
+      "probe": "probe_scene",
+      "section": "§map/scene basics",
+      "assertions": [
+        {
+          "section": "§map/scene basics",
+          "id": "scene.pads29",
+          "name": "29 slot pads present",
+          "status": "pass",
+          "expected": 29,
+          "actual": 29,
+          "detail": "pad ids=[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28]"
+        },
+        {
+          "section": "§map/scene basics",
+          "id": "scene.render_alive",
+          "name": "renderer drawing, veil lifted",
+          "status": "pass",
+          "expected": "calls > 0 and no loading veil",
+          "actual": {
+            "calls": 331,
+            "fps": 2.8,
+            "veil": false
+          },
+          "detail": "page errors: []"
+        },
+        {
+          "section": "§map/scene basics",
+          "id": "scene.tower_model",
+          "name": "tower GLB model loads",
+          "status": "pass",
+          "expected": "slot 2 record with loaded model obj",
+          "actual": {
+            "2": {
+              "url": "/models/towers/autocannon-L50.glb",
+              "descendants": 339
+            }
+          },
+          "detail": "cannon tier 3 on the Bandar Abbas slot"
+        }
+      ],
+      "meta": {}
+    }
+  ],
+  "sections": {
+    "§0-§1 combat cadence": {
+      "pass": 5,
+      "fail": 0,
+      "skip": 0
+    },
+    "§2-§3 enemies & waves": {
+      "pass": 8,
+      "fail": 0,
+      "skip": 0
+    },
+    "§7 economy": {
+      "pass": 4,
+      "fail": 0,
+      "skip": 0
+    },
+    "§map/scene basics": {
+      "pass": 3,
+      "fail": 0,
+      "skip": 0
+    }
+  },
+  "total": {
+    "pass": 20,
+    "fail": 0,
+    "skip": 0
+  },
+  "tested_bundle": {
+    "files": 431,
+    "sha256": "511267b0e019c22ea272f4601359e91ba3ed60c00af1ee1e6454d3ddf778fc18"
+  },
+  "scope": "Integrated pre-trade-route-corner-correction export, Chromium with SwiftShader. Legacy checks measure seeded cases and model load; physical Android and model orientation are outside their assertions."
+}

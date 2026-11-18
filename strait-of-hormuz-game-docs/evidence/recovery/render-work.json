@@ -1,0 +1,80 @@
+{
+  "tool": "scripts/audit/probe-render-work.cjs",
+  "browser": "Chromium 156.0.8078.79 built on Debian GNU/Linux 13 (trixie)",
+  "renderBackend": "Headless Linux Chromium, ANGLE SwiftShader; 390x844 portrait; Android UA and native lifecycle callback fixture; actual Three.js WebGL2 scene",
+  "method": "Open stock game from local Android web export; settle entrance camera at its own destination. Observe 32 seconds of opening scene; hook every actual render and time CSS2DRenderer.render. Read Three.js counters, viewport and JS heap. Simulate a 4.5 second native inactive interval while document remains visible. Verify scene resumes, place-label switch, and byte compare frozen scene with/without a magenta sheet directly below seabed across three views (RGB delta >2). No UI or shader quality changes are injected during the observation window.",
+  "baseline": {
+    "appVersion": "0.7.0",
+    "indexSha256": "13d6fca6ddfca9b30c67cc4923ca8e17d859ae41d746762d715b7c259907a5e3",
+    "observations": {
+      "frames": 28,
+      "syncCalls": 28,
+      "cssObjects": 3461,
+      "cssLabels": 183,
+      "cssCpuMsPerFrame": 3.41,
+      "callsMedian": 314,
+      "trisMedian": 316135,
+      "dpr": 1,
+      "frameMsMedian": 1068,
+      "frameMsP95": 2306.7000000001863,
+      "fps": 0.87,
+      "memory": {
+        "geometries": 811,
+        "textures": 57
+      },
+      "jsHeapBytes": 71259943,
+      "cssVisible": 4,
+      "terrainFaces": 506400,
+      "changedPixels": [
+        0,
+        0,
+        0
+      ],
+      "backgroundFrames": 2,
+      "hiddenPlaceLabels": 0,
+      "pageErrors": []
+    }
+  },
+  "candidate": {
+    "appVersion": "0.7.1",
+    "indexSha256": "e47c70b8f12f55be5c5dfe9c8b11a7bf3c132b2ad54bf5158a5a1d9afd61d0d7",
+    "observations": {
+      "frames": 22,
+      "syncCalls": 22,
+      "cssObjects": 189,
+      "cssLabels": 183,
+      "cssCpuMsPerFrame": 0.77,
+      "callsMedian": 297,
+      "trisMedian": 278506,
+      "dpr": 1,
+      "frameMsMedian": 1441.3999999999069,
+      "frameMsP95": 2130.399999999907,
+      "fps": 0.7,
+      "hudFps": 0.8,
+      "memory": {
+        "geometries": 282,
+        "textures": 57
+      },
+      "jsHeapBytes": 79836429,
+      "cssVisible": 4,
+      "terrainFaces": 385052,
+      "changedPixels": [
+        0,
+        0,
+        0
+      ],
+      "backgroundFrames": 0,
+      "backgroundHasScheduledFrame": false,
+      "hiddenPlaceLabels": 0,
+      "pageErrors": []
+    }
+  },
+  "verification": {
+    "nativeSignalStopsFrames": "VERIFIED in callback fixture",
+    "culledSeabedInvisible": "VERIFIED at 3 tested camera views",
+    "labelsProjectWithoutWorldTraversal": "VERIFIED",
+    "terrainFacesReduced": "VERIFIED",
+    "androidDeviceTemperatureGpuEnergy": "BLOCKED (no physical Android handset attached)"
+  },
+  "limits": "Benchmarks ran under variable VM contention. Random live actors, asset loading and elapsed simulation differ; scene-object counts, memory and timing are snapshots, not controlled phone throughput, battery, GPU duration, leak tests or temperature. Geometries and textures are object counts, not VRAM bytes. Shifts in triangle/draw counts reflect combined game changes. Baseline native callback frame count >0 is observed while inactive. An older probe lacked the hudFps field on the baseline."
+}

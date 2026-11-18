@@ -1,0 +1,122 @@
+{
+  "baseline_bundle": {
+    "files": 428,
+    "sha256": "71a106b2de48bedee77fc96dc6351508427c9fe947d3b03613d58f27cbcd3f2d"
+  },
+  "audit2": {
+    "generated_at": "2026-11-18T09:52:03",
+    "total": {
+      "pass": 30,
+      "fail": 0,
+      "skip": 0
+    },
+    "probe_assertions": {
+      "probe_amplitude": 23,
+      "probe_heat": 4,
+      "probe_wave3": 2,
+      "probe_i5": 1
+    },
+    "opening_heat_samples": [
+      {
+        "calls": 319,
+        "tris": 407427,
+        "dpr": 1,
+        "fps": 0,
+        "objects": 3287,
+        "bufW": 360,
+        "bufH": 640,
+        "phase": "peace"
+      },
+      {
+        "calls": 414,
+        "tris": 444985,
+        "dpr": 1,
+        "fps": 0,
+        "objects": 3425,
+        "bufW": 360,
+        "bufH": 640,
+        "phase": "peace"
+      },
+      {
+        "calls": 416,
+        "tris": 454853,
+        "dpr": 1,
+        "fps": 0,
+        "objects": 3425,
+        "bufW": 360,
+        "bufH": 640,
+        "phase": "peace"
+      },
+      {
+        "calls": 418,
+        "tris": 431227,
+        "dpr": 1,
+        "fps": 0,
+        "objects": 3425,
+        "bufW": 360,
+        "bufH": 640,
+        "phase": "peace"
+      },
+      {
+        "calls": 387,
+        "tris": 428325,
+        "dpr": 1,
+        "fps": 0,
+        "objects": 3425,
+        "bufW": 360,
+        "bufH": 640,
+        "phase": "peace"
+      },
+      {
+        "calls": 384,
+        "tris": 428109,
+        "dpr": 1,
+        "fps": 1,
+        "objects": 3425,
+        "bufW": 360,
+        "bufH": 640,
+        "phase": "peace"
+      }
+    ],
+    "battle_window": {
+      "frames": 29,
+      "wall_s": 56.6255,
+      "game_s": 10,
+      "battle": true
+    },
+    "boss": {
+      "verdict": "I5 NOT reproduced — the live path fires",
+      "browserShots": 278,
+      "fxEvents": 518,
+      "battleT": 35.62,
+      "reducerShotsAt30": 197,
+      "enemiesSeen": 14,
+      "maxProgress": 0.674,
+      "destroyed": 11
+    }
+  },
+  "mobile": {
+    "pass": [
+      "PASS opted-in intermission reload enters battle after world becomes ready { phase: 'battle', wave: 1, auto: true }",
+      "PASS mobile layout, economy, 25-operation grid, challenge preparation and tower action, command navigation and native daily claim",
+      "PASS 96 bundled asset requests; no network/service worker; corrupt-primary backup recovery; offline reward once; contract/boost timers; reload and 3D rendering"
+    ],
+    "lifecycle_failure": "[ERR_ASSERTION]: lost graphics must freeze combat\n\n2.875 !== 2.5\n\n    at /workspace/strait-of-hormuz-game/scripts/test-lifecycle.cjs:15:106 {\n  generatedMessage: false,\n  code: 'ERR_ASSERTION',\n  actual: 2.875,\n  expected: 2.5,\n  operator: 'strictEqual',\n  diff: 'simple'\n}"
+  },
+  "legacy_audit1": {
+    "status": "partial; superseded for candidate testing",
+    "early_results": [
+      "[PASS] cadence.silo actual=4.667 3 dispatches on slot 9, source=telemetry[silo], engaged=True",
+      "[PASS] cadence.autocannon actual=0.2 75 dispatches on slot 2, source=telemetry[autocannon], engaged=True",
+      "[PASS] cadence.ew actual=0 24 EW dispatches on slot 8, engaged=True (audit critical-7: EW must be aura/pulse only)"
+    ]
+  },
+  "candidate_mobile_lifecycle": {
+    "bundle": {
+      "files": 431,
+      "sha256": "511267b0e019c22ea272f4601359e91ba3ed60c00af1ee1e6454d3ddf778fc18"
+    },
+    "stdout": "PASS load pause, no duplicate briefing, WebGL lifecycle events freeze/resume, backup export, invalid/valid restore, narrow layout and daily panel after reset"
+  },
+  "limitations": "Desktop Chromium and SwiftShader; overlapping runs. The raw reducer reference in the baseline I5 probe was generated from the working tree, while the browser served the frozen 0.7.0 export. No physical phone or Android WebView measured."
+}

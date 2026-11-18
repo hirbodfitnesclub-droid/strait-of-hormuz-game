@@ -1,0 +1,1257 @@
+
+> strait-of-hormuz-game@0.7.1 verify
+> npm run typecheck && npm run lint && npm run test:core && npm run test:integrity && npm run test:campaign && npm run test:fresh-campaign && node scripts/audit/test-tick-immutability.cjs && node scripts/audit/test-mech-a.cjs && node scripts/audit/test-mech-b.cjs && node scripts/audit/test-scen.cjs && node scripts/audit/test-economy.cjs && node scripts/audit/test-ui-round2.cjs && node scripts/audit/probe_wave3.cjs && node scripts/audit/probe_wave4_teaching.cjs && npm run test:recovery
+
+
+> strait-of-hormuz-game@0.7.1 typecheck
+> tsc --noEmit
+
+npm notice
+npm notice New major version of npm available! 11.9.0 -> 12.2.3
+npm notice Changelog: https://github.com/npm/cli/releases/tag/v12.2.3
+npm notice To update run: npm install -g npm@12.2.3
+npm notice
+
+> strait-of-hormuz-game@0.7.1 lint
+> eslint .
+
+
+/workspace/strait-of-hormuz-game/src/components/BuildingModel.tsx
+  15:19  warning  Using `<img>` could result in slower LCP and higher bandwidth. Consider using `<Image />` from `next/image` or a custom image loader to automatically optimize images. This may incur additional usage or cost from your provider. See: https://nextjs.org/docs/messages/no-img-element  @next/next/no-img-element
+  16:5   warning  Using `<img>` could result in slower LCP and higher bandwidth. Consider using `<Image />` from `next/image` or a custom image loader to automatically optimize images. This may incur additional usage or cost from your provider. See: https://nextjs.org/docs/messages/no-img-element  @next/next/no-img-element
+
+/workspace/strait-of-hormuz-game/src/components/BuildingSheet.tsx
+  44:111  warning  Using `<img>` could result in slower LCP and higher bandwidth. Consider using `<Image />` from `next/image` or a custom image loader to automatically optimize images. This may incur additional usage or cost from your provider. See: https://nextjs.org/docs/messages/no-img-element  @next/next/no-img-element
+
+/workspace/strait-of-hormuz-game/src/components/MapScene.tsx
+  66:18  warning  Using `<img>` could result in slower LCP and higher bandwidth. Consider using `<Image />` from `next/image` or a custom image loader to automatically optimize images. This may incur additional usage or cost from your provider. See: https://nextjs.org/docs/messages/no-img-element  @next/next/no-img-element
+  80:7   warning  Using `<img>` could result in slower LCP and higher bandwidth. Consider using `<Image />` from `next/image` or a custom image loader to automatically optimize images. This may incur additional usage or cost from your provider. See: https://nextjs.org/docs/messages/no-img-element  @next/next/no-img-element
+  83:7   warning  Using `<img>` could result in slower LCP and higher bandwidth. Consider using `<Image />` from `next/image` or a custom image loader to automatically optimize images. This may incur additional usage or cost from your provider. See: https://nextjs.org/docs/messages/no-img-element  @next/next/no-img-element
+
+/workspace/strait-of-hormuz-game/src/components/ProgressionPanels.tsx
+  28:529  warning  Using `<img>` could result in slower LCP and higher bandwidth. Consider using `<Image />` from `next/image` or a custom image loader to automatically optimize images. This may incur additional usage or cost from your provider. See: https://nextjs.org/docs/messages/no-img-element  @next/next/no-img-element
+  39:44   warning  Using `<img>` could result in slower LCP and higher bandwidth. Consider using `<Image />` from `next/image` or a custom image loader to automatically optimize images. This may incur additional usage or cost from your provider. See: https://nextjs.org/docs/messages/no-img-element  @next/next/no-img-element
+
+/workspace/strait-of-hormuz-game/src/components/RewardViews.tsx
+  19:33   warning  Using `<img>` could result in slower LCP and higher bandwidth. Consider using `<Image />` from `next/image` or a custom image loader to automatically optimize images. This may incur additional usage or cost from your provider. See: https://nextjs.org/docs/messages/no-img-element  @next/next/no-img-element
+  50:443  warning  Using `<img>` could result in slower LCP and higher bandwidth. Consider using `<Image />` from `next/image` or a custom image loader to automatically optimize images. This may incur additional usage or cost from your provider. See: https://nextjs.org/docs/messages/no-img-element  @next/next/no-img-element
+
+/workspace/strait-of-hormuz-game/src/components/TowerModel.tsx
+  24:50   warning  Using `<img>` could result in slower LCP and higher bandwidth. Consider using `<Image />` from `next/image` or a custom image loader to automatically optimize images. This may incur additional usage or cost from your provider. See: https://nextjs.org/docs/messages/no-img-element  @next/next/no-img-element
+  24:168  warning  Using `<img>` could result in slower LCP and higher bandwidth. Consider using `<Image />` from `next/image` or a custom image loader to automatically optimize images. This may incur additional usage or cost from your provider. See: https://nextjs.org/docs/messages/no-img-element  @next/next/no-img-element
+
+✖ 12 problems (0 errors, 12 warnings)
+
+npm notice
+npm notice New major version of npm available! 11.9.0 -> 12.2.3
+npm notice Changelog: https://github.com/npm/cli/releases/tag/v12.2.3
+npm notice To update run: npm install -g npm@12.2.3
+npm notice
+
+> strait-of-hormuz-game@0.7.1 test:core
+> node scripts/test-hydrate.cjs && node scripts/test-navigation.cjs && node scripts/test-progression.cjs && node scripts/test-mobile-core.cjs && node scripts/test-asset-catalog.cjs
+
+hydrateGame corrupt-save hardening
+  ok - top-level garbage is rejected, not crashed on
+  ok - a valid save round-trips its key values
+  ok - rewards as a non-array becomes an empty array
+  ok - reward entries are filtered and field-sanitized
+  ok - port null falls back to the fresh port state
+  ok - port with a bogus tanker is rebuilt field by field
+  ok - enemies as a non-array object becomes an empty array
+  ok - enemy entries: bad kinds dropped, numeric fields made finite
+  ok - tampered phase / mode / speed / event fall back to safe enums
+  ok - battle arrays with wrong container types become empty arrays
+  ok - idle as a non-object restores the fresh idle state
+  ok - contract with an unknown id is dropped; elapsed clamps to its duration
+  ok - platforms keep only valid slot ids, deduplicated
+  ok - lastBattle as an array becomes null; a partial record is rebuilt
+  ok - appliedDailyIds is string-filtered and capped at the last 64
+  ok - cards with corrupt per-kind entries fall back per kind
+  ok - manager levels clamp to 0..5 and stars to 0..3
+  ok - scalar tampering: cooldowns, stuns, combo, counters stay numeric
+  ok - tower branch/priority are sanitized with the tier
+  ok - hydrated corrupt state survives getStats and reducer ticks
+round 2 — QA SAVE findings S-1 / S-4 / S-5
+  ok - S-1: prototype-chain contract ids are rejected, never kept
+  ok - S-1: contract elapsed can never become NaN
+  ok - S-1 end-to-end: claiming after a poisoned-contract save keeps cash/xp finite and untouched
+  ok - S-1: a real completed contract still claims its exact reward
+  ok - S-1 sweep: a __proto__ key inside buildings cannot pollute or leak into state
+  ok - S-4: negative bank and cash clamp to zero
+  ok - S-5: battle arrays and rewards are length-capped
+runtime detection
+  ok - isNativeRuntime / serverApiEnabled classify window shapes
+PASS: 28 hydrate/runtime checks
+PASS landscape: all lanes, pathfinding, combat ships, merchant traffic and hero movement stay on water
+PASS portrait: all lanes, pathfinding, combat ships, merchant traffic and hero movement stay on water
+PASS: previous saves remain compatible
+PASS actual slot mapping, VIP escorts, continuous route starts and legacy navigation repair
+PASS: idle treasury, sequential missions, duplicate protection, managers, production boost, exact bulk costs, milestone rewards, chest contents, contracts, daily receipts, offline cap, battle rewards, opt-in auto battle and legacy saves.
+PASS simulation time is identical at 30, 60 and 120Hz
+PASS background never catches combat up
+PASS stall catch-up is bounded
+PASS daily receipt replays the same reward after crash and rejects clock rollback
+PASS static batching retains bounds, triangles and articulated subtrees
+PASS tap, drag, pinch and cancellation cannot be confused
+PASS all rendered shipping lanes match simulation coordinates
+7 mobile core checks passed
+(node:24566) [THREE_CJS_DEPRECATED] DeprecationWarning: `require("three")` is deprecated and will be removed.
+Replace `const THREE = require("three")` with `import * as THREE from "three"`.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+PASS 55 valid GLBs; 11 buildings each have five distinct tiers
+npm notice
+npm notice New major version of npm available! 11.9.0 -> 12.2.3
+npm notice Changelog: https://github.com/npm/cli/releases/tag/v12.2.3
+npm notice To update run: npm install -g npm@12.2.3
+npm notice
+
+> strait-of-hormuz-game@0.7.1 test:integrity
+> node scripts/test-integrity.cjs && node scripts/test-save-storage.cjs && node scripts/test-analytics.cjs && node scripts/test-save-api.cjs
+
+PASS non-campaign victory cannot unlock campaign or award campaign stars
+PASS new operation restores its full integrity; unclaimed rewards cannot be discarded by switching mode
+PASS identical battle action produces identical output without mutating input
+PASS mid-battle persistence retains hostile and friendly projectiles, reverse lanes, hacks and boss limits
+PASS malformed numeric actions and over-cap saved buildings cannot poison the economy
+PASS prestige retires previous-run combat and event entities
+PASS escort victory requires the caravan to reach its destination
+PASS allied hacked aircraft cannot fail an interception objective
+PASS selling returns the stated fraction of all invested tower upgrades
+PASS saving during combat preserves the next 15 seconds of deterministic mechanics
+PASS preparation coverage matches battle range in fog plus storm and short-range challenge
+11 integrity checks passed
+PASS save migration, corrupt-primary recovery, backup preservation, quota failure and invalid-state rejection
+PASS exact D20, deduplicated installations, D19/D21 exclusion, immature cohorts, daily presence dedupe and inconsistent IDs
+PASS API invalid/missing/future/stale revisions, concurrent same-version writes, size limit, legacy envelope migration and delete; transactional adapter only
+npm notice
+npm notice New major version of npm available! 11.9.0 -> 12.2.3
+npm notice Changelog: https://github.com/npm/cli/releases/tag/v12.2.3
+npm notice To update run: npm install -g npm@12.2.3
+npm notice
+
+> strait-of-hormuz-game@0.7.1 test:campaign
+> node scripts/test-campaign.cjs
+
+{
+  "gate": "25 authored operations; fully equipped fixture; not fresh-player pacing",
+  "rows": [
+    {
+      "wave": 1,
+      "hearts": 20,
+      "seconds": 8.875,
+      "objective": "repel"
+    },
+    {
+      "wave": 2,
+      "hearts": 20,
+      "seconds": 38.125,
+      "objective": "escort"
+    },
+    {
+      "wave": 3,
+      "hearts": 20,
+      "seconds": 11.5,
+      "objective": "airdef"
+    },
+    {
+      "wave": 4,
+      "hearts": 20,
+      "seconds": 17.5,
+      "objective": "intercept"
+    },
+    {
+      "wave": 5,
+      "hearts": 20,
+      "seconds": 33.25,
+      "objective": "repel"
+    },
+    {
+      "wave": 6,
+      "hearts": 20,
+      "seconds": 21.5,
+      "objective": "structure"
+    },
+    {
+      "wave": 7,
+      "hearts": 20,
+      "seconds": 28.875,
+      "objective": "siege"
+    },
+    {
+      "wave": 8,
+      "hearts": 20,
+      "seconds": 19.5,
+      "objective": "airdef"
+    },
+    {
+      "wave": 9,
+      "hearts": 20,
+      "seconds": 38.125,
+      "objective": "escort"
+    },
+    {
+      "wave": 10,
+      "hearts": 20,
+      "seconds": 72,
+      "objective": "structure"
+    },
+    {
+      "wave": 11,
+      "hearts": 20,
+      "seconds": 42,
+      "objective": "intercept"
+    },
+    {
+      "wave": 12,
+      "hearts": 20,
+      "seconds": 36.125,
+      "objective": "structure"
+    },
+    {
+      "wave": 13,
+      "hearts": 20,
+      "seconds": 43.75,
+      "objective": "repel"
+    },
+    {
+      "wave": 14,
+      "hearts": 20,
+      "seconds": 42.25,
+      "objective": "structure"
+    },
+    {
+      "wave": 15,
+      "hearts": 20,
+      "seconds": 64.75,
+      "objective": "siege"
+    },
+    {
+      "wave": 16,
+      "hearts": 20,
+      "seconds": 48,
+      "objective": "rescue"
+    },
+    {
+      "wave": 17,
+      "hearts": 20,
+      "seconds": 44.5,
+      "objective": "airdef"
+    },
+    {
+      "wave": 18,
+      "hearts": 20,
+      "seconds": 80.25,
+      "objective": "escort"
+    },
+    {
+      "wave": 19,
+      "hearts": 20,
+      "seconds": 85.125,
+      "objective": "repel"
+    },
+    {
+      "wave": 20,
+      "hearts": 20,
+      "seconds": 108.375,
+      "objective": "intercept"
+    },
+    {
+      "wave": 21,
+      "hearts": 20,
+      "seconds": 87,
+      "objective": "structure"
+    },
+    {
+      "wave": 22,
+      "hearts": 20,
+      "seconds": 61.625,
+      "objective": "siege"
+    },
+    {
+      "wave": 23,
+      "hearts": 20,
+      "seconds": 63,
+      "objective": "structure"
+    },
+    {
+      "wave": 24,
+      "hearts": 20,
+      "seconds": 87.5,
+      "objective": "rescue"
+    },
+    {
+      "wave": 25,
+      "hearts": 20,
+      "seconds": 195.75,
+      "objective": "repel"
+    }
+  ]
+}
+npm notice
+npm notice New major version of npm available! 11.9.0 -> 12.2.3
+npm notice Changelog: https://github.com/npm/cli/releases/tag/v12.2.3
+npm notice To update run: npm install -g npm@12.2.3
+npm notice
+
+> strait-of-hormuz-game@0.7.1 test:fresh-campaign
+> node scripts/test-fresh-campaign.cjs
+
+{"wave":1,"retry":0,"won":true,"prepareSeconds":180,"battleSeconds":24.875,"elapsed":204.875,"cash":1141,"hearts":20,"towers":4,"research":1}
+{"wave":2,"retry":0,"won":true,"prepareSeconds":9,"battleSeconds":38.125,"elapsed":252,"cash":2990,"hearts":20,"towers":5,"research":2}
+{"wave":3,"retry":0,"won":true,"prepareSeconds":323,"battleSeconds":16.5,"elapsed":591.5,"cash":39458,"hearts":20,"towers":6,"research":4}
+{"wave":4,"retry":0,"won":true,"prepareSeconds":55,"battleSeconds":28.5,"elapsed":675,"cash":46602,"hearts":20,"towers":7,"research":6}
+{"wave":5,"retry":0,"won":true,"prepareSeconds":2,"battleSeconds":69,"elapsed":746,"cash":58139,"hearts":20,"towers":8,"research":8}
+{"wave":6,"retry":0,"won":true,"prepareSeconds":3,"battleSeconds":39.125,"elapsed":788.125,"cash":52471,"hearts":20,"towers":9,"research":10}
+{"wave":7,"retry":0,"won":true,"prepareSeconds":2,"battleSeconds":34.125,"elapsed":824.25,"cash":56724,"hearts":20,"towers":10,"research":12}
+{"wave":8,"retry":0,"won":true,"prepareSeconds":4,"battleSeconds":19.875,"elapsed":848.125,"cash":44756,"hearts":20,"towers":11,"research":14}
+{"wave":9,"retry":0,"won":true,"prepareSeconds":3,"battleSeconds":44.875,"elapsed":896,"cash":39432,"hearts":20,"towers":12,"research":16}
+{"wave":10,"retry":0,"won":true,"prepareSeconds":3,"battleSeconds":58.5,"elapsed":957.5,"cash":41905,"hearts":20,"towers":13,"research":18}
+{"wave":11,"retry":0,"won":true,"prepareSeconds":3,"battleSeconds":41.875,"elapsed":1002.375,"cash":26039,"hearts":20,"towers":13,"research":20}
+{"wave":12,"retry":0,"won":true,"prepareSeconds":9,"battleSeconds":33.625,"elapsed":1045,"cash":10235,"hearts":20,"towers":13,"research":22}
+{"wave":13,"retry":0,"won":true,"prepareSeconds":1,"battleSeconds":44.75,"elapsed":1090.75,"cash":22907,"hearts":20,"towers":13,"research":24}
+{"wave":14,"retry":0,"won":true,"prepareSeconds":1,"battleSeconds":41.5,"elapsed":1133.25,"cash":31559,"hearts":20,"towers":13,"research":26}
+{"wave":15,"retry":0,"won":true,"prepareSeconds":1,"battleSeconds":65.625,"elapsed":1199.875,"cash":56560,"hearts":20,"towers":13,"research":28}
+{"wave":16,"retry":0,"won":true,"prepareSeconds":3,"battleSeconds":46.75,"elapsed":1249.625,"cash":68152,"hearts":20,"towers":13,"research":30}
+{"wave":17,"retry":0,"won":true,"prepareSeconds":0,"battleSeconds":30.875,"elapsed":1280.5,"cash":93739,"hearts":20,"towers":13,"research":30}
+{"wave":18,"retry":0,"won":true,"prepareSeconds":0,"battleSeconds":81.5,"elapsed":1362,"cash":125640,"hearts":20,"towers":13,"research":30}
+{"wave":19,"retry":0,"won":true,"prepareSeconds":0,"battleSeconds":90,"elapsed":1452,"cash":159552,"hearts":20,"towers":13,"research":30}
+{"wave":20,"retry":0,"won":true,"prepareSeconds":0,"battleSeconds":106.375,"elapsed":1558.375,"cash":201733,"hearts":20,"towers":13,"research":30}
+{"wave":21,"retry":0,"won":true,"prepareSeconds":3,"battleSeconds":100.625,"elapsed":1662,"cash":182039,"hearts":18,"towers":13,"research":30}
+{"wave":22,"retry":0,"won":true,"prepareSeconds":0,"battleSeconds":59.375,"elapsed":1721.375,"cash":216352,"hearts":20,"towers":13,"research":30}
+{"wave":23,"retry":0,"won":true,"prepareSeconds":0,"battleSeconds":51.5,"elapsed":1772.875,"cash":242519,"hearts":20,"towers":13,"research":30}
+{"wave":24,"retry":0,"won":true,"prepareSeconds":0,"battleSeconds":87.375,"elapsed":1860.25,"cash":290678,"hearts":17,"towers":13,"research":30}
+{"wave":25,"retry":0,"won":true,"prepareSeconds":0,"battleSeconds":183.125,"elapsed":2043.375,"cash":367583,"hearts":19,"towers":13,"research":30}
+{
+  "gate": "legal-action fresh campaign; expert policy; no human retention inference",
+  "actions": 20085,
+  "hours": 0.5676041666666667,
+  "failures": [],
+  "rows": [
+    {
+      "wave": 1,
+      "retry": 0,
+      "won": true,
+      "prepareSeconds": 180,
+      "battleSeconds": 24.875,
+      "elapsed": 204.875,
+      "cash": 1141,
+      "hearts": 20,
+      "towers": 4,
+      "research": 1
+    },
+    {
+      "wave": 2,
+      "retry": 0,
+      "won": true,
+      "prepareSeconds": 9,
+      "battleSeconds": 38.125,
+      "elapsed": 252,
+      "cash": 2990,
+      "hearts": 20,
+      "towers": 5,
+      "research": 2
+    },
+    {
+      "wave": 3,
+      "retry": 0,
+      "won": true,
+      "prepareSeconds": 323,
+      "battleSeconds": 16.5,
+      "elapsed": 591.5,
+      "cash": 39458,
+      "hearts": 20,
+      "towers": 6,
+      "research": 4
+    },
+    {
+      "wave": 4,
+      "retry": 0,
+      "won": true,
+      "prepareSeconds": 55,
+      "battleSeconds": 28.5,
+      "elapsed": 675,
+      "cash": 46602,
+      "hearts": 20,
+      "towers": 7,
+      "research": 6
+    },
+    {
+      "wave": 5,
+      "retry": 0,
+      "won": true,
+      "prepareSeconds": 2,
+      "battleSeconds": 69,
+      "elapsed": 746,
+      "cash": 58139,
+      "hearts": 20,
+      "towers": 8,
+      "research": 8
+    },
+    {
+      "wave": 6,
+      "retry": 0,
+      "won": true,
+      "prepareSeconds": 3,
+      "battleSeconds": 39.125,
+      "elapsed": 788.125,
+      "cash": 52471,
+      "hearts": 20,
+      "towers": 9,
+      "research": 10
+    },
+    {
+      "wave": 7,
+      "retry": 0,
+      "won": true,
+      "prepareSeconds": 2,
+      "battleSeconds": 34.125,
+      "elapsed": 824.25,
+      "cash": 56724,
+      "hearts": 20,
+      "towers": 10,
+      "research": 12
+    },
+    {
+      "wave": 8,
+      "retry": 0,
+      "won": true,
+      "prepareSeconds": 4,
+      "battleSeconds": 19.875,
+      "elapsed": 848.125,
+      "cash": 44756,
+      "hearts": 20,
+      "towers": 11,
+      "research": 14
+    },
+    {
+      "wave": 9,
+      "retry": 0,
+      "won": true,
+      "prepareSeconds": 3,
+      "battleSeconds": 44.875,
+      "elapsed": 896,
+      "cash": 39432,
+      "hearts": 20,
+      "towers": 12,
+      "research": 16
+    },
+    {
+      "wave": 10,
+      "retry": 0,
+      "won": true,
+      "prepareSeconds": 3,
+      "battleSeconds": 58.5,
+      "elapsed": 957.5,
+      "cash": 41905,
+      "hearts": 20,
+      "towers": 13,
+      "research": 18
+    },
+    {
+      "wave": 11,
+      "retry": 0,
+      "won": true,
+      "prepareSeconds": 3,
+      "battleSeconds": 41.875,
+      "elapsed": 1002.375,
+      "cash": 26039,
+      "hearts": 20,
+      "towers": 13,
+      "research": 20
+    },
+    {
+      "wave": 12,
+      "retry": 0,
+      "won": true,
+      "prepareSeconds": 9,
+      "battleSeconds": 33.625,
+      "elapsed": 1045,
+      "cash": 10235,
+      "hearts": 20,
+      "towers": 13,
+      "research": 22
+    },
+    {
+      "wave": 13,
+      "retry": 0,
+      "won": true,
+      "prepareSeconds": 1,
+      "battleSeconds": 44.75,
+      "elapsed": 1090.75,
+      "cash": 22907,
+      "hearts": 20,
+      "towers": 13,
+      "research": 24
+    },
+    {
+      "wave": 14,
+      "retry": 0,
+      "won": true,
+      "prepareSeconds": 1,
+      "battleSeconds": 41.5,
+      "elapsed": 1133.25,
+      "cash": 31559,
+      "hearts": 20,
+      "towers": 13,
+      "research": 26
+    },
+    {
+      "wave": 15,
+      "retry": 0,
+      "won": true,
+      "prepareSeconds": 1,
+      "battleSeconds": 65.625,
+      "elapsed": 1199.875,
+      "cash": 56560,
+      "hearts": 20,
+      "towers": 13,
+      "research": 28
+    },
+    {
+      "wave": 16,
+      "retry": 0,
+      "won": true,
+      "prepareSeconds": 3,
+      "battleSeconds": 46.75,
+      "elapsed": 1249.625,
+      "cash": 68152,
+      "hearts": 20,
+      "towers": 13,
+      "research": 30
+    },
+    {
+      "wave": 17,
+      "retry": 0,
+      "won": true,
+      "prepareSeconds": 0,
+      "battleSeconds": 30.875,
+      "elapsed": 1280.5,
+      "cash": 93739,
+      "hearts": 20,
+      "towers": 13,
+      "research": 30
+    },
+    {
+      "wave": 18,
+      "retry": 0,
+      "won": true,
+      "prepareSeconds": 0,
+      "battleSeconds": 81.5,
+      "elapsed": 1362,
+      "cash": 125640,
+      "hearts": 20,
+      "towers": 13,
+      "research": 30
+    },
+    {
+      "wave": 19,
+      "retry": 0,
+      "won": true,
+      "prepareSeconds": 0,
+      "battleSeconds": 90,
+      "elapsed": 1452,
+      "cash": 159552,
+      "hearts": 20,
+      "towers": 13,
+      "research": 30
+    },
+    {
+      "wave": 20,
+      "retry": 0,
+      "won": true,
+      "prepareSeconds": 0,
+      "battleSeconds": 106.375,
+      "elapsed": 1558.375,
+      "cash": 201733,
+      "hearts": 20,
+      "towers": 13,
+      "research": 30
+    },
+    {
+      "wave": 21,
+      "retry": 0,
+      "won": true,
+      "prepareSeconds": 3,
+      "battleSeconds": 100.625,
+      "elapsed": 1662,
+      "cash": 182039,
+      "hearts": 18,
+      "towers": 13,
+      "research": 30
+    },
+    {
+      "wave": 22,
+      "retry": 0,
+      "won": true,
+      "prepareSeconds": 0,
+      "battleSeconds": 59.375,
+      "elapsed": 1721.375,
+      "cash": 216352,
+      "hearts": 20,
+      "towers": 13,
+      "research": 30
+    },
+    {
+      "wave": 23,
+      "retry": 0,
+      "won": true,
+      "prepareSeconds": 0,
+      "battleSeconds": 51.5,
+      "elapsed": 1772.875,
+      "cash": 242519,
+      "hearts": 20,
+      "towers": 13,
+      "research": 30
+    },
+    {
+      "wave": 24,
+      "retry": 0,
+      "won": true,
+      "prepareSeconds": 0,
+      "battleSeconds": 87.375,
+      "elapsed": 1860.25,
+      "cash": 290678,
+      "hearts": 17,
+      "towers": 13,
+      "research": 30
+    },
+    {
+      "wave": 25,
+      "retry": 0,
+      "won": true,
+      "prepareSeconds": 0,
+      "battleSeconds": 183.125,
+      "elapsed": 2043.375,
+      "cash": 367583,
+      "hearts": 19,
+      "towers": 13,
+      "research": 30
+    }
+  ]
+}
+npm notice
+npm notice New major version of npm available! 11.9.0 -> 12.2.3
+npm notice Changelog: https://github.com/npm/cli/releases/tag/v12.2.3
+npm notice To update run: npm install -g npm@12.2.3
+npm notice
+1) deep-freeze immutability: PASS (48 ticks, input untouched, tick-subtrees copied, research/cards shared)
+2) discrete fire: PASS (9 shots in 2s, total impact damage 108 = sum of shot records, ammo -9)
+3) destroyer intercept: PASS (shot of 180 dmg nullified at impact, intercept=3.63s left)
+4) boss-3 shield vs burn: PASS (35.0 damage in 1s of 100-dps burn)
+5) weapons-spec + towerDps derivation: PASS
+6) cadence matrix: PASS (29 configs × 3 speeds, all within ±10% of spec)
+   autocannon  T1 spec 4.00/s → 1× 4.02 (0.4%) · 2× 4.01 (0.2%) · 3× 4.01 (0.1%)
+   autocannon  T2 spec 4.40/s → 1× 4.42 (0.4%) · 2× 4.41 (0.2%) · 3× 4.41 (0.1%)
+   autocannon  T3 spec 5.00/s → 1× 5.00 (0.0%) · 2× 5.00 (0.0%) · 3× 5.00 (0.0%)
+   ciws        T4 spec 14.00/s → 1× 14.02 (0.1%) · 2× 14.01 (0.1%) · 3× 14.01 (0.0%)
+   railgun     T4 spec 0.55/s → 1× 0.57 (3.0%) · 2× 0.56 (1.5%) · 3× 0.56 (1.0%)
+   howitzer    T1 spec 0.50/s → 1× 0.52 (3.3%) · 2× 0.51 (1.7%) · 3× 0.51 (1.1%)
+   howitzer    T2 spec 0.55/s → 1× 0.57 (3.0%) · 2× 0.56 (1.5%) · 3× 0.56 (1.0%)
+   howitzer    T3 spec 0.60/s → 1× 0.60 (0.0%) · 2× 0.60 (0.0%) · 3× 0.60 (0.0%)
+   mlrs        T4 spec 2.71/s → 1× 2.80 (3.2%) · 2× 2.75 (1.3%) · 3× 2.73 (0.7%)
+   thermobaric T4 spec 0.32/s → 1× 0.33 (4.2%) · 2× 0.33 (1.6%) · 3× 0.32 (0.7%)
+   silo        T1 spec 0.20/s → 1× 0.22 (8.3%) · 2× 0.21 (4.2%) · 3× 0.21 (2.8%)
+   silo        T2 spec 0.22/s → 1× 0.23 (6.1%) · 2× 0.23 (2.3%) · 3× 0.22 (1.0%)
+   silo        T3 spec 0.25/s → 1× 0.27 (6.7%) · 2× 0.26 (3.3%) · 3× 0.26 (2.2%)
+   hypersonic  T4 spec 0.16/s → 1× 0.17 (4.2%) · 2× 0.17 (4.2%) · 3× 0.16 (0.7%)
+   swarm       T4 spec 0.30/s → 1× 0.30 (0.0%) · 2× 0.30 (0.0%) · 3× 0.30 (0.0%)
+   aadefense   T1 spec 2.00/s → 1× 2.02 (0.8%) · 2× 2.01 (0.4%) · 3× 2.01 (0.3%)
+   aadefense   T2 spec 2.40/s → 1× 2.40 (0.0%) · 2× 2.40 (0.0%) · 3× 2.40 (0.0%)
+   aadefense   T3 spec 3.00/s → 1× 3.02 (0.6%) · 2× 3.01 (0.3%) · 3× 3.01 (0.2%)
+   bavar       T4 spec 0.40/s → 1× 0.42 (4.2%) · 2× 0.41 (2.1%) · 3× 0.41 (1.4%)
+   ew          T1 spec 1.00/s → 1× 1.02 (1.7%) · 2× 1.01 (0.8%) · 3× 1.01 (0.6%)
+   ew          T2 spec 1.20/s → 1× 1.20 (0.0%) · 2× 1.20 (0.0%) · 3× 1.20 (0.0%)
+   ew          T3 spec 1.50/s → 1× 1.52 (1.1%) · 2× 1.51 (0.6%) · 3× 1.51 (0.4%)
+   emp         T4 spec 0.50/s → 1× 0.50 (0.0%) · 2× 0.50 (0.0%) · 3× 0.50 (0.0%)
+   sonar       T4 spec 1.00/s → 1× 1.02 (1.7%) · 2× 1.01 (0.8%) · 3× 1.01 (0.6%)
+   garrison    T1 spec 4.50/s → 1× 4.52 (0.4%) · 2× 4.51 (0.2%) · 3× 4.51 (0.1%)
+   garrison    T2 spec 5.40/s → 1× 5.40 (0.0%) · 2× 5.40 (0.0%) · 3× 5.40 (0.0%)
+   garrison    T3 spec 6.60/s → 1× 6.62 (0.3%) · 2× 6.61 (0.1%) · 3× 6.61 (0.1%)
+   torpedo     T4 spec 4.50/s → 1× 4.50 (0.0%) · 2× 4.50 (0.0%) · 3× 4.50 (0.0%)
+   mine        T4 spec 0.35/s → 1× 0.35 (0.0%) · 2× 0.35 (0.0%) · 3× 0.35 (0.0%)
+7) ammo ruling: PASS (insufficient stock → no shot, no consumption, 3× retry; zero-ammo weapons and overdrive unaffected)
+8a) bavar air-only multi-lock: PASS (9 missiles on the air target only, destroyer untouched)
+8) point-defense keys: PASS (bavar air-only verified above; swarm landed for 3420 dmg, no window)
+9) impact-queue hygiene: PASS (battle ended → phase intermission, queue empty)
+10) fireStats: PASS (shots at fire time, hits/fizzled at resolution, pirate records excluded)
+
+ALL ROOT PROBES PASSED
+1) EMP pulse: PASS (40 dmg @2s cadence, weapon/radar down ~4s, movement ×0.40, no ordinary shots, charge holds empty)
+2) sonar hack: PASS (hacked at tick 96, frozen + untargetable for 10s, dealt 50 dmg to its fleet in 2s, reverts cleanly)
+3) sub detection: PASS (healthy sonar = map-wide reveal; stunned sonar = no reveal — team-3b fix)
+4) garrison boats: PASS (3 boats, blocked at station 0.772≈0.758, 198 boat-fired shots, sink + respawn observed)
+5) torpedo squadron: PASS (5 boats, destroyer pinned at 0 movement in 6s, speed boat passes, subs refused)
+6) minefield + Ghadir: PASS (10-mine cap on-lane, 4 ammo/mine, 300 blast + replant, Ghadir fires with sub priority from its own position)
+7) immutability: PASS (48 frozen ticks, 4 boats + 1 mines live only in the copy)
+8) mine blast air exclusion: PASS (sea victim blasted, air at 0.47 units untouched)
+9) torpedo vulnerability: PASS (return fire lands, 5 sinkings, pin released after the squadron fell)
+10) ghadir vulnerability: PASS (wounded by ASW fire, sunk after ~48s, branch silent while down)
+11) spells spare hacked drones: PASS (no damage, no stun, no bounty, no credit)
+12) hacked cleanup: PASS (wave ends immediately, no hang, no leak)
+13) save round-trip: PASS (mines + boat HP/state/clock restored; tampered entries sanitized)
+14) anti-boat balance: PASS (fire spread over 3 boats; wave growth ratio 1.104)
+
+ALL MECH-A PROBES PASSED
+1) MLRS salvo: PASS (36 rockets in 13s = 3 salvos of 12, 2 reload silences >= 3s, in-salvo gap <= 0.26s, reload state visible, towerDps 188.9)
+2a) swarm multi-lock: PASS (4 missiles over 3 targets as 2/1/1, 1 cadence record, 4 independent impacts queued)
+2b) swarm no-splash: PASS (each target lost exactly its own locked missiles: 760 / 760)
+3) bavar air-only hold-fire: PASS (0 shots at a sea target in 5s)
+4a) destroyer missile + CIWS intercept: PASS (1 launch at 5s, missile tracked in state, intercepted, zero tower stuns)
+4b) CIWS budget cap: PASS (4 launches → exactly 3 intercepts, 4th missile disabled its tower for 4s)
+4c) unintercepted missile: PASS (lands on the target tower, 4.0s stun)
+4d) silenced destroyer: PASS (weapon-down stamp and stun both → 0 launches in 12s)
+4e) CIWS continuous feed: PASS (12 intercepts in 20s, worst 5s span closed=3 half-open=3, 9 in 15s = 0.60/s, 131 missiles got through)
+5) boss-2 missile stun: PASS (launch event + missile entity, stun only on impact, 4.0s)
+6) boss clock = effective time: PASS (stunned → 0.00 in 3s; slowed x0.4 → clock 1.60s / progress +0.018 in 4s)
+7) boss adds ruling: PASS (6 fanned adds span >= 0.05, spawn event emitted, add pays 14 = 25% of 56 with combo untouched, normal kill pays 56 + combo, cap 40 enforced)
+8) boss ability events: PASS (shield-down at 10s, shield-up at 15s, boss-spawn covered in probe 7)
+
+ALL MECH-B PROBES PASSED
+1) composition ×25 ops: PASS (airdef ≥60%, drone ≥40%, op3 air-first, boss last, siege two-front, preview==queue)
+2) generator memory: PASS (30 unique names, rotation, forced 5th-run events, varied non-repeating news)
+3) generator gating: PASS (zones/objectives follow islands, platforms, tanker state)
+4) condition weights: PASS (spec weights, tier gates, none-probability)
+5) diary: PASS (day/zone/result fields, pre-battle retry dedupe)
+6) mechanics integration: PASS (ctx roll, fog/night range, dawn window, intercept, escort, structure, airdef threshold, mines + sweep)
+7) save integrity: PASS (context round-trip, safe downgrade, frozen tick with mines/escort)
+8) QA round-2 regressions: PASS (cross-process generator stability, commit-at-start, fog×storm, mine freeze, hydrate clamps, library ≥10)
+
+ALL SCEN PROBES PASSED
+VIP UNDEFENDED TTK 29.875s (band 28–33)
+VIP DEFENDED: crossing done at 46.25s, escort kills 2
+ECONOMY PROBE DIGEST {"cash":5000,"oil":932.2,"fuel":181.52,"steel":181.52,"ammo":615.19,"bank":1686.9,"lifetimeIncome":1426.9,"exportedDollars":756.9,"exportWindowDollars":756.9,"exportWindowTime":50,"tankerStage":"loading","tankerLoad":378.45,"cycles":0,"merchants":7,"security":72,"destroyed":0,"piratesDestroyed":1}
+test-economy: all ECO assertions passed
+1a) max state OK: rows [40,30,20,30,10,−30] sum = 100 = stats.stability
+1b) 76 state OK: 5 rows, no cap row, sum = 76
+1c) over-cap state OK: raw 125, cap row -25, sum = 100
+2a) branch power OK: raw 80 MW → effective 52 MW with capacitors
+2b) choice range OK: raw 17 → effective 20.4 with radar
+ALL UI ROUND-2 PROBES PASSED
+[opening-line] fresh player: cash=1200 steel=150
+[opening-line] t=0 claim mission first-profit: cash=1770 xp=55
+[opening-line] t=0 upgrade oil -> L2 (mission oil-five)
+[opening-line] t=0 upgrade oil -> L3 (mission oil-five)
+[opening-line] t=0 upgrade oil -> L4 (mission oil-five)
+[opening-line] t=0 upgrade oil -> L5 (mission oil-five)
+[opening-line] t=0 claim mission oil-five: cash=1694 xp=162
+[opening-line] t=0 upgrade dock -> L2 (mission busy-port)
+[opening-line] t=0 upgrade dock -> L3 (mission busy-port)
+[opening-line] t=0 claim mission busy-port: cash=1722 xp=238
+[opening-line] t=0 hire manager harbor (mission first-manager)
+[opening-line] t=0 claim mission first-manager: cash=1572 xp=368
+[opening-line] t=0 build cannon@2 -> cash=1322 steel=120
+[opening-line] t=0 build heavy@5 -> cash=942 steel=75
+[opening-line] WAVE 1 start: objective=repel queue={"speed":6} towers=[cannon@2t1, heavy@5t1] cash=942 steel=75 grid=1
+[opening-line] WAVE 1 VICTORY: hearts=20 airLeaked=0/0 objective=repel
+[opening-line] t=30 claim battle reward: cash=2399
+[opening-line] t=30 claim mission first-defense: cash=3149 xp=669
+[opening-line] WAVE 2 start: objective=escort queue={"speed":6,"corvette":1} towers=[cannon@2t1, heavy@5t1] cash=3149 steel=75 grid=1
+[opening-line] WAVE 2 VICTORY: hearts=20 airLeaked=0/0 objective=escort
+[opening-line] t=72 claim battle reward: cash=6908
+[opening-line] WAVE 3 x7: survived 7/7 leaks=[1, 1, 1, 1, 1, 1, 1] towers=[cannon@2t1, heavy@5t1] steel=75 cash=6908
+[mission-line] fresh player: cash=1200 steel=150
+[mission-line] t=0 claim mission first-profit: cash=1770 xp=55
+[mission-line] t=0 upgrade oil -> L2 (mission oil-five)
+[mission-line] t=0 upgrade oil -> L3 (mission oil-five)
+[mission-line] t=0 upgrade oil -> L4 (mission oil-five)
+[mission-line] t=0 upgrade oil -> L5 (mission oil-five)
+[mission-line] t=0 claim mission oil-five: cash=1694 xp=162
+[mission-line] t=0 upgrade dock -> L2 (mission busy-port)
+[mission-line] t=0 upgrade dock -> L3 (mission busy-port)
+[mission-line] t=0 claim mission busy-port: cash=1722 xp=238
+[mission-line] t=0 hire manager harbor (mission first-manager)
+[mission-line] t=0 claim mission first-manager: cash=1572 xp=368
+[mission-line] t=0 build cannon@2 -> cash=1322 steel=120
+[mission-line] t=0 build heavy@5 -> cash=942 steel=75
+[mission-line] WAVE 1 start: objective=repel queue={"speed":6} towers=[cannon@2t1, heavy@5t1] cash=942 steel=75 grid=1
+[mission-line] WAVE 1 VICTORY: hearts=20 airLeaked=0/0 objective=repel
+[mission-line] t=30 claim battle reward: cash=2399
+[mission-line] t=30 claim mission first-defense: cash=3149 xp=669
+[mission-line] t=30 build ew@8 -> cash=2729 steel=35
+[mission-line] t=30 build cannon@0 -> cash=2479 steel=5
+[mission-line] t=30 claim mission four-towers: cash=3279 xp=769
+[mission-line] t=30 upgrade refinery -> L1 (mission refinery-five)
+[mission-line] t=30 upgrade refinery -> L2 (mission refinery-five)
+[mission-line] t=30 upgrade refinery -> L3 (mission refinery-five)
+[mission-line] t=30 upgrade refinery -> L4 (mission refinery-five)
+[mission-line] t=30 upgrade refinery -> L5 (mission refinery-five)
+[mission-line] t=30 claim mission refinery-five: cash=2255 xp=929
+[mission-line] t=30 research gas (mission first-tech)
+[mission-line] t=30 claim mission first-tech: cash=2755 xp=1054
+[mission-line] t=30 upgrade oil -> L6 (mission oil-ten)
+[mission-line] t=30 upgrade oil -> L7 (mission oil-ten)
+[mission-line] t=30 upgrade oil -> L8 (mission oil-ten)
+[mission-line] t=30 upgrade oil -> L9 (mission oil-ten)
+[mission-line] t=30 upgrade oil -> L10 (mission oil-ten)
+[mission-line] t=30 claim mission oil-ten: cash=3196 xp=1324
+[mission-line] t=30 upgrade steel -> L1 (mission steel-first)
+[mission-line] t=30 claim mission steel-first: cash=3296 xp=1412
+[mission-line] t=30 power -> L2 (grid=0.60)
+[mission-line] t=30 power -> L3 (grid=0.90)
+[mission-line] t=30 power -> L4 (grid=1.00)
+[mission-line] WAVE 2 start: objective=escort queue={"speed":6,"corvette":1} towers=[cannon@2t1, heavy@5t1, ew@8t1, cannon@0t1] cash=699 steel=5 grid=1
+[mission-line] WAVE 2 VICTORY: hearts=20 airLeaked=0/0 objective=escort
+[mission-line] t=71 claim battle reward: cash=6185
+[mission-line] t=71 build boat@4 -> cash=5735 steel=94.92466346153728
+[mission-line] t=71 build heavy@7 -> cash=5355 steel=49.92466346153728
+[mission-line] t=71 build cannon@3 -> cash=5105 steel=19.92466346153728
+[mission-line] WAVE 3 x7: survived 7/7 leaks=[0, 0, 0, 0, 0, 0, 0] towers=[cannon@2t1, heavy@5t1, ew@8t1, cannon@0t1, boat@4t1, heavy@7t1, cannon@3t1] steel=19.92466346153728 cash=5105
+AUDIT_JSON_BEGIN
+{
+ "probe": "probe_wave3",
+ "section": "§fresh-player gate (D-024)",
+ "assertions": [
+  {
+   "section": "§fresh-player gate (D-024)",
+   "id": "wave3.opening_line",
+   "name": "guided fresh player, opening line only, survives wave 3",
+   "status": "pass",
+   "expected": "wave 3 victory in all 7 combat-RNG attempts from the guided pre-wave state",
+   "actual": "victory at wave 3 (survived 7/7 attempts)",
+   "detail": "wave 3 cleared in all attempts: leaks=[1, 1, 1, 1, 1, 1, 1]/6 towers=[cannon@2t1, heavy@5t1]"
+  },
+  {
+   "section": "§fresh-player gate (D-024)",
+   "id": "wave3.mission_line",
+   "name": "guided fresh player, four-towers line, survives wave 3",
+   "status": "pass",
+   "expected": "wave 3 victory in all 7 combat-RNG attempts from the guided pre-wave state",
+   "actual": "victory at wave 3 (survived 7/7 attempts)",
+   "detail": "wave 3 cleared in all attempts: leaks=[0, 0, 0, 0, 0, 0, 0]/6 towers=[cannon@2t1, heavy@5t1, ew@8t1, cannon@0t1, boat@4t1, heavy@7t1, cannon@3t1]"
+  }
+ ],
+ "meta": {
+  "runs": {
+   "opening-line": {
+    "waveResults": [
+     {
+      "wave": 1,
+      "victory": true,
+      "hearts": 20,
+      "airLeaked": 0,
+      "airTotal": 0,
+      "objective": "repel",
+      "fireStats": {
+       "hero": {
+        "shots": 9,
+        "hits": 7,
+        "fizzled": 2
+       },
+       "howitzer": {
+        "shots": 4,
+        "hits": 4,
+        "fizzled": 0
+       },
+       "autocannon": {
+        "shots": 10,
+        "hits": 8,
+        "fizzled": 1
+       }
+      },
+      "start": {
+       "wave": 1,
+       "objective": "repel",
+       "queue": {
+        "speed": 6
+       },
+       "towers": [
+        "cannon@2t1",
+        "heavy@5t1"
+       ],
+       "cash": 942,
+       "steel": 75,
+       "hearts": 20,
+       "grid": 1
+      }
+     },
+     {
+      "wave": 2,
+      "victory": true,
+      "hearts": 20,
+      "airLeaked": 0,
+      "airTotal": 0,
+      "objective": "escort",
+      "fireStats": {
+       "hero": {
+        "shots": 23,
+        "hits": 20,
+        "fizzled": 3
+       },
+       "howitzer": {
+        "shots": 10,
+        "hits": 9,
+        "fizzled": 0
+       },
+       "autocannon": {
+        "shots": 24,
+        "hits": 20,
+        "fizzled": 3
+       }
+      },
+      "start": {
+       "wave": 2,
+       "objective": "escort",
+       "queue": {
+        "speed": 6,
+        "corvette": 1
+       },
+       "towers": [
+        "cannon@2t1",
+        "heavy@5t1"
+       ],
+       "cash": 3149,
+       "steel": 75,
+       "hearts": 20,
+       "grid": 1
+      }
+     },
+     {
+      "wave": 3,
+      "victory": true,
+      "attempts": [
+       {
+        "victory": true,
+        "hearts": 19,
+        "airLeaked": 1,
+        "airTotal": 6
+       },
+       {
+        "victory": true,
+        "hearts": 19,
+        "airLeaked": 1,
+        "airTotal": 6
+       },
+       {
+        "victory": true,
+        "hearts": 19,
+        "airLeaked": 1,
+        "airTotal": 6
+       },
+       {
+        "victory": true,
+        "hearts": 19,
+        "airLeaked": 1,
+        "airTotal": 6
+       },
+       {
+        "victory": true,
+        "hearts": 19,
+        "airLeaked": 1,
+        "airTotal": 6
+       },
+       {
+        "victory": true,
+        "hearts": 19,
+        "airLeaked": 1,
+        "airTotal": 6
+       },
+       {
+        "victory": true,
+        "hearts": 19,
+        "airLeaked": 1,
+        "airTotal": 6
+       }
+      ],
+      "hearts": 19,
+      "airLeaked": 1,
+      "airTotal": 6,
+      "objective": "airdef",
+      "fireStats": {
+       "hero": {
+        "shots": 33,
+        "hits": 28,
+        "fizzled": 5
+       },
+       "howitzer": {
+        "shots": 14,
+        "hits": 13,
+        "fizzled": 0
+       },
+       "autocannon": {
+        "shots": 72,
+        "hits": 64,
+        "fizzled": 6
+       }
+      },
+      "start": {
+       "wave": 3,
+       "objective": "airdef",
+       "towers": [
+        "cannon@2t1",
+        "heavy@5t1"
+       ],
+       "cash": 6908,
+       "steel": 75,
+       "hearts": 20,
+       "grid": 1
+      }
+     }
+    ],
+    "final": {
+     "cash": 6908,
+     "steel": 75,
+     "highestWave": 2,
+     "phase": "intermission",
+     "elapsed": 72
+    }
+   },
+   "mission-line": {
+    "waveResults": [
+     {
+      "wave": 1,
+      "victory": true,
+      "hearts": 20,
+      "airLeaked": 0,
+      "airTotal": 0,
+      "objective": "repel",
+      "fireStats": {
+       "hero": {
+        "shots": 9,
+        "hits": 7,
+        "fizzled": 2
+       },
+       "howitzer": {
+        "shots": 4,
+        "hits": 4,
+        "fizzled": 0
+       },
+       "autocannon": {
+        "shots": 10,
+        "hits": 8,
+        "fizzled": 1
+       }
+      },
+      "start": {
+       "wave": 1,
+       "objective": "repel",
+       "queue": {
+        "speed": 6
+       },
+       "towers": [
+        "cannon@2t1",
+        "heavy@5t1"
+       ],
+       "cash": 942,
+       "steel": 75,
+       "hearts": 20,
+       "grid": 1
+      }
+     },
+     {
+      "wave": 2,
+      "victory": true,
+      "hearts": 20,
+      "airLeaked": 0,
+      "airTotal": 0,
+      "objective": "escort",
+      "fireStats": {
+       "hero": {
+        "shots": 23,
+        "hits": 20,
+        "fizzled": 3
+       },
+       "howitzer": {
+        "shots": 9,
+        "hits": 9,
+        "fizzled": 0
+       },
+       "autocannon": {
+        "shots": 27,
+        "hits": 21,
+        "fizzled": 3
+       }
+      },
+      "start": {
+       "wave": 2,
+       "objective": "escort",
+       "queue": {
+        "speed": 6,
+        "corvette": 1
+       },
+       "towers": [
+        "cannon@2t1",
+        "heavy@5t1",
+        "ew@8t1",
+        "cannon@0t1"
+       ],
+       "cash": 699,
+       "steel": 5,
+       "hearts": 20,
+       "grid": 1
+      }
+     },
+     {
+      "wave": 3,
+      "victory": true,
+      "attempts": [
+       {
+        "victory": true,
+        "hearts": 20,
+        "airLeaked": 0,
+        "airTotal": 6
+       },
+       {
+        "victory": true,
+        "hearts": 20,
+        "airLeaked": 0,
+        "airTotal": 6
+       },
+       {
+        "victory": true,
+        "hearts": 20,
+        "airLeaked": 0,
+        "airTotal": 6
+       },
+       {
+        "victory": true,
+        "hearts": 20,
+        "airLeaked": 0,
+        "airTotal": 6
+       },
+       {
+        "victory": true,
+        "hearts": 20,
+        "airLeaked": 0,
+        "airTotal": 6
+       },
+       {
+        "victory": true,
+        "hearts": 20,
+        "airLeaked": 0,
+        "airTotal": 6
+       },
+       {
+        "victory": true,
+        "hearts": 20,
+        "airLeaked": 0,
+        "airTotal": 6
+       }
+      ],
+      "hearts": 20,
+      "airLeaked": 0,
+      "airTotal": 6,
+      "objective": "airdef",
+      "fireStats": {
+       "hero": {
+        "shots": 32,
+        "hits": 26,
+        "fizzled": 5
+       },
+       "howitzer": {
+        "shots": 9,
+        "hits": 9,
+        "fizzled": 0
+       },
+       "autocannon": {
+        "shots": 93,
+        "hits": 72,
+        "fizzled": 15
+       },
+       "garrison": {
+        "shots": 15,
+        "hits": 13,
+        "fizzled": 2
+       }
+      },
+      "start": {
+       "wave": 3,
+       "objective": "airdef",
+       "towers": [
+        "cannon@2t1",
+        "heavy@5t1",
+        "ew@8t1",
+        "cannon@0t1",
+        "boat@4t1",
+        "heavy@7t1",
+        "cannon@3t1"
+       ],
+       "cash": 5105,
+       "steel": 19.92466346153728,
+       "hearts": 20,
+       "grid": 1
+      }
+     }
+    ],
+    "final": {
+     "cash": 5105,
+     "steel": 19.92466346153728,
+     "highestWave": 2,
+     "phase": "intermission",
+     "elapsed": 71
+    }
+   }
+  }
+ }
+}
+AUDIT_JSON_END
+[PASS] wave3.opening_line wave 3 cleared in all attempts: leaks=[1, 1, 1, 1, 1, 1, 1]/6 towers=[cannon@2t1, heavy@5t1]
+[PASS] wave3.mission_line wave 3 cleared in all attempts: leaks=[0, 0, 0, 0, 0, 0, 0]/6 towers=[cannon@2t1, heavy@5t1, ew@8t1, cannon@0t1, boat@4t1, heavy@7t1, cannon@3t1]
+[PASS] teach.fires_wave4_prestart — wave 4 pre-start: {"units":9,"heroReady":false} (want units=9, heroReady=false)
+[PASS] teach.fires_wave4_rolled — wave 4 with battle rolled (objective=intercept): {"units":9,"heroReady":false}
+[PASS] teach.silent_unless_intercept — intercept waves in campaign: [4,11,20]; warning/objective mismatches: [] (want none)
+[PASS] teach.hero_ready_flag — hero already type 2: heroReady=true (want true)
+[PASS] teach.pure_peek — state JSON byte-identical across two warning calls (D-024 purity precedent)
+[PASS] gate.arrival — doorstep: highestWave=3 wave=4 phase=intermission doorstop=true defeated=null towers=[cannon@2t1, heavy@5t1, ew@8t1, cannon@3t1, air@7t1, missile@0t1, cannon@1t1, boat@4t1] hero=0
+[PASS] gate.warning_at_doorstep — the briefing guidance at the doorstep: {"units":9,"heroReady":false} (want non-null)
+[PASS] gate.guided_clears_wave4 — guided: phase=intermission highestWave=4 hearts=20 emp=true strike=true
+[PASS] gate.shore_defense_clears_wave4 — unguided: phase=intermission reason=undefined hearts=20 (want victory from shore defense without a mandatory spell combo)
+
+probe_wave4_teaching: 9/9 pass
+
+> strait-of-hormuz-game@0.7.1 test:recovery
+> node scripts/test-combat-presentation.cjs && node scripts/test-model-preload.cjs && node scripts/test-frame-recorder.cjs && node scripts/test-render-pacer.cjs && node scripts/test-model-retry.cjs
+
+(node:24929) [THREE_CJS_DEPRECATED] DeprecationWarning: `require("three")` is deprecated and will be removed.
+Replace `const THREE = require("three")` with `import * as THREE from "three"`.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+✔ new and recycled projectile render at the launch position on the first draw (80.133693ms)
+✔ flight uses elapsed battle time at 1/2/3× including slow frames and pauses (728.705285ms)
+✔ mechanics distinguish visible destruction from leaks and wave cleanup (8.605655ms)
+✔ pooled beam has its current full length on the first draw (10.271831ms)
+✔ only living smoke and sparks reach the GPU, including expiry and pool reuse (33.861651ms)
+✔ pirate engagements respect the same ammunition and target restrictions (1.851981ms)
+ℹ tests 6
+ℹ suites 0
+ℹ pass 6
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 872.015321
+(node:24936) [THREE_CJS_DEPRECATED] DeprecationWarning: `require("three")` is deprecated and will be removed.
+Replace `const THREE = require("three")` with `import * as THREE from "three"`.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+PASS 30 warmups without a discarded clone; placements clone independently
+PASS frame timeline, render-hook stalls, first wall-clock minute, native export retry
+PASS 30/60 Hz frame and animation budgets at 60/90/120/144 Hz, stall and resume
+PASS HUD reports counted frames through stalls and resets on resume
+(node:24964) [THREE_CJS_DEPRECATED] DeprecationWarning: `require("three")` is deprecated and will be removed.
+Replace `const THREE = require("three")` with `import * as THREE from "three"`.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+(node:24972) [THREE_CJS_DEPRECATED] DeprecationWarning: `require("three")` is deprecated and will be removed.
+Replace `const THREE = require("three")` with `import * as THREE from "three"`.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+[gamesync] retrying model for merchant Error: injected failure
+    at model (/workspace/strait-of-hormuz-game/scripts/test-model-retry.cjs:12:49)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+[models3d] load-start /test-retry.glb
+[gamesync] retrying placement /test-retry.glb Error: injected missing placement
+    at GLTFLoader.loadAsync (/workspace/strait-of-hormuz-game/scripts/test-model-retry.cjs:37:28)
+    at eval (eval at load (/workspace/strait-of-hormuz-game/scripts/load-game.cjs:18:3), <anonymous>:82:40)
+    at async loadModel (eval at load (/workspace/strait-of-hormuz-game/scripts/load-game.cjs:18:3), <anonymous>:108:13)
+    at async GameSync3D.loadPlacement (eval at load (/workspace/strait-of-hormuz-game/scripts/load-game.cjs:18:3), <anonymous>:1015:27)
+    at async main (/workspace/strait-of-hormuz-game/scripts/test-model-retry.cjs:41:16)
+[models3d] load-start /test-retry.glb
+[models3d] load-done /test-retry.glb
+PASS bounded dynamic and static GLB retry, stale instance suppression, real Three attachment
+npm notice
+npm notice New major version of npm available! 11.9.0 -> 12.2.3
+npm notice Changelog: https://github.com/npm/cli/releases/tag/v12.2.3
+npm notice To update run: npm install -g npm@12.2.3
+npm notice
+npm notice
+npm notice New major version of npm available! 11.9.0 -> 12.2.3
+npm notice Changelog: https://github.com/npm/cli/releases/tag/v12.2.3
+npm notice To update run: npm install -g npm@12.2.3
+npm notice

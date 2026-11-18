@@ -6,7 +6,7 @@ Android-web build, on top of the v1 runner's build/server plumbing:
   probe_amplitude  D-019 gate: real-GLB animation amplitude per tower
                    config + building idle lists (MUST fail on v0.5.0 code)
   probe_heat       D-020 gate: opening-view triangle budget <= 800k +
-                   battle render-cap structure (MUST fail on v0.5.0 code)
+                   rendered-frame rate over an advancing battle window
   probe_wave3      D-024 gate: scripted fresh player following the
                    game's own mission chain must survive wave 3
                    (MUST fail on v0.5.0 code)

@@ -1,0 +1,10 @@
+{
+  "source": "9411149bdf04dbeb7cb20ef23622bcd6b0d5b17c",
+  "environment": "Local Gradle debug build; GitHub Actions independently rebuilds and signs its own asset.",
+  "manifest": "package: name='ir.hormuz.sovereign' versionCode='8' versionName='0.7.1' platformBuildVersionName='16' platformBuildVersionCode='36' compileSdkVersion='36' compileSdkVersionCodename='16'",
+  "debugSigner": "Signer #1 certificate DN: C=US, O=Android, CN=Android Debug",
+  "bytes": 170452038,
+  "sha256": "931c84df3558cdc3ae1dda2227066fe1fb3a339b86b3bc1ad91f163402b2042e",
+  "packagedWebFilesChecked": 431,
+  "mismatches": []
+}
