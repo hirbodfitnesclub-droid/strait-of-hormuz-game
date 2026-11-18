@@ -94,7 +94,7 @@ jobs:
           echo "Verified APK SHA-256: $sha"
 
       - name: Save APK as an Actions artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: android-${{ steps.package.outputs.tag }}
           path: release/
@@ -116,7 +116,7 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v5
         with:
           name: android-${{ needs.publish-debug-apk.outputs.tag }}
           path: release
@@ -142,6 +142,8 @@ jobs:
           [[ "$(gh api "$release" --jq .draft)" == true ]] || { echo "::error::Release $TAG is already published"; exit 1; }
           if existing="$(gh api "repos/$GH_REPO/commits/$TAG" --jq .sha 2>/dev/null)"; then
             [[ "$existing" == "$GITHUB_SHA" ]] || { echo "::error::Existing tag points at $existing instead of $GITHUB_SHA"; exit 1; }
+          else
+            existing=''
           fi
           upload="$(gh api "$release" --jq .upload_url)"
           asset="$(gh api "$release/assets" --jq ".[] | select(.name == \"$APK\") | .id")"
