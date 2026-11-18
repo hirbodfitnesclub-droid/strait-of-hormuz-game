@@ -23,5 +23,8 @@ jobs:
         with:
           distribution: temurin
           java-version: 21
-      - run: sdkmanager 'platforms;android-36' 'build-tools;35.0.0'
+      - name: Set up Android SDK 36
+        uses: android-actions/setup-android@v4.0.4
+        with:
+          packages: platforms;android-36 build-tools;35.0.0
       - run: bash android/gradlew -p android assembleDebug lintDebug --no-daemon
