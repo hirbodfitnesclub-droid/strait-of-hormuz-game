@@ -137,8 +137,8 @@ jobs:
           printf '%s  %s\n' "$SHA" "release/$APK" | sha256sum -c -
           id="$(gh api --paginate "repos/$GH_REPO/releases" --jq ".[] | select(.tag_name == \"$TAG\") | .id")"
           if [[ -z "$id" ]]; then
-            gh release create "$TAG" --draft --prerelease --target "$GITHUB_SHA" --title "آزمایشی اندروید $TAG" --notes-file release/notes.md
-            id="$(gh api --paginate "repos/$GH_REPO/releases" --jq ".[] | select(.tag_name == \"$TAG\") | .id")"
+            id="$(gh api -X POST "repos/$GH_REPO/releases" -f tag_name="$TAG" -f target_commitish="$GITHUB_SHA" \
+              -F draft=true -F prerelease=true -f name="آزمایشی اندروید $TAG" -F body=@release/notes.md --jq .id)"
           fi
           [[ "$id" =~ ^[0-9]+$ ]]
           release="repos/$GH_REPO/releases/$id"

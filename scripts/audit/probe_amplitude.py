@@ -190,11 +190,14 @@ async def main() -> int:
             bld = final["bld"] or {}
             bld_lists = {k: v for k, v in bld.items() if k.startswith("bld-")}
             live = {k: v for k, v in bld_lists.items() if v["count"] > 0}
+            # These four tier-one models in tower_matrix_seed have authored
+            # motion. Checking only the loaded subset lets a lost model pass.
+            expected_buildings = {"bld-oil", "bld-water", "bld-dock", "bld-power"}
             assertions.append(report.check(
                 SECTION, "amplitude.building_idle",
-                "building idle animation lists are non-empty",
-                len(live) > 0,
-                expected=">= 1 building with authored idle animation nodes",
+                "every expected animated building is loaded and bound",
+                expected_buildings.issubset(live),
+                expected=sorted(expected_buildings),
                 actual={"buildings": bld_lists},
                 detail="gamesync.genericAnims 'bld-' entries (radar/flame/smoke idles)"))
             # Low-tier tanks/houses are authored static. For every loaded
