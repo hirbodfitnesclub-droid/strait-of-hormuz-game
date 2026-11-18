@@ -7,7 +7,7 @@ import buildingsData from './buildings-3d.json';
 import { loadModel, TOWER_MODEL, BRANCH_MODEL, groundY, buildingScale } from './models3d';
 import { makeShip } from './ships3d';
 import { pctTo3d, point3dToPct } from './coords';
-import { getRange, getStats, getSlots, enemyMissilePosition, enemyPosition, distance, type GameState, type Shot } from '@/lib/game';
+import { INTERCEPT_LINE, positionAt, getRange, getStats, getSlots, enemyMissilePosition, enemyPosition, distance, type GameState, type Shot } from '@/lib/game';
 import type { BattleSound } from '@/lib/battle-audio';
 import { BattleFX } from './battlefx';
 import { canonicalAnimName } from './anim-names';
@@ -101,7 +101,7 @@ interface TowerAnim {
   generic: AnimNode[]; glowMats: GlowMat[];
   targetPos: THREE.Vector3 | null; lastShotAt: number; period: number; shotIdx: number;
 }
-const MAT_CLONE_NAMES = new Set(['anim:ping', 'anim:door', 'anim:shell']);
+const MAT_CLONE_NAMES = new Set(['anim:ping', 'anim:door', 'anim:shell', 'anim:beacon']);
 
 function collectAnims(root: THREE.Object3D, seedKey: string): { byName: Map<string, THREE.Object3D[]>; generic: AnimNode[] } {
   // GLTFLoader delivers the pack's `anim:<key>` nodes under sanitized names
@@ -466,6 +466,8 @@ export class GameSync3D {
   private reconciling = false;
   private reconcileDirty = false;
   private selectedSlot: number | null = null;
+  private combatPaused = false;
+  private interceptMarker = new THREE.Mesh(new THREE.TorusGeometry(8, .65, 6, 40), new THREE.MeshBasicMaterial({ color: 0xffb347, depthTest: false }));
   private targeting: string | null = null;
   private raf = 0; private alive = true; private last = performance.now();
   private ray = new THREE.Raycaster();
@@ -475,6 +477,8 @@ export class GameSync3D {
   constructor(map: MapLike, cb: SyncCallbacks) {
     this.map = map; this.cb = cb;
     for (const n of ['enemy', 'trade', 'slots', 'ships', 'zones'] as const) { try { map.setLayer(n, false); } catch { /* layer may not exist */ } }
+    this.interceptMarker.rotation.x = -Math.PI / 2; this.interceptMarker.renderOrder = 10;
+    this.statics.add(this.interceptMarker);
     this.root.name = 'gamesync-root'; this.statics.name = 'gamesync-statics'; this.dyn.name = 'gamesync-dyn';
     map.scene.add(this.root); this.root.add(this.statics); this.root.add(this.dyn); this.dyn.add(this.fx.group);
     // cheaper shadow filtering (PCF instead of PCFSoft) — same look at game scale, less GPU
@@ -627,7 +631,13 @@ export class GameSync3D {
     write(this.telemetry.fizzled, "fizzled");
   }
 
-  setState(game: GameState, opts: { selectedSlot: number | null; targeting: string | null; targetPreview: { x: number; y: number } }) {
+  setState(game: GameState, opts: { selectedSlot: number | null; targeting: string | null; targetPreview: { x: number; y: number }; paused?: boolean }) {
+    this.combatPaused = opts.paused === true;
+    this.interceptMarker.visible = game.phase === 'battle' && game.battle?.objective === 'intercept';
+    if (this.interceptMarker.visible) {
+      const point = positionAt(INTERCEPT_LINE, game.layout), [x, z] = pctTo3d(point.x, point.y);
+      this.interceptMarker.position.set(x, 1, z);
+    }
     // wave-start signal for the enemy-route ribbon pulse: the phase edge
     // into battle (peace/intermission -> battle) is the wave launch moment.
     if (this.state && this.state.phase !== 'battle' && game.phase === 'battle') this.wavePulseAt = performance.now();
@@ -1501,7 +1511,7 @@ export class GameSync3D {
     }
     this.stepMotion(dt, now);
     this.updateAnims(dt, now);
-    this.fx.update(dt);
+    this.fx.update(this.combatPaused ? 0 : dt * Math.max(1, game.speed));
     this.updatePopups(dt);
     this.applyShake(dt);
     this.stepPulseFx(dt);
@@ -1715,21 +1725,14 @@ export class GameSync3D {
     const track = eKey ? () => this.targets.get(eKey)?.pos ?? null : undefined;
     const dist = from.distanceTo(to);
     const dir = to.clone().sub(from).normalize();
-    const clamp = (v: number, a: number, b: number) => Math.max(a, Math.min(b, v));
-    // Arrival effects shared by the projectile cases: per-family impact audio
-    // and the heavy-missile damage number (PRD §۸٫۳). Crits are numbered by
-    // the logic's own popup stream, so they are not duplicated here; pirate
-    // records carry damage 0 and never spawn a number.
+    // Flight timing comes from the same shot that schedules mechanical impact.
+    const duration = Math.max(0.03, s.flightDur);
     const arrive = (soundKind: BattleSound | null) => () => {
       if (soundKind) this.sound(soundKind);
-      if (!s.crit && s.damage > 0 && HEAVY_POPUP_KINDS.has(kind)) {
-        const p = eKey ? this.targets.get(eKey)?.pos : null;
-        this.spawnPopupWorld(p?.x ?? to.x, p?.z ?? to.z, `−${Math.max(1, Math.round(s.damage))}`, '#ffd9a0', 1.1);
-      }
     };
     if (isHero) {
-      if (s.kind === 'air') F.shoot({ from, to, kind: 'tracer', color, dur: Math.max(0.08, dist / 330), jitter: 0.4, air: isAir });
-      else { F.shoot({ from, to, kind: 'missile', color, dur: clamp(dist / 70, 0.6, 1.6), arc: dist * 0.18, track, onArrive: arrive('impact') }); F.flashAt(from, dir, color, 1.2); }
+      if (s.kind === 'air') F.shoot({ from, to, kind: 'tracer', color, dur: duration, jitter: 0.4, air: isAir });
+      else { F.shoot({ from, to, kind: 'missile', color, dur: duration, arc: dist * 0.18, track, onArrive: arrive('impact') }); F.flashAt(from, dir, color, 1.2); }
       return;
     }
     switch (kind) {
@@ -1744,22 +1747,22 @@ export class GameSync3D {
         F.rail(cry, to, color, 0.22, ramp); F.spark(to, color, 4); F.flashAt(cry, dir, color, 1.1);
         break;
       }
-      case 'howitzer': F.shoot({ from, to, kind: 'shell', color: '#ffb347', dur: clamp(dist / 95, 0.5, 1.5), arc: dist * 0.09, onArrive: arrive('impact') }); F.smoke(from, 0.7, false); F.flashAt(from, dir, '#ffb347', 1.8); this.addShake(0.06, from); this.sound('launch'); break;
-      case 'mlrs': F.shoot({ from, to, kind: 'rocket', color, dur: clamp(dist / 85, 0.6, 1.6), arc: dist * 0.13, jitter: 2.4, track, onArrive: arrive('impact') }); F.smoke(from, 0.55, false); F.flashAt(from, dir, color, 1.6); this.sound('launch'); break;
-      case 'silo': F.shoot({ from, to, kind: 'missile', color, dur: clamp(dist / 60, 0.9, 2.2), arc: dist * 0.32, track, onArrive: arrive('explosion') }); for (let i = 0; i < 6; i++) F.smoke(from, 0.8, false); F.flashAt(from, dir, color, 1.8); this.addShake(0.08, from); this.sound('launch'); break;
-      case 'hypersonic': F.shoot({ from, to, kind: 'hyper', color, dur: clamp(dist / 220, 0.35, 0.8), arc: dist * 0.22, size: 1.4, track, onArrive: arrive('explosion') }); for (let i = 0; i < 8; i++) F.smoke(from, 0.9, false); F.flashAt(from, dir, color, 2); this.addShake(0.25, from); this.sound('launch'); break;
-      case 'swarm': F.shoot({ from, to, kind: 'missile', color, dur: clamp(dist / 70, 0.7, 1.8), arc: dist * (0.10 + Math.random() * 0.08), size: 0.8, jitter: 1.2, track, onArrive: arrive('impact') }); F.smoke(from, 0.5, false); F.flashAt(from, dir, color, 1.4); this.sound('launch'); break;
-      case 'bavar': F.shoot({ from, to, kind: 'missile', color, dur: clamp(dist / 65, 0.8, 1.8), arc: dist * 0.2, air: true, track, onArrive: arrive('impact') }); for (let i = 0; i < 5; i++) F.smoke(from, 0.7, false); F.flashAt(from, dir, color, 1.6); this.sound('launch'); break;
-      case 'thermobaric': F.shoot({ from, to, kind: 'plasma', color, dur: clamp(dist / 80, 0.6, 1.4), arc: dist * 0.05, size: 1.2, onArrive: arrive('explosion') }); F.flashAt(from, dir, color, 2.2); this.addShake(0.12, from); break;
-      case 'emp': F.shoot({ from, to, kind: 'plasma', color, dur: clamp(dist / 110, 0.4, 1.1), size: 1.1 }); F.flashAt(from, dir, color, 1.6); break;
-      case 'sonar': F.shoot({ from, to, kind: 'rocket', color, dur: clamp(dist / 80, 0.6, 1.5), arc: dist * 0.06, size: 1.2, track, onArrive: arrive('impact') }); F.flashAt(from, dir, color, 1.5); this.sound('launch'); break;
-      case 'ciws': F.shoot({ from, to, kind: 'tracer', color, dur: Math.max(0.08, dist / 360), jitter: 0.7, air: isAir }); F.flashAt(from, dir, color, 1.2); break;
-      case 'aadefense': F.shoot({ from, to, kind: 'tracer', color, dur: Math.max(0.08, dist / 320), jitter: 0.4, air: isAir }); F.flashAt(from, dir, color, 1.1); break;
-      case 'torpedo': F.shoot({ from, to, kind: 'torpedo', color, dur: clamp(dist / 34, 1, 2.6), track, onArrive: arrive('impact') }); F.flashAt(from, dir, color, 0.9); break;
-      case 'mine': F.shoot({ from, to, kind: 'torpedo', color, dur: clamp(dist / 34, 1, 2.6), size: 1.3, track, onArrive: arrive('impact') }); break;
+      case 'howitzer': F.shoot({ from, to, kind: 'shell', color: '#ffb347', dur: duration, arc: dist * 0.09, onArrive: arrive('impact') }); F.smoke(from, 0.7, false); F.flashAt(from, dir, '#ffb347', 1.8); this.addShake(0.06, from); this.sound('launch'); break;
+      case 'mlrs': F.shoot({ from, to, kind: 'rocket', color, dur: duration, arc: dist * 0.13, jitter: 2.4, track, onArrive: arrive('impact') }); F.smoke(from, 0.55, false); F.flashAt(from, dir, color, 1.6); this.sound('launch'); break;
+      case 'silo': F.shoot({ from, to, kind: 'missile', color, dur: duration, arc: dist * 0.32, track, onArrive: arrive('explosion') }); for (let i = 0; i < 6; i++) F.smoke(from, 0.8, false); F.flashAt(from, dir, color, 1.8); this.addShake(0.08, from); this.sound('launch'); break;
+      case 'hypersonic': F.shoot({ from, to, kind: 'hyper', color, dur: duration, arc: dist * 0.22, size: 1.4, track, onArrive: arrive('explosion') }); for (let i = 0; i < 8; i++) F.smoke(from, 0.9, false); F.flashAt(from, dir, color, 2); this.addShake(0.25, from); this.sound('launch'); break;
+      case 'swarm': F.shoot({ from, to, kind: 'missile', color, dur: duration, arc: dist * (0.10 + Math.random() * 0.08), size: 0.8, jitter: 1.2, track, onArrive: arrive('impact') }); F.smoke(from, 0.5, false); F.flashAt(from, dir, color, 1.4); this.sound('launch'); break;
+      case 'bavar': F.shoot({ from, to, kind: 'missile', color, dur: duration, arc: dist * 0.2, air: true, track, onArrive: arrive('impact') }); for (let i = 0; i < 5; i++) F.smoke(from, 0.7, false); F.flashAt(from, dir, color, 1.6); this.sound('launch'); break;
+      case 'thermobaric': F.shoot({ from, to, kind: 'plasma', color, dur: duration, arc: dist * 0.05, size: 1.2, onArrive: arrive('explosion') }); F.flashAt(from, dir, color, 2.2); this.addShake(0.12, from); break;
+      case 'emp': F.shoot({ from, to, kind: 'plasma', color, dur: duration, size: 1.1 }); F.flashAt(from, dir, color, 1.6); break;
+      case 'sonar': F.shoot({ from, to, kind: 'rocket', color, dur: duration, arc: dist * 0.06, size: 1.2, track, onArrive: arrive('impact') }); F.flashAt(from, dir, color, 1.5); this.sound('launch'); break;
+      case 'ciws': F.shoot({ from, to, kind: 'tracer', color, dur: duration, jitter: 0.7, air: isAir }); F.flashAt(from, dir, color, 1.2); break;
+      case 'aadefense': F.shoot({ from, to, kind: 'tracer', color, dur: duration, jitter: 0.4, air: isAir }); F.flashAt(from, dir, color, 1.1); break;
+      case 'torpedo': F.shoot({ from, to, kind: 'torpedo', color, dur: duration, track, onArrive: arrive('impact') }); F.flashAt(from, dir, color, 0.9); break;
+      case 'mine': F.shoot({ from, to, kind: 'torpedo', color, dur: duration, size: 1.3, track, onArrive: arrive('impact') }); break;
       case 'ew': F.pulse(from, color, 30, 0.85); F.spark(to, color, 3); break;
-      case 'garrison': F.shoot({ from, to, kind: 'tracer', color, dur: Math.max(0.08, dist / 300), jitter: 0.3 }); F.flashAt(from, dir, color, 0.9); break;
-      default: F.shoot({ from, to, kind: 'tracer', color, dur: Math.max(0.08, dist / 300), jitter: 0.3, air: isAir }); F.flashAt(from, dir, color, 1.3); break;
+      case 'garrison': F.shoot({ from, to, kind: 'tracer', color, dur: duration, jitter: 0.3 }); F.flashAt(from, dir, color, 0.9); break;
+      default: F.shoot({ from, to, kind: 'tracer', color, dur: duration, jitter: 0.3, air: isAir }); F.flashAt(from, dir, color, 1.3); break;
     }
   }
 
@@ -1789,19 +1792,19 @@ export class GameSync3D {
     for (const n of nodes) {
       const o = n.obj; const ph = n.phase;
       switch (n.name) {
-        case 'anim:rot': o.rotation.y += dt * 1.0; break;
+        case 'anim:rot': o.rotation.y += dt * (o.userData.spin ?? 1.0); break;
         case 'anim:rotZ': o.rotation.z += dt * 2.2; break;
-        case 'anim:sweep': o.rotation.y = Math.sin(t * 0.6 + ph) * 1.2; break;
+        case 'anim:sweep': o.rotation.y = Math.sin(t * (o.userData.sweep ?? 0.6) + ph) * 1.2; break;
         case 'anim:ping': {
           const p = ((t / 2.6) + ph) % 1; const sc = 0.5 + p * 7;
           o.scale.set(sc, sc, sc);
           if (n.mat) (n.mat as THREE.MeshBasicMaterial).opacity = Math.max(0, 1 - p);
           break;
         }
-        case 'anim:bob': o.position.y = n.by + Math.sin(t * 1.4 + ph) * 0.05; o.rotation.z = Math.sin(t * 0.98 + ph) * 0.02; break;
+        case 'anim:bob': o.position.y = n.by + Math.sin(t * (o.userData.bobSpeed ?? 1.4) + ph) * (o.userData.bobAmp ?? 0.05); o.rotation.z = Math.sin(t * (o.userData.bobSpeed ?? 1.4) * .7 + ph) * 0.02; break;
         case 'anim:swing': o.rotation.z = n.brz + Math.sin(t * 1.6 + ph) * 0.28; break;
         case 'anim:trolley':
-          o.position.x = n.bx + Math.sin(t * 0.35 + ph) * 1.1;
+          o.position.x = n.bx + Math.sin(t * 0.35 + ph) * (o.userData.travel ?? 1.1);
           if (n.hook) n.hook.position.y = (n.hookBaseY ?? 0) + Math.sin(t * 0.5 + ph) * 0.5;
           break;
         case 'anim:flame': {
@@ -1821,12 +1824,21 @@ export class GameSync3D {
         case 'anim:smoke': {
           if (!smokeOn) break; // production stopped (full tank / no fuel / capped) — no puffs
           if (t >= (o.userData.fxNext ?? 0)) {
-            o.userData.fxNext = t + 0.55 + Math.random() * 0.35;
+            o.userData.fxNext = t + (o.userData.smokeRate ?? 0.55) + Math.random() * 0.35;
             const wp = o.getWorldPosition(this.animTmp);
             const ws = o.getWorldScale(this.animTmp2);
-            wp.y += 2.1 * ws.y;
-            this.fx.smoke(wp, 0.85, true);
+            wp.y += (o.userData.smokeHeight ?? 2.1) * ws.y;
+            this.fx.smoke(wp, 0.85, o.userData.smokeDark ?? true);
           }
+          break;
+        }
+        case 'anim:beacon':
+          if (n.mat) (n.mat as THREE.MeshBasicMaterial).color.set(o.userData.beaconColor ?? '#ff3344').multiplyScalar(Math.sin(t * (o.userData.beaconRate ?? 1.4) * Math.PI * 2 + ph) > .3 ? 7 : .25);
+          break;
+        case 'anim:car': {
+          const i = o.userData.carIndex ?? 0, p = (t * (.25 + i * .07) + i * .37) % 1;
+          o.position.x = (i % 2 ? -1 : 1) * (-2.2 + p * 4.4);
+          o.rotation.y = i % 2 ? -Math.PI / 2 : Math.PI / 2;
           break;
         }
         case 'anim:scan': o.position.x = n.bx + Math.sin(t * 0.5 + ph) * 2.4; break;

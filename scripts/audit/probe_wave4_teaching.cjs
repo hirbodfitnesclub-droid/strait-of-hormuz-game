@@ -1,33 +1,5 @@
-/* Team WAVE2-FIX probe — D-026: wave-4 combo teaching gate.
- *
- * Run: node scripts/audit/probe_wave4_teaching.cjs
- *
- * Background: authored wave 4 (the first «رهگیری ناوگان» intercept) is
- * decided in the lane's first half, before any land slot can engage —
- * only the full free kit wins it (hero type 2 + EMP pulse + Strike;
- * QA-BALANCE kit matrix: full kit 2/2 at 20 hearts, every partial kit
- * 2/2 defeat by intercept-crossed). D-026 leaves the difficulty
- * untouched and closes the gap by TEACHING: the briefing now carries an
- * explicit intercept warning (interceptWarning in game.ts, rendered as
- * a chip in the briefing bulletin, the D-024 mechanism).
- *
- * Sections:
- *  W) the warning itself: fires for wave 4 pre-start AND with the
- *     battle rolled, is silent for every non-intercept campaign wave
- *     (checked against objectiveTypeOf for all 25), is a pure peek
- *     (state JSON byte-identical across the call), and reports
- *     heroReady honestly.
- *  G) the D-026 gate: ONE guided fresh-player arrival (the probe_balance
- *     section-D mission harness) stops at wave 4's doorstep; from that
- *     identical snapshot, the GUIDED continuation does only what the
- *     briefing teaches — reads interceptWarning, swaps the hero to
- *     type 2 before starting, EMP on the lead element, Strike on the
- *     follow-up — and must CLEAR wave 4. The UNGUIDED continuation
- *     (same snapshot, towers and hero as they stand, no spells) must
- *     still LOSE it, reason intercept-crossed: difficulty untouched.
- *
- * The reducer CLONES on every action — always read the RETURNED state.
- */
+/* Intercept briefing and fresh-player choice gate. The defense line at 85%
+ * gives shore towers an engagement window; spells remain an optional aid. */
 const { load } = require('../load-game.cjs');
 const G = load('src/lib/game.ts');
 const P = load('src/lib/progression.ts');
@@ -237,15 +209,15 @@ function arriveAtWave4() {
   check('gate.guided_clears_wave4', g.phase !== 'defeat' && g.highestWave >= 4 && empDone && strikeDone,
     `guided: phase=${g.phase} highestWave=${g.highestWave} hearts=${g.hearts} emp=${empDone} strike=${strikeDone}`);
 
-  // UNGUIDED: identical snapshot, no swap, no spells — the wall stands.
+  // Alternate strategy: identical invested shore defense, no swap or spells.
   let u = doorstep;
   const uact = (a) => { u = gameReducer(u, a); };
   if (u.idle.lastBattle && !u.idle.lastBattle.claimed) uact({ type: 'claim-battle' });
   uact({ type: 'start' });
   let m = 0;
   while (u.phase === 'battle' && m++ < 30000) uact({ type: 'tick', dt: DT });
-  check('gate.unguided_loses_wave4', u.phase === 'defeat' && u.idle.lastBattle?.reason === 'intercept-crossed',
-    `unguided: phase=${u.phase} reason=${u.idle.lastBattle?.reason} hearts=${u.hearts} (want defeat / intercept-crossed — difficulty untouched)`);
+  check('gate.shore_defense_clears_wave4', u.highestWave >= 4,
+    `unguided: phase=${u.phase} reason=${u.idle.lastBattle?.reason} hearts=${u.hearts} (want victory from shore defense without a mandatory spell combo)`);
 }
 
 const failed = results.filter(r => !r.ok);

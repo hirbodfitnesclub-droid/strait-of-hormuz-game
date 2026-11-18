@@ -8,22 +8,19 @@
 - سناریوی جنگی یکتا و سیستم اخبار داخل بازی برای هر نبرد
 
 ## مستندات
-مستندات رسمی پروژه در پوشهٔ [`strait-of-hormuz-game-docs/`](strait-of-hormuz-game-docs/) است:
-- `PRD.md` — سند جامع طراحی و نیازمندی‌های محصول
-- `decisions.md` — تصمیم‌های معتبر و دلیلشان
-- `status.md` — وضعیت فعلی، کارهای باز و نقطهٔ ادامه
-- `how_to_update_docs.md` — راهنمای نگهداری همین مستندات
+
+مرجع کامل نسخهٔ 0.7.0: [فهرست مستندات](strait-of-hormuz-game-docs/README.md)، [وضعیت واقعی و تست‌ها](strait-of-hormuz-game-docs/status.md)، [ساخت و انتشار](strait-of-hormuz-game-docs/release.md).
 
 ## فناوری
 Next.js 16 + React 19 + TypeScript + Three.js — بسته‌بندی اندروید با Capacitor (پکیج `ir.hormuz.sovereign`).
 
 ## ساخت APK
 ```bash
-npm install
-node scripts/build-android-web.mjs   # خروجی استاتیک در out/
-npx cap sync android
-cd android && ./gradlew assembleDebug
+npm ci
+npm run verify
+npm run build:android
+bash android/gradlew -p android assembleDebug
 ```
 
 ## نسخه‌ها
-فایل‌های APK در بخش **Releases** همین مخزن منتشر می‌شوند (داخل گیت نیستند).
+ساخت محلی در `android/app/build/outputs/` قرار می‌گیرد؛ خروجی‌ها داخل گیت نیستند. این مأموریت چیزی در GitHub Releases، فروشگاه یا محیط منتشر نکرده است. APK آزمایشی امضای debug دارد؛ انتشار با کلید مالک و پذیرش دستگاه واقعی انجام می‌شود.

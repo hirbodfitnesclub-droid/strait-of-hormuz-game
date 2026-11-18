@@ -102,7 +102,7 @@ export function Beacon({ pos, color = "#ff3344", rate = 1.4, size = 0.06 }: { po
     const on = Math.sin(s.clock.elapsedTime * rate * PI * 2 + off) > 0.3;
     mat.color.set(color).multiplyScalar(on ? 7 : 0.25);
   });
-  return <mesh position={pos} material={mat}><sphereGeometry args={[size, 10, 8]} /></mesh>;
+  return <mesh name="anim:beacon" userData={{beaconRate:rate,beaconColor:color}} position={pos} material={mat}><sphereGeometry args={[size, 10, 8]} /></mesh>;
 }
 
 export function Dish({ pos, r = 0.35, k, spin = 1.2, tilt = 0.9 }: { pos: V3; r?: number; k: Kit; spin?: number; tilt?: number }) {
@@ -111,7 +111,7 @@ export function Dish({ pos, r = 0.35, k, spin = 1.2, tilt = 0.9 }: { pos: V3; r?
   return (
     <group position={pos}>
       <mesh position={[0, r * 0.6, 0]} material={k.gun}><cylinderGeometry args={[r * 0.12, r * 0.2, r * 1.2, 10]} /></mesh>
-      <group ref={ref} position={[0, r * 1.25, 0]}>
+      <group ref={ref} name="anim:rot" userData={{spin}} position={[0, r * 1.25, 0]}>
         <group rotation={[tilt, 0, 0]}>
           <mesh material={k.white}><sphereGeometry args={[r, 24, 10, 0, PI * 2, 0, PI / 2.8]} /></mesh>
           <mesh position={[0, r * 0.55, 0]} material={k.gun}><cylinderGeometry args={[0.015, 0.015, r * 1.1, 6]} /></mesh>
@@ -129,7 +129,7 @@ export function PhasedRadar({ pos, w = 0.9, h = 0.6, k, spin = 0.8 }: { pos: V3;
   return (
     <group position={pos}>
       <mesh position={[0, 0.25, 0]} material={k.gun}><cylinderGeometry args={[0.06, 0.1, 0.5, 10]} /></mesh>
-      <group ref={ref} position={[0, 0.55 + h / 2, 0]}>
+      <group ref={ref} name="anim:rot" userData={{spin}} position={[0, 0.55 + h / 2, 0]}>
         <group rotation={[-0.25, 0, 0]}>
           <RBox args={[w, h, 0.1]} r={0.03} m={k.armorDark} />
           <mesh position={[0, 0, 0.055]} material={k.glow}><planeGeometry args={[w * 0.86, h * 0.82]} /></mesh>
@@ -150,7 +150,7 @@ export function Searchlight({ pos, k, sweep = 0.6 }: { pos: V3; k: Kit; sweep?: 
   return (
     <group position={pos}>
       <mesh material={k.gun}><cylinderGeometry args={[0.05, 0.08, 0.15, 8]} /></mesh>
-      <group ref={ref} position={[0, 0.16, 0]}>
+      <group ref={ref} name="anim:sweep" userData={{sweep}} position={[0, 0.16, 0]}>
         <group rotation={[0.25, 0, 0]}>
           <mesh rotation={[PI / 2, 0, 0]} material={k.gun}><cylinderGeometry args={[0.12, 0.09, 0.22, 14]} /></mesh>
           <mesh position={[0, 0, 0.115]} material={new THREE.MeshBasicMaterial({ color: new THREE.Color("#fff3d0").multiplyScalar(6), toneMapped: false })}>

@@ -1,0 +1,2728 @@
+{
+ "generated_at": "2026-11-17T15:50:23",
+ "base_url": "http://localhost:3310",
+ "probes": [
+  {
+   "probe": "probe_amplitude",
+   "section": "§anim amplitude (D-019)",
+   "assertions": [
+    {
+     "section": "§anim amplitude (D-019)",
+     "id": "amplitude.cannon-t3",
+     "name": "cannon-t3 animation nodes move in battle",
+     "status": "pass",
+     "expected": "nodes > 0 and amplitude > 0.002",
+     "actual": {
+      "nodes": 12,
+      "amplitude": 2.3884,
+      "modelKind": "autocannon",
+      "fired": true
+     },
+     "detail": "slot 0, counts={'yaw': 1, 'pitch': 1, 'mz': 4, 'rc': 4, 'spin': 0, 'erector': 0, 'missile': 0, 'crystal': 0, 'doorsL': 0, 'doorsR': 0, 'cells': 0, 'generic': 2}"
+    },
+    {
+     "section": "§anim amplitude (D-019)",
+     "id": "amplitude.cannon-t4b0",
+     "name": "cannon-t4b0 animation nodes move in battle",
+     "status": "pass",
+     "expected": "nodes > 0 and amplitude > 0.002",
+     "actual": {
+      "nodes": 4,
+      "amplitude": 49.15,
+      "modelKind": "ciws",
+      "fired": true
+     },
+     "detail": "slot 1, counts={'yaw': 1, 'pitch': 1, 'mz': 1, 'rc': 0, 'spin': 1, 'erector': 0, 'missile': 0, 'crystal': 0, 'doorsL': 0, 'doorsR': 0, 'cells': 0, 'generic': 0}"
+    },
+    {
+     "section": "§anim amplitude (D-019)",
+     "id": "amplitude.cannon-t4b1",
+     "name": "cannon-t4b1 animation nodes move in battle",
+     "status": "pass",
+     "expected": "nodes > 0 and amplitude > 0.002",
+     "actual": {
+      "nodes": 4,
+      "amplitude": 0.4375,
+      "modelKind": "railgun",
+      "fired": true
+     },
+     "detail": "slot 2, counts={'yaw': 1, 'pitch': 1, 'mz': 1, 'rc': 1, 'spin': 0, 'erector': 0, 'missile': 0, 'crystal': 0, 'doorsL': 0, 'doorsR': 0, 'cells': 0, 'generic': 0}"
+    },
+    {
+     "section": "§anim amplitude (D-019)",
+     "id": "amplitude.heavy-t3",
+     "name": "heavy-t3 animation nodes move in battle",
+     "status": "pass",
+     "expected": "nodes > 0 and amplitude > 0.002",
+     "actual": {
+      "nodes": 7,
+      "amplitude": 2.2,
+      "modelKind": "howitzer",
+      "fired": true
+     },
+     "detail": "slot 3, counts={'yaw': 1, 'pitch': 1, 'mz': 2, 'rc': 2, 'spin': 0, 'erector': 0, 'missile': 0, 'crystal': 0, 'doorsL': 0, 'doorsR': 0, 'cells': 0, 'generic': 1}"
+    },
+    {
+     "section": "§anim amplitude (D-019)",
+     "id": "amplitude.heavy-t4b0",
+     "name": "heavy-t4b0 animation nodes move in battle",
+     "status": "pass",
+     "expected": "nodes > 0 and amplitude > 0.002",
+     "actual": {
+      "nodes": 15,
+      "amplitude": 2.2,
+      "modelKind": "mlrs",
+      "fired": true
+     },
+     "detail": "slot 4, counts={'yaw': 1, 'pitch': 1, 'mz': 12, 'rc': 0, 'spin': 0, 'erector': 0, 'missile': 0, 'crystal': 0, 'doorsL': 0, 'doorsR': 0, 'cells': 0, 'generic': 1}"
+    },
+    {
+     "section": "§anim amplitude (D-019)",
+     "id": "amplitude.heavy-t4b1",
+     "name": "heavy-t4b1 animation nodes move in battle",
+     "status": "pass",
+     "expected": "nodes > 0 and amplitude > 0.002",
+     "actual": {
+      "nodes": 4,
+      "amplitude": 0.4996,
+      "modelKind": "thermobaric",
+      "fired": true
+     },
+     "detail": "slot 5, counts={'yaw': 1, 'pitch': 1, 'mz': 1, 'rc': 1, 'spin': 0, 'erector': 0, 'missile': 0, 'crystal': 0, 'doorsL': 0, 'doorsR': 0, 'cells': 0, 'generic': 0}"
+    },
+    {
+     "section": "§anim amplitude (D-019)",
+     "id": "amplitude.missile-t3",
+     "name": "missile-t3 animation nodes move in battle",
+     "status": "pass",
+     "expected": "nodes > 0 and amplitude > 0.002",
+     "actual": {
+      "nodes": 14,
+      "amplitude": 2.3884,
+      "modelKind": "silo",
+      "fired": true
+     },
+     "detail": "slot 6, counts={'yaw': 0, 'pitch': 0, 'mz': 3, 'rc': 0, 'spin': 0, 'erector': 0, 'missile': 0, 'crystal': 0, 'doorsL': 3, 'doorsR': 3, 'cells': 3, 'generic': 2}"
+    },
+    {
+     "section": "§anim amplitude (D-019)",
+     "id": "amplitude.missile-t4b0",
+     "name": "missile-t4b0 animation nodes move in battle",
+     "status": "pass",
+     "expected": "nodes > 0 and amplitude > 0.002",
+     "actual": {
+      "nodes": 4,
+      "amplitude": 2.3938,
+      "modelKind": "hypersonic",
+      "fired": true
+     },
+     "detail": "slot 7, counts={'yaw': 0, 'pitch': 0, 'mz': 1, 'rc': 0, 'spin': 0, 'erector': 1, 'missile': 1, 'crystal': 0, 'doorsL': 0, 'doorsR': 0, 'cells': 0, 'generic': 1}"
+    },
+    {
+     "section": "§anim amplitude (D-019)",
+     "id": "amplitude.missile-t4b1",
+     "name": "missile-t4b1 animation nodes move in battle",
+     "status": "pass",
+     "expected": "nodes > 0 and amplitude > 0.002",
+     "actual": {
+      "nodes": 11,
+      "amplitude": 2.2,
+      "modelKind": "swarm",
+      "fired": true
+     },
+     "detail": "slot 8, counts={'yaw': 1, 'pitch': 1, 'mz': 8, 'rc': 0, 'spin': 0, 'erector': 0, 'missile': 0, 'crystal': 0, 'doorsL': 0, 'doorsR': 0, 'cells': 0, 'generic': 1}"
+    },
+    {
+     "section": "§anim amplitude (D-019)",
+     "id": "amplitude.air-t3",
+     "name": "air-t3 animation nodes move in battle",
+     "status": "pass",
+     "expected": "nodes > 0 and amplitude > 0.002",
+     "actual": {
+      "nodes": 12,
+      "amplitude": 2.2,
+      "modelKind": "aadefense",
+      "fired": true
+     },
+     "detail": "slot 9, counts={'yaw': 1, 'pitch': 1, 'mz': 4, 'rc': 4, 'spin': 0, 'erector': 0, 'missile': 0, 'crystal': 0, 'doorsL': 0, 'doorsR': 0, 'cells': 0, 'generic': 2}"
+    },
+    {
+     "section": "§anim amplitude (D-019)",
+     "id": "amplitude.air-t4b0",
+     "name": "air-t4b0 animation nodes move in battle",
+     "status": "pass",
+     "expected": "nodes > 0 and amplitude > 0.002",
+     "actual": {
+      "nodes": 5,
+      "amplitude": 2.2,
+      "modelKind": "bavar",
+      "fired": false
+     },
+     "detail": "slot 10, counts={'yaw': 0, 'pitch': 0, 'mz': 4, 'rc': 0, 'spin': 0, 'erector': 0, 'missile': 0, 'crystal': 0, 'doorsL': 0, 'doorsR': 0, 'cells': 0, 'generic': 1}"
+    },
+    {
+     "section": "§anim amplitude (D-019)",
+     "id": "amplitude.air-t4b1",
+     "name": "air-t4b1 animation nodes move in battle",
+     "status": "pass",
+     "expected": "nodes > 0 and amplitude > 0.002",
+     "actual": {
+      "nodes": 2,
+      "amplitude": 3.3,
+      "modelKind": "laser",
+      "fired": false
+     },
+     "detail": "slot 11, counts={'yaw': 0, 'pitch': 0, 'mz': 0, 'rc': 0, 'spin': 0, 'erector': 0, 'missile': 0, 'crystal': 1, 'doorsL': 0, 'doorsR': 0, 'cells': 0, 'generic': 1}"
+    },
+    {
+     "section": "§anim amplitude (D-019)",
+     "id": "amplitude.ew-t3",
+     "name": "ew-t3 animation nodes move in battle",
+     "status": "pass",
+     "expected": "nodes > 0 and amplitude > 0.002",
+     "actual": {
+      "nodes": 4,
+      "amplitude": 2.2,
+      "modelKind": "ew",
+      "fired": true
+     },
+     "detail": "slot 12, counts={'yaw': 0, 'pitch': 0, 'mz': 0, 'rc': 0, 'spin': 0, 'erector': 0, 'missile': 0, 'crystal': 0, 'doorsL': 0, 'doorsR': 0, 'cells': 0, 'generic': 4}"
+    },
+    {
+     "section": "§anim amplitude (D-019)",
+     "id": "amplitude.ew-t4b0",
+     "name": "ew-t4b0 animation nodes move in battle",
+     "status": "pass",
+     "expected": "nodes > 0 and amplitude > 0.002",
+     "actual": {
+      "nodes": 3,
+      "amplitude": 0.1568,
+      "modelKind": "emp",
+      "fired": false
+     },
+     "detail": "slot 13, counts={'yaw': 0, 'pitch': 0, 'mz': 0, 'rc': 0, 'spin': 0, 'erector': 0, 'missile': 0, 'crystal': 0, 'doorsL': 0, 'doorsR': 0, 'cells': 0, 'generic': 3}"
+    },
+    {
+     "section": "§anim amplitude (D-019)",
+     "id": "amplitude.ew-t4b1",
+     "name": "ew-t4b1 animation nodes move in battle",
+     "status": "pass",
+     "expected": "nodes > 0 and amplitude > 0.002",
+     "actual": {
+      "nodes": 5,
+      "amplitude": 2.2,
+      "modelKind": "sonar",
+      "fired": true
+     },
+     "detail": "slot 14, counts={'yaw': 1, 'pitch': 0, 'mz': 1, 'rc': 0, 'spin': 0, 'erector': 0, 'missile': 0, 'crystal': 0, 'doorsL': 0, 'doorsR': 0, 'cells': 0, 'generic': 3}"
+    },
+    {
+     "section": "§anim amplitude (D-019)",
+     "id": "amplitude.boat-t3",
+     "name": "boat-t3 animation nodes move in battle",
+     "status": "pass",
+     "expected": "nodes > 0 and amplitude > 0.002",
+     "actual": {
+      "nodes": 8,
+      "amplitude": 6.1594,
+      "modelKind": "garrison",
+      "fired": true
+     },
+     "detail": "slot 15, counts={'yaw': 0, 'pitch': 0, 'mz': 3, 'rc': 0, 'spin': 0, 'erector': 0, 'missile': 0, 'crystal': 0, 'doorsL': 0, 'doorsR': 0, 'cells': 0, 'generic': 5}"
+    },
+    {
+     "section": "§anim amplitude (D-019)",
+     "id": "amplitude.boat-t4b0",
+     "name": "boat-t4b0 animation nodes move in battle",
+     "status": "pass",
+     "expected": "nodes > 0 and amplitude > 0.002",
+     "actual": {
+      "nodes": 12,
+      "amplitude": 6.1594,
+      "modelKind": "torpedo",
+      "fired": true
+     },
+     "detail": "slot 16, counts={'yaw': 0, 'pitch': 0, 'mz': 5, 'rc': 0, 'spin': 0, 'erector': 0, 'missile': 0, 'crystal': 0, 'doorsL': 0, 'doorsR': 0, 'cells': 0, 'generic': 7}"
+    },
+    {
+     "section": "§anim amplitude (D-019)",
+     "id": "amplitude.boat-t4b1",
+     "name": "boat-t4b1 animation nodes move in battle",
+     "status": "pass",
+     "expected": "nodes > 0 and amplitude > 0.002",
+     "actual": {
+      "nodes": 4,
+      "amplitude": 1.5921,
+      "modelKind": "mine",
+      "fired": true
+     },
+     "detail": "slot 17, counts={'yaw': 0, 'pitch': 0, 'mz': 1, 'rc': 0, 'spin': 0, 'erector': 0, 'missile': 0, 'crystal': 0, 'doorsL': 0, 'doorsR': 0, 'cells': 0, 'generic': 3}"
+    },
+    {
+     "section": "§anim amplitude (D-019)",
+     "id": "amplitude.building_idle",
+     "name": "building idle animation lists are non-empty",
+     "status": "pass",
+     "expected": ">= 1 building with authored idle animation nodes",
+     "actual": {
+      "buildings": {
+       "bld-city": {
+        "count": 0,
+        "vals": []
+       },
+       "bld-tank": {
+        "count": 0,
+        "vals": []
+       },
+       "bld-water": {
+        "count": 1,
+        "vals": [
+         -0.0,
+         0,
+         -0.0,
+         -0.2,
+         0.3,
+         3.1,
+         1,
+         1,
+         1,
+         0.2768236468937046,
+         3.5621692459206136,
+         6.570800099195525,
+         0
+        ]
+       },
+       "bld-dock": {
+        "count": 6,
+        "vals": [
+         -0.0,
+         0,
+         -0.0,
+         0,
+         1.05,
+         0,
+         1,
+         1,
+         1,
+         0.23173336595606459,
+         7,
+         0.9300782508090238,
+         0,
+         -0.0,
+         0,
+         -0.0,
+         1.1,
+         2.35,
+         0,
+         1,
+         1,
+         1,
+         0.25,
+         0.007389208608090943,
+         0.007389208608090943,
+         0,
+         -0.0,
+         0,
+         -0.0,
+         -1.1,
+         2.35,
+         0,
+         1,
+         1,
+         1,
+         0.25,
+         0.007389208608090943,
+         0.007389208608090943,
+         0,
+         -0.0,
+         0,
+         -0.001092094471347924,
+         1.2,
+         0.04488587234301771,
+         3.6,
+         1,
+         1,
+         1,
+         0,
+         -0.0,
+         0,
+         -0.015168544686190593,
+         -2.6,
+         0.009004222644479157,
+         3,
+         1,
+         1,
+         1,
+         0,
+         -0.0,
+         0,
+         -0.0,
+         -0.6197373028953875,
+         2.0500000000000003,
+         0,
+         1,
+         1,
+         1,
+         0
+        ]
+       },
+       "bld-power": {
+        "count": 3,
+        "vals": [
+         -0.0,
+         0,
+         -0.0,
+         0.55,
+         0.9,
+         -0.3,
+         1,
+         1,
+         1,
+         0,
+         -0.0,
+         0,
+         -0.0,
+         0,
+         1.6500000000000001,
+         0,
+         1,
+         1,
+         1,
+         0.25,
+         0.007389208608090943,
+         0.007389208608090943,
+         0,
+         -0.0,
+         0,
+         -0.0,
+         0,
+         2.72,
+         0,
+         1,
+         1,
+         1,
+         0.25,
+         0.005788341543312841,
+         0.005788341543312841,
+         0
+        ]
+       },
+       "bld-oil": {
+        "count": 7,
+        "vals": [
+         -0.0,
+         0,
+         -0.0,
+         0,
+         2.3200000000000003,
+         0,
+         1,
+         1,
+         1,
+         0.25,
+         0.005788341543312841,
+         0.005788341543312841,
+         0,
+         -0.0,
+         0,
+         -0.0,
+         0.9,
+         2.05,
+         0,
+         1,
+         1,
+         1,
+         7,
+         0.2068978410265464,
+         0.2068978410265464,
+         0,
+         -0.0,
+         0,
+         -0.0,
+         -0.9,
+         2.05,
+         0,
+         1,
+         1,
+         1,
+         7,
+         0.2068978410265464,
+         0.2068978410265464,
+         0,
+         -0.0,
+         0,
+         -0.19427904642318214,
+         0,
+         0.85,
+         0,
+         1,
+         1,
+         1,
+         0,
+         -0.0,
+         0,
+         -0.0,
+         0,
+         2.35,
+         0,
+         0.6993642009084129,
+         0.9055158131628349,
+         0.6993642009084129,
+         0,
+         -0.0,
+         0,
+         -0.0,
+         0,
+         2.4,
+         0,
+         1,
+         1,
+         1,
+         7.73656239244229,
+         -0.0,
+         0,
+         -0.0,
+         0.32213121092988983,
+         1.75,
+         0,
+         1,
+         1,
+         1,
+         0
+        ]
+       }
+      }
+     },
+     "detail": "gamesync.genericAnims 'bld-' entries (radar/flame/smoke idles)"
+    },
+    {
+     "section": "§anim amplitude (D-019)",
+     "id": "amplitude.bld-water",
+     "name": "bld-water authored transform or beacon color changes",
+     "status": "pass",
+     "expected": "amplitude > 0.002",
+     "actual": 6.3361,
+     "detail": ""
+    },
+    {
+     "section": "§anim amplitude (D-019)",
+     "id": "amplitude.bld-dock",
+     "name": "bld-dock authored transform or beacon color changes",
+     "status": "pass",
+     "expected": "amplitude > 0.002",
+     "actual": 6.75,
+     "detail": ""
+    },
+    {
+     "section": "§anim amplitude (D-019)",
+     "id": "amplitude.bld-power",
+     "name": "bld-power authored transform or beacon color changes",
+     "status": "pass",
+     "expected": "amplitude > 0.002",
+     "actual": 6.75,
+     "detail": ""
+    },
+    {
+     "section": "§anim amplitude (D-019)",
+     "id": "amplitude.bld-oil",
+     "name": "bld-oil authored transform or beacon color changes",
+     "status": "pass",
+     "expected": "amplitude > 0.002",
+     "actual": 6.75,
+     "detail": ""
+    }
+   ],
+   "meta": {
+    "page_errors": [],
+    "anims_bound": 18,
+    "samples": 23,
+    "game_window_s": 12.0,
+    "fireStats": {
+     "autocannon": {
+      "shots": 63,
+      "hits": 62,
+      "fizzled": 0
+     },
+     "ciws": {
+      "shots": 176,
+      "hits": 174,
+      "fizzled": 0
+     },
+     "railgun": {
+      "shots": 7,
+      "hits": 7,
+      "fizzled": 0
+     },
+     "howitzer": {
+      "shots": 8,
+      "hits": 8,
+      "fizzled": 0
+     },
+     "mlrs": {
+      "shots": 36,
+      "hits": 36,
+      "fizzled": 0
+     },
+     "thermobaric": {
+      "shots": 5,
+      "hits": 4,
+      "fizzled": 0
+     },
+     "silo": {
+      "shots": 4,
+      "hits": 3,
+      "fizzled": 0
+     },
+     "hypersonic": {
+      "shots": 3,
+      "hits": 2,
+      "fizzled": 0
+     },
+     "swarm": {
+      "shots": 4,
+      "hits": 16,
+      "fizzled": 0
+     },
+     "aadefense": {
+      "shots": 38,
+      "hits": 38,
+      "fizzled": 0
+     },
+     "ew": {
+      "shots": 19,
+      "hits": 19,
+      "fizzled": 0
+     },
+     "sonar": {
+      "shots": 13,
+      "hits": 13,
+      "fizzled": 0
+     },
+     "mine": {
+      "shots": 3,
+      "hits": 3,
+      "fizzled": 0
+     },
+     "garrison": {
+      "shots": 83,
+      "hits": 83,
+      "fizzled": 0
+     },
+     "torpedo": {
+      "shots": 46,
+      "hits": 44,
+      "fizzled": 0
+     }
+    }
+   }
+  },
+  {
+   "probe": "probe_heat",
+   "section": "§heat budget (D-020)",
+   "assertions": [
+    {
+     "section": "§heat budget (D-020)",
+     "id": "heat.tris_budget",
+     "name": "opening peace view triangle budget (D-020)",
+     "status": "pass",
+     "expected": "<= 800000 tris",
+     "actual": {
+      "tris": 425143,
+      "calls": 359,
+      "objects": 3425,
+      "buffer_px": 230400,
+      "dpr": 1
+     },
+     "detail": "renderer.info on the merged build, median of 6 perfInfo samples"
+    },
+    {
+     "section": "§heat budget (D-020)",
+     "id": "heat.dpr_cap",
+     "name": "pixel ratio never above 1.5",
+     "status": "pass",
+     "expected": "0 < dpr <= 1.5",
+     "actual": 1,
+     "detail": "wave-0 PERF cap, re-asserted as a heat input"
+    },
+    {
+     "section": "§heat budget (D-020)",
+     "id": "heat.battle_render_rate",
+     "name": "rendered frames per wall second in battle (live count)",
+     "status": "pass",
+     "expected": "<= 60.5 renders/wall-s",
+     "actual": {
+      "renders_per_wall_s": 1.33,
+      "renders_per_game_s": 3.62
+     },
+     "detail": "counted via window.__hormuzFrameHook; NOTE: SwiftShader renders far below 60 wall-fps, so this live rate passes vacuously here — the structural check below is the real cap gate"
+    },
+    {
+     "section": "§heat budget (D-020)",
+     "id": "heat.battle_cap_structure",
+     "name": "a 60 fps render cap exists on the battle path (D-020)",
+     "status": "pass",
+     "expected": "frame-rate gate applying during battle (not calm-only)",
+     "actual": {
+      "patterns": {
+       "1\\s*/\\s*60": true,
+       "1000\\s*/\\s*60": false,
+       "fpsCap": false,
+       "maxFps": false,
+       "frameCap": false,
+       "BATTLE_FPS": false,
+       "battleCap": false,
+       "capBattleFps": false
+      },
+      "calm_30_gate_present": true
+     },
+     "detail": "v0.5.0: the map loop's only gate is the 1/30 calm branch, and calm is false during battle -> unbounded rAF"
+    }
+   ],
+   "meta": {
+    "page_errors": [],
+    "peace_samples": [
+     {
+      "calls": 477,
+      "tris": 533559,
+      "dpr": 1,
+      "fps": 1,
+      "objects": 3425,
+      "bufW": 360,
+      "bufH": 640,
+      "phase": "peace"
+     },
+     {
+      "calls": 413,
+      "tris": 454281,
+      "dpr": 1,
+      "fps": 0,
+      "objects": 3425,
+      "bufW": 360,
+      "bufH": 640,
+      "phase": "peace"
+     },
+     {
+      "calls": 409,
+      "tris": 428817,
+      "dpr": 1,
+      "fps": 1,
+      "objects": 3425,
+      "bufW": 360,
+      "bufH": 640,
+      "phase": "peace"
+     },
+     {
+      "calls": 352,
+      "tris": 421469,
+      "dpr": 1,
+      "fps": 1,
+      "objects": 3425,
+      "bufW": 360,
+      "bufH": 640,
+      "phase": "peace"
+     },
+     {
+      "calls": 345,
+      "tris": 419311,
+      "dpr": 1,
+      "fps": 1,
+      "objects": 3425,
+      "bufW": 360,
+      "bufH": 640,
+      "phase": "peace"
+     },
+     {
+      "calls": 359,
+      "tris": 420119,
+      "dpr": 1,
+      "fps": 1,
+      "objects": 3425,
+      "bufW": 360,
+      "bufH": 640,
+      "phase": "peace"
+     }
+    ],
+    "battle_page_errors": [],
+    "battle_window": {
+     "frames": 38,
+     "wall_s": 28.47,
+     "game_s": 10.5,
+     "phase": "battle"
+    }
+   }
+  },
+  {
+   "probe": "probe_wave3",
+   "section": "§fresh-player gate (D-024)",
+   "assertions": [
+    {
+     "section": "§fresh-player gate (D-024)",
+     "id": "wave3.opening_line",
+     "name": "guided fresh player, opening line only, survives wave 3",
+     "status": "pass",
+     "expected": "wave 3 victory in all 7 combat-RNG attempts from the guided pre-wave state",
+     "actual": "victory at wave 3 (survived 7/7 attempts)",
+     "detail": "wave 3 cleared in all attempts: leaks=[2, 2, 2, 2, 2, 2, 2]/6 towers=[cannon@2t1, heavy@5t1]"
+    },
+    {
+     "section": "§fresh-player gate (D-024)",
+     "id": "wave3.mission_line",
+     "name": "guided fresh player, four-towers line, survives wave 3",
+     "status": "pass",
+     "expected": "wave 3 victory in all 7 combat-RNG attempts from the guided pre-wave state",
+     "actual": "victory at wave 3 (survived 7/7 attempts)",
+     "detail": "wave 3 cleared in all attempts: leaks=[0, 0, 0, 0, 0, 0, 0]/6 towers=[cannon@2t1, heavy@5t1, ew@8t1, cannon@0t1, boat@4t1, heavy@7t1, cannon@3t1]"
+    }
+   ],
+   "meta": {
+    "runs": {
+     "opening-line": {
+      "waveResults": [
+       {
+        "wave": 1,
+        "victory": true,
+        "hearts": 20,
+        "airLeaked": 0,
+        "airTotal": 0,
+        "objective": "repel",
+        "fireStats": {
+         "hero": {
+          "shots": 9,
+          "hits": 7,
+          "fizzled": 2
+         },
+         "howitzer": {
+          "shots": 4,
+          "hits": 4,
+          "fizzled": 0
+         },
+         "autocannon": {
+          "shots": 13,
+          "hits": 10,
+          "fizzled": 2
+         }
+        },
+        "start": {
+         "wave": 1,
+         "objective": "repel",
+         "queue": {
+          "speed": 6
+         },
+         "towers": [
+          "cannon@2t1",
+          "heavy@5t1"
+         ],
+         "cash": 942,
+         "steel": 75,
+         "hearts": 20,
+         "grid": 1
+        }
+       },
+       {
+        "wave": 2,
+        "victory": true,
+        "hearts": 20,
+        "airLeaked": 0,
+        "airTotal": 0,
+        "objective": "escort",
+        "fireStats": {
+         "hero": {
+          "shots": 23,
+          "hits": 21,
+          "fizzled": 2
+         },
+         "howitzer": {
+          "shots": 8,
+          "hits": 8,
+          "fizzled": 0
+         },
+         "autocannon": {
+          "shots": 24,
+          "hits": 20,
+          "fizzled": 2
+         }
+        },
+        "start": {
+         "wave": 2,
+         "objective": "escort",
+         "queue": {
+          "speed": 6,
+          "corvette": 1
+         },
+         "towers": [
+          "cannon@2t1",
+          "heavy@5t1"
+         ],
+         "cash": 3149,
+         "steel": 75,
+         "hearts": 20,
+         "grid": 1
+        }
+       },
+       {
+        "wave": 3,
+        "victory": true,
+        "attempts": [
+         {
+          "victory": true,
+          "hearts": 18,
+          "airLeaked": 2,
+          "airTotal": 6
+         },
+         {
+          "victory": true,
+          "hearts": 18,
+          "airLeaked": 2,
+          "airTotal": 6
+         },
+         {
+          "victory": true,
+          "hearts": 18,
+          "airLeaked": 2,
+          "airTotal": 6
+         },
+         {
+          "victory": true,
+          "hearts": 18,
+          "airLeaked": 2,
+          "airTotal": 6
+         },
+         {
+          "victory": true,
+          "hearts": 18,
+          "airLeaked": 2,
+          "airTotal": 6
+         },
+         {
+          "victory": true,
+          "hearts": 18,
+          "airLeaked": 2,
+          "airTotal": 6
+         },
+         {
+          "victory": true,
+          "hearts": 18,
+          "airLeaked": 2,
+          "airTotal": 6
+         }
+        ],
+        "hearts": 18,
+        "airLeaked": 2,
+        "airTotal": 6,
+        "objective": "airdef",
+        "fireStats": {
+         "hero": {
+          "shots": 33,
+          "hits": 28,
+          "fizzled": 4
+         },
+         "howitzer": {
+          "shots": 12,
+          "hits": 12,
+          "fizzled": 0
+         },
+         "autocannon": {
+          "shots": 75,
+          "hits": 68,
+          "fizzled": 4
+         }
+        },
+        "start": {
+         "wave": 3,
+         "objective": "airdef",
+         "towers": [
+          "cannon@2t1",
+          "heavy@5t1"
+         ],
+         "cash": 6903,
+         "steel": 75,
+         "hearts": 20,
+         "grid": 1
+        }
+       }
+      ],
+      "final": {
+       "cash": 6903,
+       "steel": 75,
+       "highestWave": 2,
+       "phase": "intermission",
+       "elapsed": 71
+      }
+     },
+     "mission-line": {
+      "waveResults": [
+       {
+        "wave": 1,
+        "victory": true,
+        "hearts": 20,
+        "airLeaked": 0,
+        "airTotal": 0,
+        "objective": "repel",
+        "fireStats": {
+         "hero": {
+          "shots": 9,
+          "hits": 7,
+          "fizzled": 2
+         },
+         "howitzer": {
+          "shots": 4,
+          "hits": 4,
+          "fizzled": 0
+         },
+         "autocannon": {
+          "shots": 13,
+          "hits": 10,
+          "fizzled": 2
+         }
+        },
+        "start": {
+         "wave": 1,
+         "objective": "repel",
+         "queue": {
+          "speed": 6
+         },
+         "towers": [
+          "cannon@2t1",
+          "heavy@5t1"
+         ],
+         "cash": 942,
+         "steel": 75,
+         "hearts": 20,
+         "grid": 1
+        }
+       },
+       {
+        "wave": 2,
+        "victory": true,
+        "hearts": 20,
+        "airLeaked": 0,
+        "airTotal": 0,
+        "objective": "escort",
+        "fireStats": {
+         "hero": {
+          "shots": 23,
+          "hits": 20,
+          "fizzled": 2
+         },
+         "howitzer": {
+          "shots": 8,
+          "hits": 8,
+          "fizzled": 0
+         },
+         "autocannon": {
+          "shots": 27,
+          "hits": 22,
+          "fizzled": 3
+         }
+        },
+        "start": {
+         "wave": 2,
+         "objective": "escort",
+         "queue": {
+          "speed": 6,
+          "corvette": 1
+         },
+         "towers": [
+          "cannon@2t1",
+          "heavy@5t1",
+          "ew@8t1",
+          "cannon@0t1"
+         ],
+         "cash": 699,
+         "steel": 5,
+         "hearts": 20,
+         "grid": 1
+        }
+       },
+       {
+        "wave": 3,
+        "victory": true,
+        "attempts": [
+         {
+          "victory": true,
+          "hearts": 20,
+          "airLeaked": 0,
+          "airTotal": 6
+         },
+         {
+          "victory": true,
+          "hearts": 20,
+          "airLeaked": 0,
+          "airTotal": 6
+         },
+         {
+          "victory": true,
+          "hearts": 20,
+          "airLeaked": 0,
+          "airTotal": 6
+         },
+         {
+          "victory": true,
+          "hearts": 20,
+          "airLeaked": 0,
+          "airTotal": 6
+         },
+         {
+          "victory": true,
+          "hearts": 20,
+          "airLeaked": 0,
+          "airTotal": 6
+         },
+         {
+          "victory": true,
+          "hearts": 20,
+          "airLeaked": 0,
+          "airTotal": 6
+         },
+         {
+          "victory": true,
+          "hearts": 20,
+          "airLeaked": 0,
+          "airTotal": 6
+         }
+        ],
+        "hearts": 20,
+        "airLeaked": 0,
+        "airTotal": 6,
+        "objective": "airdef",
+        "fireStats": {
+         "hero": {
+          "shots": 31,
+          "hits": 27,
+          "fizzled": 3
+         },
+         "howitzer": {
+          "shots": 8,
+          "hits": 8,
+          "fizzled": 0
+         },
+         "autocannon": {
+          "shots": 80,
+          "hits": 63,
+          "fizzled": 13
+         },
+         "garrison": {
+          "shots": 20,
+          "hits": 18,
+          "fizzled": 2
+         }
+        },
+        "start": {
+         "wave": 3,
+         "objective": "airdef",
+         "towers": [
+          "cannon@2t1",
+          "heavy@5t1",
+          "ew@8t1",
+          "cannon@0t1",
+          "boat@4t1",
+          "heavy@7t1",
+          "cannon@3t1"
+         ],
+         "cash": 5105,
+         "steel": 16.48484615384632,
+         "hearts": 20,
+         "grid": 1
+        }
+       }
+      ],
+      "final": {
+       "cash": 5105,
+       "steel": 16.48484615384632,
+       "highestWave": 2,
+       "phase": "intermission",
+       "elapsed": 70
+      }
+     }
+    }
+   }
+  },
+  {
+   "probe": "probe_i5",
+   "section": "§I5 retest (D-020 gate)",
+   "assertions": [
+    {
+     "section": "§I5 retest (D-020 gate)",
+     "id": "i5.browser_fires",
+     "name": "seeded boss battle fires on a real frame",
+     "status": "pass",
+     "expected": "browser fireStats > 0 and FX > 0 by battle t=30, matching the reducer",
+     "actual": {
+      "verdict": "I5 NOT reproduced — the live path fires",
+      "browserShots": 278,
+      "fxEvents": 538,
+      "battleT": 35.62,
+      "reducerShotsAt30": 197,
+      "enemiesSeen": 14,
+      "maxProgress": 0.674,
+      "destroyed": 11
+     },
+     "detail": "browser fireStats total=278 at battle t=35.62, FX events=538, reducer reference at t=30: 197 shots — team 5's zero readings were a headless time-dilation/window artifact"
+    }
+   ],
+   "meta": {
+    "reducer_reference": {
+     "battleStartElapsed": 2,
+     "firstShotAtBattle": 10.88,
+     "at30": {
+      "fireStats": {
+       "aadefense": {
+        "shots": 41,
+        "hits": 34,
+        "fizzled": 6
+       },
+       "garrison": {
+        "shots": 131,
+        "hits": 111,
+        "fizzled": 17
+       },
+       "autocannon": {
+        "shots": 14,
+        "hits": 6,
+        "fizzled": 8
+       },
+       "silo": {
+        "shots": 11,
+        "hits": 3,
+        "fizzled": 6
+       }
+      },
+      "totalShots": 197,
+      "destroyed": 8
+     },
+     "final": {
+      "fireStats": {
+       "aadefense": {
+        "shots": 77,
+        "hits": 62,
+        "fizzled": 13
+       },
+       "garrison": {
+        "shots": 210,
+        "hits": 175,
+        "fizzled": 32
+       },
+       "autocannon": {
+        "shots": 35,
+        "hits": 19,
+        "fizzled": 16
+       },
+       "silo": {
+        "shots": 16,
+        "hits": 4,
+        "fizzled": 11
+       },
+       "howitzer": {
+        "shots": 7,
+        "hits": 0,
+        "fizzled": 6
+       },
+       "hero": {
+        "shots": 1,
+        "hits": 0,
+        "fizzled": 1
+       },
+       "ew": {
+        "shots": 3,
+        "hits": 0,
+        "fizzled": 3
+       }
+      },
+      "totalShots": 349,
+      "destroyed": 15,
+      "phase": "battle",
+      "peakEnemies": 14
+     }
+    },
+    "page_errors": [],
+    "fx_install": "installed",
+    "samples": [
+     {
+      "elapsed": 6.625,
+      "phase": "intermission",
+      "battle": null,
+      "towersState": 8,
+      "towersSync": 8,
+      "enemies": 0,
+      "maxProgress": 0,
+      "destroyed": 0,
+      "fireStats": {},
+      "teleDirect": {
+       "shots": {},
+       "impacts": {}
+      },
+      "battleT": null
+     },
+     {
+      "elapsed": 8.125,
+      "phase": "intermission",
+      "battle": null,
+      "towersState": 8,
+      "towersSync": 8,
+      "enemies": 0,
+      "maxProgress": 0,
+      "destroyed": 0,
+      "fireStats": {},
+      "teleDirect": {
+       "shots": {},
+       "impacts": {}
+      },
+      "battleT": null
+     },
+     {
+      "elapsed": 9.125,
+      "phase": "intermission",
+      "battle": null,
+      "towersState": 8,
+      "towersSync": 8,
+      "enemies": 0,
+      "maxProgress": 0,
+      "destroyed": 0,
+      "fireStats": {},
+      "teleDirect": {
+       "shots": {},
+       "impacts": {}
+      },
+      "battleT": null
+     },
+     {
+      "elapsed": 10.625,
+      "phase": "battle",
+      "battle": {
+       "wave": 5,
+       "objective": "repel",
+       "elapsed": 0.625
+      },
+      "towersState": 8,
+      "towersSync": 8,
+      "enemies": 1,
+      "maxProgress": 0.028124999999999997,
+      "destroyed": 0,
+      "fireStats": {},
+      "teleDirect": {
+       "shots": {},
+       "impacts": {}
+      },
+      "battleT": 0.62
+     },
+     {
+      "elapsed": 11.625,
+      "phase": "battle",
+      "battle": {
+       "wave": 5,
+       "objective": "repel",
+       "elapsed": 1.625
+      },
+      "towersState": 8,
+      "towersSync": 8,
+      "enemies": 2,
+      "maxProgress": 0.073125,
+      "destroyed": 0,
+      "fireStats": {},
+      "teleDirect": {
+       "shots": {},
+       "impacts": {}
+      },
+      "battleT": 1.62
+     },
+     {
+      "elapsed": 12.625,
+      "phase": "battle",
+      "battle": {
+       "wave": 5,
+       "objective": "repel",
+       "elapsed": 2.625
+      },
+      "towersState": 8,
+      "towersSync": 8,
+      "enemies": 2,
+      "maxProgress": 0.11812500000000004,
+      "destroyed": 0,
+      "fireStats": {},
+      "teleDirect": {
+       "shots": {},
+       "impacts": {}
+      },
+      "battleT": 2.62
+     },
+     {
+      "elapsed": 13.625,
+      "phase": "battle",
+      "battle": {
+       "wave": 5,
+       "objective": "repel",
+       "elapsed": 3.625
+      },
+      "towersState": 8,
+      "towersSync": 8,
+      "enemies": 3,
+      "maxProgress": 0.163125,
+      "destroyed": 0,
+      "fireStats": {},
+      "teleDirect": {
+       "shots": {},
+       "impacts": {}
+      },
+      "battleT": 3.62
+     },
+     {
+      "elapsed": 14.625,
+      "phase": "battle",
+      "battle": {
+       "wave": 5,
+       "objective": "repel",
+       "elapsed": 4.625
+      },
+      "towersState": 8,
+      "towersSync": 8,
+      "enemies": 4,
+      "maxProgress": 0.20812499999999992,
+      "destroyed": 0,
+      "fireStats": {},
+      "teleDirect": {
+       "shots": {},
+       "impacts": {}
+      },
+      "battleT": 4.62
+     },
+     {
+      "elapsed": 15.625,
+      "phase": "battle",
+      "battle": {
+       "wave": 5,
+       "objective": "repel",
+       "elapsed": 5.625
+      },
+      "towersState": 8,
+      "towersSync": 8,
+      "enemies": 5,
+      "maxProgress": 0.2531249999999999,
+      "destroyed": 0,
+      "fireStats": {},
+      "teleDirect": {
+       "shots": {},
+       "impacts": {}
+      },
+      "battleT": 5.62
+     },
+     {
+      "elapsed": 16.625,
+      "phase": "battle",
+      "battle": {
+       "wave": 5,
+       "objective": "repel",
+       "elapsed": 6.625
+      },
+      "towersState": 8,
+      "towersSync": 8,
+      "enemies": 5,
+      "maxProgress": 0.2981249999999998,
+      "destroyed": 0,
+      "fireStats": {},
+      "teleDirect": {
+       "shots": {},
+       "impacts": {}
+      },
+      "battleT": 6.62
+     },
+     {
+      "elapsed": 17.125,
+      "phase": "battle",
+      "battle": {
+       "wave": 5,
+       "objective": "repel",
+       "elapsed": 7.125
+      },
+      "towersState": 8,
+      "towersSync": 8,
+      "enemies": 6,
+      "maxProgress": 0.32062499999999977,
+      "destroyed": 0,
+      "fireStats": {},
+      "teleDirect": {
+       "shots": {},
+       "impacts": {}
+      },
+      "battleT": 7.12
+     },
+     {
+      "elapsed": 18.625,
+      "phase": "battle",
+      "battle": {
+       "wave": 5,
+       "objective": "repel",
+       "elapsed": 8.625
+      },
+      "towersState": 8,
+      "towersSync": 8,
+      "enemies": 7,
+      "maxProgress": 0.38812499999999966,
+      "destroyed": 0,
+      "fireStats": {},
+      "teleDirect": {
+       "shots": {},
+       "impacts": {}
+      },
+      "battleT": 8.62
+     },
+     {
+      "elapsed": 20.125,
+      "phase": "battle",
+      "battle": {
+       "wave": 5,
+       "objective": "repel",
+       "elapsed": 10.125
+      },
+      "towersState": 8,
+      "towersSync": 8,
+      "enemies": 8,
+      "maxProgress": 0.45562499999999956,
+      "destroyed": 0,
+      "fireStats": {},
+      "teleDirect": {
+       "shots": {},
+       "impacts": {}
+      },
+      "battleT": 10.12
+     },
+     {
+      "elapsed": 21.125,
+      "phase": "battle",
+      "battle": {
+       "wave": 5,
+       "objective": "repel",
+       "elapsed": 11.125
+      },
+      "towersState": 8,
+      "towersSync": 8,
+      "enemies": 9,
+      "maxProgress": 0.5006249999999995,
+      "destroyed": 0,
+      "fireStats": {
+       "aadefense": {
+        "shots": 1,
+        "hits": 0,
+        "fizzled": 0
+       }
+      },
+      "teleDirect": {
+       "shots": {
+        "aadefense": 1
+       },
+       "impacts": {}
+      },
+      "battleT": 11.12
+     },
+     {
+      "elapsed": 22.125,
+      "phase": "battle",
+      "battle": {
+       "wave": 5,
+       "objective": "repel",
+       "elapsed": 12.125
+      },
+      "towersState": 8,
+      "towersSync": 8,
+      "enemies": 9,
+      "maxProgress": 0.5456249999999995,
+      "destroyed": 0,
+      "fireStats": {
+       "aadefense": {
+        "shots": 5,
+        "hits": 3,
+        "fizzled": 0
+       }
+      },
+      "teleDirect": {
+       "shots": {
+        "aadefense": 5
+       },
+       "impacts": {
+        "aadefense": 3
+       }
+      },
+      "battleT": 12.12
+     },
+     {
+      "elapsed": 23.125,
+      "phase": "battle",
+      "battle": {
+       "wave": 5,
+       "objective": "repel",
+       "elapsed": 13.125
+      },
+      "towersState": 8,
+      "towersSync": 8,
+      "enemies": 10,
+      "maxProgress": 0.5906249999999994,
+      "destroyed": 0,
+      "fireStats": {
+       "aadefense": {
+        "shots": 9,
+        "hits": 7,
+        "fizzled": 0
+       },
+       "garrison": {
+        "shots": 1,
+        "hits": 0,
+        "fizzled": 0
+       }
+      },
+      "teleDirect": {
+       "shots": {
+        "aadefense": 9,
+        "garrison": 1
+       },
+       "impacts": {
+        "aadefense": 7
+       }
+      },
+      "battleT": 13.12
+     },
+     {
+      "elapsed": 24.625,
+      "phase": "battle",
+      "battle": {
+       "wave": 5,
+       "objective": "repel",
+       "elapsed": 14.625
+      },
+      "towersState": 8,
+      "towersSync": 8,
+      "enemies": 10,
+      "maxProgress": 0.5399999999999995,
+      "destroyed": 1,
+      "fireStats": {
+       "aadefense": {
+        "shots": 14,
+        "hits": 10,
+        "fizzled": 2
+       },
+       "garrison": {
+        "shots": 8,
+        "hits": 5,
+        "fizzled": 0
+       },
+       "autocannon": {
+        "shots": 3,
+        "hits": 1,
+        "fizzled": 2
+       },
+       "silo": {
+        "shots": 1,
+        "hits": 0,
+        "fizzled": 0
+       }
+      },
+      "teleDirect": {
+       "shots": {
+        "aadefense": 14,
+        "garrison": 8,
+        "autocannon": 3,
+        "silo": 1
+       },
+       "impacts": {
+        "aadefense": 10,
+        "garrison": 5,
+        "autocannon": 1
+       }
+      },
+      "battleT": 14.62
+     },
+     {
+      "elapsed": 25.625,
+      "phase": "battle",
+      "battle": {
+       "wave": 5,
+       "objective": "repel",
+       "elapsed": 15.625
+      },
+      "towersState": 8,
+      "towersSync": 8,
+      "enemies": 10,
+      "maxProgress": 0.5849999999999994,
+      "destroyed": 1,
+      "fireStats": {
+       "aadefense": {
+        "shots": 18,
+        "hits": 14,
+        "fizzled": 2
+       },
+       "garrison": {
+        "shots": 16,
+        "hits": 12,
+        "fizzled": 0
+       },
+       "autocannon": {
+        "shots": 3,
+        "hits": 1,
+        "fizzled": 2
+       },
+       "silo": {
+        "shots": 2,
+        "hits": 1,
+        "fizzled": 0
+       }
+      },
+      "teleDirect": {
+       "shots": {
+        "aadefense": 18,
+        "garrison": 16,
+        "autocannon": 3,
+        "silo": 2
+       },
+       "impacts": {
+        "aadefense": 14,
+        "garrison": 12,
+        "autocannon": 1,
+        "silo": 1
+       }
+      },
+      "battleT": 15.62
+     },
+     {
+      "elapsed": 26.625,
+      "phase": "battle",
+      "battle": {
+       "wave": 5,
+       "objective": "repel",
+       "elapsed": 16.625
+      },
+      "towersState": 8,
+      "towersSync": 8,
+      "enemies": 9,
+      "maxProgress": 0.5062499999999995,
+      "destroyed": 2,
+      "fireStats": {
+       "aadefense": {
+        "shots": 21,
+        "hits": 17,
+        "fizzled": 3
+       },
+       "garrison": {
+        "shots": 24,
+        "hits": 20,
+        "fizzled": 0
+       },
+       "autocannon": {
+        "shots": 6,
+        "hits": 2,
+        "fizzled": 4
+       },
+       "silo": {
+        "shots": 2,
+        "hits": 1,
+        "fizzled": 0
+       }
+      },
+      "teleDirect": {
+       "shots": {
+        "aadefense": 21,
+        "garrison": 24,
+        "autocannon": 6,
+        "silo": 2
+       },
+       "impacts": {
+        "aadefense": 17,
+        "garrison": 20,
+        "autocannon": 2,
+        "silo": 1
+       }
+      },
+      "battleT": 16.62
+     },
+     {
+      "elapsed": 27.625,
+      "phase": "battle",
+      "battle": {
+       "wave": 5,
+       "objective": "repel",
+       "elapsed": 17.625
+      },
+      "towersState": 8,
+      "towersSync": 8,
+      "enemies": 8,
+      "maxProgress": 0.5512499999999995,
+      "destroyed": 3,
+      "fireStats": {
+       "aadefense": {
+        "shots": 25,
+        "hits": 20,
+        "fizzled": 3
+       },
+       "garrison": {
+        "shots": 32,
+        "hits": 23,
+        "fizzled": 5
+       },
+       "autocannon": {
+        "shots": 6,
+        "hits": 2,
+        "fizzled": 4
+       },
+       "silo": {
+        "shots": 3,
+        "hits": 2,
+        "fizzled": 0
+       }
+      },
+      "teleDirect": {
+       "shots": {
+        "aadefense": 25,
+        "garrison": 32,
+        "autocannon": 6,
+        "silo": 3
+       },
+       "impacts": {
+        "aadefense": 20,
+        "garrison": 23,
+        "autocannon": 2,
+        "silo": 2
+       }
+      },
+      "battleT": 17.62
+     },
+     {
+      "elapsed": 28.625,
+      "phase": "battle",
+      "battle": {
+       "wave": 5,
+       "objective": "repel",
+       "elapsed": 18.625
+      },
+      "towersState": 8,
+      "towersSync": 8,
+      "enemies": 8,
+      "maxProgress": 0.5962499999999994,
+      "destroyed": 3,
+      "fireStats": {
+       "aadefense": {
+        "shots": 28,
+        "hits": 24,
+        "fizzled": 3
+       },
+       "garrison": {
+        "shots": 40,
+        "hits": 31,
+        "fizzled": 5
+       },
+       "autocannon": {
+        "shots": 6,
+        "hits": 2,
+        "fizzled": 4
+       },
+       "silo": {
+        "shots": 4,
+        "hits": 2,
+        "fizzled": 0
+       }
+      },
+      "teleDirect": {
+       "shots": {
+        "aadefense": 28,
+        "garrison": 40,
+        "autocannon": 6,
+        "silo": 4
+       },
+       "impacts": {
+        "aadefense": 24,
+        "garrison": 31,
+        "autocannon": 2,
+        "silo": 2
+       }
+      },
+      "battleT": 18.62
+     },
+     {
+      "elapsed": 29.625,
+      "phase": "battle",
+      "battle": {
+       "wave": 5,
+       "objective": "repel",
+       "elapsed": 19.625
+      },
+      "towersState": 8,
+      "towersSync": 8,
+      "enemies": 6,
+      "maxProgress": 0.5231249999999995,
+      "destroyed": 5,
+      "fireStats": {
+       "aadefense": {
+        "shots": 32,
+        "hits": 26,
+        "fizzled": 5
+       },
+       "garrison": {
+        "shots": 48,
+        "hits": 37,
+        "fizzled": 7
+       },
+       "autocannon": {
+        "shots": 10,
+        "hits": 4,
+        "fizzled": 6
+       },
+       "silo": {
+        "shots": 4,
+        "hits": 2,
+        "fizzled": 1
+       }
+      },
+      "teleDirect": {
+       "shots": {
+        "aadefense": 32,
+        "garrison": 48,
+        "autocannon": 10,
+        "silo": 4
+       },
+       "impacts": {
+        "aadefense": 26,
+        "garrison": 37,
+        "autocannon": 4,
+        "silo": 2
+       }
+      },
+      "battleT": 19.62
+     },
+     {
+      "elapsed": 31.125,
+      "phase": "battle",
+      "battle": {
+       "wave": 5,
+       "objective": "repel",
+       "elapsed": 21.125
+      },
+      "towersState": 8,
+      "towersSync": 8,
+      "enemies": 6,
+      "maxProgress": 0.5906249999999994,
+      "destroyed": 5,
+      "fireStats": {
+       "aadefense": {
+        "shots": 37,
+        "hits": 31,
+        "fizzled": 5
+       },
+       "garrison": {
+        "shots": 60,
+        "hits": 47,
+        "fizzled": 9
+       },
+       "autocannon": {
+        "shots": 10,
+        "hits": 4,
+        "fizzled": 6
+       },
+       "silo": {
+        "shots": 5,
+        "hits": 2,
+        "fizzled": 2
+       }
+      },
+      "teleDirect": {
+       "shots": {
+        "aadefense": 37,
+        "garrison": 60,
+        "autocannon": 10,
+        "silo": 5
+       },
+       "impacts": {
+        "aadefense": 31,
+        "garrison": 47,
+        "autocannon": 4,
+        "silo": 2
+       }
+      },
+      "battleT": 21.12
+     },
+     {
+      "elapsed": 32.125,
+      "phase": "battle",
+      "battle": {
+       "wave": 5,
+       "objective": "repel",
+       "elapsed": 22.125
+      },
+      "towersState": 8,
+      "towersSync": 8,
+      "enemies": 4,
+      "maxProgress": 0.3262499999999993,
+      "destroyed": 7,
+      "fireStats": {
+       "aadefense": {
+        "shots": 40,
+        "hits": 34,
+        "fizzled": 6
+       },
+       "garrison": {
+        "shots": 68,
+        "hits": 54,
+        "fizzled": 10
+       },
+       "autocannon": {
+        "shots": 14,
+        "hits": 6,
+        "fizzled": 7
+       },
+       "silo": {
+        "shots": 6,
+        "hits": 2,
+        "fizzled": 2
+       }
+      },
+      "teleDirect": {
+       "shots": {
+        "aadefense": 40,
+        "garrison": 68,
+        "autocannon": 14,
+        "silo": 6
+       },
+       "impacts": {
+        "aadefense": 34,
+        "garrison": 54,
+        "autocannon": 6,
+        "silo": 2
+       }
+      },
+      "battleT": 22.12
+     },
+     {
+      "elapsed": 33.125,
+      "phase": "battle",
+      "battle": {
+       "wave": 5,
+       "objective": "repel",
+       "elapsed": 23.125
+      },
+      "towersState": 8,
+      "towersSync": 8,
+      "enemies": 4,
+      "maxProgress": 0.3442499999999991,
+      "destroyed": 7,
+      "fireStats": {
+       "aadefense": {
+        "shots": 40,
+        "hits": 34,
+        "fizzled": 6
+       },
+       "garrison": {
+        "shots": 76,
+        "hits": 59,
+        "fizzled": 13
+       },
+       "autocannon": {
+        "shots": 14,
+        "hits": 6,
+        "fizzled": 8
+       },
+       "silo": {
+        "shots": 6,
+        "hits": 2,
+        "fizzled": 3
+       }
+      },
+      "teleDirect": {
+       "shots": {
+        "aadefense": 40,
+        "garrison": 76,
+        "autocannon": 14,
+        "silo": 6
+       },
+       "impacts": {
+        "aadefense": 34,
+        "garrison": 59,
+        "autocannon": 6,
+        "silo": 2
+       }
+      },
+      "battleT": 23.12
+     },
+     {
+      "elapsed": 34.125,
+      "phase": "battle",
+      "battle": {
+       "wave": 5,
+       "objective": "repel",
+       "elapsed": 24.125
+      },
+      "towersState": 8,
+      "towersSync": 8,
+      "enemies": 10,
+      "maxProgress": 0.3622499999999989,
+      "destroyed": 7,
+      "fireStats": {
+       "aadefense": {
+        "shots": 40,
+        "hits": 34,
+        "fizzled": 6
+       },
+       "garrison": {
+        "shots": 84,
+        "hits": 67,
+        "fizzled": 13
+       },
+       "autocannon": {
+        "shots": 14,
+        "hits": 6,
+        "fizzled": 8
+       },
+       "silo": {
+        "shots": 7,
+        "hits": 2,
+        "fizzled": 4
+       }
+      },
+      "teleDirect": {
+       "shots": {
+        "aadefense": 40,
+        "garrison": 84,
+        "autocannon": 14,
+        "silo": 7
+       },
+       "impacts": {
+        "aadefense": 34,
+        "garrison": 67,
+        "autocannon": 6,
+        "silo": 2
+       }
+      },
+      "battleT": 24.12
+     },
+     {
+      "elapsed": 35.125,
+      "phase": "battle",
+      "battle": {
+       "wave": 5,
+       "objective": "repel",
+       "elapsed": 25.125
+      },
+      "towersState": 8,
+      "towersSync": 8,
+      "enemies": 10,
+      "maxProgress": 0.3802499999999987,
+      "destroyed": 7,
+      "fireStats": {
+       "aadefense": {
+        "shots": 40,
+        "hits": 34,
+        "fizzled": 6
+       },
+       "garrison": {
+        "shots": 92,
+        "hits": 75,
+        "fizzled": 13
+       },
+       "autocannon": {
+        "shots": 14,
+        "hits": 6,
+        "fizzled": 8
+       },
+       "silo": {
+        "shots": 8,
+        "hits": 2,
+        "fizzled": 4
+       }
+      },
+      "teleDirect": {
+       "shots": {
+        "aadefense": 40,
+        "garrison": 92,
+        "autocannon": 14,
+        "silo": 8
+       },
+       "impacts": {
+        "aadefense": 34,
+        "garrison": 75,
+        "autocannon": 6,
+        "silo": 2
+       }
+      },
+      "battleT": 25.12
+     },
+     {
+      "elapsed": 36.125,
+      "phase": "battle",
+      "battle": {
+       "wave": 5,
+       "objective": "repel",
+       "elapsed": 26.125
+      },
+      "towersState": 8,
+      "towersSync": 8,
+      "enemies": 10,
+      "maxProgress": 0.3982499999999985,
+      "destroyed": 7,
+      "fireStats": {
+       "aadefense": {
+        "shots": 40,
+        "hits": 34,
+        "fizzled": 6
+       },
+       "garrison": {
+        "shots": 99,
+        "hits": 83,
+        "fizzled": 13
+       },
+       "autocannon": {
+        "shots": 14,
+        "hits": 6,
+        "fizzled": 8
+       },
+       "silo": {
+        "shots": 8,
+        "hits": 2,
+        "fizzled": 5
+       }
+      },
+      "teleDirect": {
+       "shots": {
+        "aadefense": 40,
+        "garrison": 99,
+        "autocannon": 14,
+        "silo": 8
+       },
+       "impacts": {
+        "aadefense": 34,
+        "garrison": 83,
+        "autocannon": 6,
+        "silo": 2
+       }
+      },
+      "battleT": 26.12
+     },
+     {
+      "elapsed": 37.125,
+      "phase": "battle",
+      "battle": {
+       "wave": 5,
+       "objective": "repel",
+       "elapsed": 27.125
+      },
+      "towersState": 8,
+      "towersSync": 8,
+      "enemies": 10,
+      "maxProgress": 0.4162499999999983,
+      "destroyed": 7,
+      "fireStats": {
+       "aadefense": {
+        "shots": 40,
+        "hits": 34,
+        "fizzled": 6
+       },
+       "garrison": {
+        "shots": 108,
+        "hits": 90,
+        "fizzled": 13
+       },
+       "autocannon": {
+        "shots": 14,
+        "hits": 6,
+        "fizzled": 8
+       },
+       "silo": {
+        "shots": 9,
+        "hits": 3,
+        "fizzled": 5
+       }
+      },
+      "teleDirect": {
+       "shots": {
+        "aadefense": 40,
+        "garrison": 108,
+        "autocannon": 14,
+        "silo": 9
+       },
+       "impacts": {
+        "aadefense": 34,
+        "garrison": 90,
+        "autocannon": 6,
+        "silo": 3
+       }
+      },
+      "battleT": 27.12
+     },
+     {
+      "elapsed": 38.125,
+      "phase": "battle",
+      "battle": {
+       "wave": 5,
+       "objective": "repel",
+       "elapsed": 28.125
+      },
+      "towersState": 8,
+      "towersSync": 8,
+      "enemies": 10,
+      "maxProgress": 0.4342499999999981,
+      "destroyed": 7,
+      "fireStats": {
+       "aadefense": {
+        "shots": 40,
+        "hits": 34,
+        "fizzled": 6
+       },
+       "garrison": {
+        "shots": 115,
+        "hits": 99,
+        "fizzled": 13
+       },
+       "autocannon": {
+        "shots": 14,
+        "hits": 6,
+        "fizzled": 8
+       },
+       "silo": {
+        "shots": 9,
+        "hits": 3,
+        "fizzled": 5
+       }
+      },
+      "teleDirect": {
+       "shots": {
+        "aadefense": 40,
+        "garrison": 115,
+        "autocannon": 14,
+        "silo": 9
+       },
+       "impacts": {
+        "aadefense": 34,
+        "garrison": 99,
+        "autocannon": 6,
+        "silo": 3
+       }
+      },
+      "battleT": 28.12
+     },
+     {
+      "elapsed": 39.125,
+      "phase": "battle",
+      "battle": {
+       "wave": 5,
+       "objective": "repel",
+       "elapsed": 29.125
+      },
+      "towersState": 8,
+      "towersSync": 8,
+      "enemies": 9,
+      "maxProgress": 0.44100000000000034,
+      "destroyed": 8,
+      "fireStats": {
+       "aadefense": {
+        "shots": 40,
+        "hits": 34,
+        "fizzled": 6
+       },
+       "garrison": {
+        "shots": 123,
+        "hits": 102,
+        "fizzled": 17
+       },
+       "autocannon": {
+        "shots": 14,
+        "hits": 6,
+        "fizzled": 8
+       },
+       "silo": {
+        "shots": 10,
+        "hits": 3,
+        "fizzled": 6
+       }
+      },
+      "teleDirect": {
+       "shots": {
+        "aadefense": 40,
+        "garrison": 123,
+        "autocannon": 14,
+        "silo": 10
+       },
+       "impacts": {
+        "aadefense": 34,
+        "garrison": 102,
+        "autocannon": 6,
+        "silo": 3
+       }
+      },
+      "battleT": 29.12
+     },
+     {
+      "elapsed": 40.625,
+      "phase": "battle",
+      "battle": {
+       "wave": 5,
+       "objective": "repel",
+       "elapsed": 30.625
+      },
+      "towersState": 8,
+      "towersSync": 8,
+      "enemies": 9,
+      "maxProgress": 0.47700000000000037,
+      "destroyed": 8,
+      "fireStats": {
+       "aadefense": {
+        "shots": 43,
+        "hits": 35,
+        "fizzled": 6
+       },
+       "garrison": {
+        "shots": 135,
+        "hits": 115,
+        "fizzled": 17
+       },
+       "autocannon": {
+        "shots": 14,
+        "hits": 6,
+        "fizzled": 8
+       },
+       "silo": {
+        "shots": 11,
+        "hits": 3,
+        "fizzled": 7
+       }
+      },
+      "teleDirect": {
+       "shots": {
+        "aadefense": 43,
+        "garrison": 135,
+        "autocannon": 14,
+        "silo": 11
+       },
+       "impacts": {
+        "aadefense": 35,
+        "garrison": 115,
+        "autocannon": 6,
+        "silo": 3
+       }
+      },
+      "battleT": 30.62
+     },
+     {
+      "elapsed": 41.625,
+      "phase": "battle",
+      "battle": {
+       "wave": 5,
+       "objective": "repel",
+       "elapsed": 31.625
+      },
+      "towersState": 8,
+      "towersSync": 8,
+      "enemies": 9,
+      "maxProgress": 0.5056249999999995,
+      "destroyed": 8,
+      "fireStats": {
+       "aadefense": {
+        "shots": 46,
+        "hits": 39,
+        "fizzled": 6
+       },
+       "garrison": {
+        "shots": 143,
+        "hits": 123,
+        "fizzled": 17
+       },
+       "autocannon": {
+        "shots": 14,
+        "hits": 6,
+        "fizzled": 8
+       },
+       "silo": {
+        "shots": 12,
+        "hits": 3,
+        "fizzled": 7
+       },
+       "howitzer": {
+        "shots": 1,
+        "hits": 0,
+        "fizzled": 0
+       }
+      },
+      "teleDirect": {
+       "shots": {
+        "aadefense": 46,
+        "garrison": 143,
+        "autocannon": 14,
+        "silo": 12,
+        "howitzer": 1
+       },
+       "impacts": {
+        "aadefense": 39,
+        "garrison": 123,
+        "autocannon": 6,
+        "silo": 3
+       }
+      },
+      "battleT": 31.62
+     },
+     {
+      "elapsed": 42.625,
+      "phase": "battle",
+      "battle": {
+       "wave": 5,
+       "objective": "repel",
+       "elapsed": 32.625
+      },
+      "towersState": 8,
+      "towersSync": 8,
+      "enemies": 8,
+      "maxProgress": 0.5506249999999995,
+      "destroyed": 9,
+      "fireStats": {
+       "aadefense": {
+        "shots": 50,
+        "hits": 42,
+        "fizzled": 6
+       },
+       "garrison": {
+        "shots": 151,
+        "hits": 127,
+        "fizzled": 21
+       },
+       "autocannon": {
+        "shots": 14,
+        "hits": 6,
+        "fizzled": 8
+       },
+       "silo": {
+        "shots": 12,
+        "hits": 4,
+        "fizzled": 7
+       },
+       "howitzer": {
+        "shots": 1,
+        "hits": 0,
+        "fizzled": 0
+       }
+      },
+      "teleDirect": {
+       "shots": {
+        "aadefense": 50,
+        "garrison": 151,
+        "autocannon": 14,
+        "silo": 12,
+        "howitzer": 1
+       },
+       "impacts": {
+        "aadefense": 42,
+        "garrison": 127,
+        "autocannon": 6,
+        "silo": 4
+       }
+      },
+      "battleT": 32.62
+     },
+     {
+      "elapsed": 43.625,
+      "phase": "battle",
+      "battle": {
+       "wave": 5,
+       "objective": "repel",
+       "elapsed": 33.625
+      },
+      "towersState": 8,
+      "towersSync": 8,
+      "enemies": 14,
+      "maxProgress": 0.5956249999999994,
+      "destroyed": 9,
+      "fireStats": {
+       "aadefense": {
+        "shots": 54,
+        "hits": 46,
+        "fizzled": 6
+       },
+       "garrison": {
+        "shots": 159,
+        "hits": 134,
+        "fizzled": 21
+       },
+       "autocannon": {
+        "shots": 14,
+        "hits": 6,
+        "fizzled": 8
+       },
+       "silo": {
+        "shots": 13,
+        "hits": 4,
+        "fizzled": 7
+       },
+       "howitzer": {
+        "shots": 1,
+        "hits": 0,
+        "fizzled": 1
+       }
+      },
+      "teleDirect": {
+       "shots": {
+        "aadefense": 54,
+        "garrison": 159,
+        "autocannon": 14,
+        "silo": 13,
+        "howitzer": 1
+       },
+       "impacts": {
+        "aadefense": 46,
+        "garrison": 134,
+        "autocannon": 6,
+        "silo": 4
+       }
+      },
+      "battleT": 33.62
+     },
+     {
+      "elapsed": 44.625,
+      "phase": "battle",
+      "battle": {
+       "wave": 5,
+       "objective": "repel",
+       "elapsed": 34.625
+      },
+      "towersState": 8,
+      "towersSync": 8,
+      "enemies": 12,
+      "maxProgress": 0.6286249999999993,
+      "destroyed": 11,
+      "fireStats": {
+       "aadefense": {
+        "shots": 57,
+        "hits": 48,
+        "fizzled": 8
+       },
+       "garrison": {
+        "shots": 167,
+        "hits": 141,
+        "fizzled": 23
+       },
+       "autocannon": {
+        "shots": 20,
+        "hits": 8,
+        "fizzled": 10
+       },
+       "silo": {
+        "shots": 13,
+        "hits": 4,
+        "fizzled": 8
+       },
+       "howitzer": {
+        "shots": 1,
+        "hits": 0,
+        "fizzled": 1
+       }
+      },
+      "teleDirect": {
+       "shots": {
+        "aadefense": 57,
+        "garrison": 167,
+        "autocannon": 20,
+        "silo": 13,
+        "howitzer": 1
+       },
+       "impacts": {
+        "aadefense": 48,
+        "garrison": 141,
+        "autocannon": 8,
+        "silo": 4
+       }
+      },
+      "battleT": 34.62
+     },
+     {
+      "elapsed": 45.625,
+      "phase": "battle",
+      "battle": {
+       "wave": 5,
+       "objective": "repel",
+       "elapsed": 35.625
+      },
+      "towersState": 8,
+      "towersSync": 8,
+      "enemies": 12,
+      "maxProgress": 0.6736249999999993,
+      "destroyed": 11,
+      "fireStats": {
+       "aadefense": {
+        "shots": 61,
+        "hits": 51,
+        "fizzled": 8
+       },
+       "garrison": {
+        "shots": 175,
+        "hits": 148,
+        "fizzled": 24
+       },
+       "autocannon": {
+        "shots": 26,
+        "hits": 14,
+        "fizzled": 10
+       },
+       "silo": {
+        "shots": 14,
+        "hits": 4,
+        "fizzled": 9
+       },
+       "howitzer": {
+        "shots": 2,
+        "hits": 0,
+        "fizzled": 1
+       }
+      },
+      "teleDirect": {
+       "shots": {
+        "aadefense": 61,
+        "garrison": 175,
+        "autocannon": 26,
+        "silo": 14,
+        "howitzer": 2
+       },
+       "impacts": {
+        "aadefense": 51,
+        "garrison": 148,
+        "autocannon": 14,
+        "silo": 4
+       }
+      },
+      "battleT": 35.62
+     }
+    ],
+    "fx_totals": {
+     "shoot": 269,
+     "rail": 0,
+     "flash": 269,
+     "explode": 53
+    },
+    "telemetry_legacy_reader": {
+     "aadefense": 63,
+     "garrison": 179,
+     "autocannon": 29,
+     "silo": 14,
+     "howitzer": 2,
+     "hero": 1,
+     "ew": 1
+    }
+   }
+  }
+ ],
+ "sections": {
+  "§anim amplitude (D-019)": {
+   "pass": 23,
+   "fail": 0,
+   "skip": 0
+  },
+  "§heat budget (D-020)": {
+   "pass": 4,
+   "fail": 0,
+   "skip": 0
+  },
+  "§fresh-player gate (D-024)": {
+   "pass": 2,
+   "fail": 0,
+   "skip": 0
+  },
+  "§I5 retest (D-020 gate)": {
+   "pass": 1,
+   "fail": 0,
+   "skip": 0
+  }
+ },
+ "total": {
+  "pass": 30,
+  "fail": 0,
+  "skip": 0
+ }
+}

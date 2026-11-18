@@ -69,7 +69,10 @@ SAMPLE_JS = """() => {
       vals };
   }
   const bld = {};
-  if (s.genericAnims) for (const [k, arr] of s.genericAnims.entries()) bld[k] = (arr || []).length;
+  if (s.genericAnims) for (const [k, arr] of s.genericAnims.entries()) bld[k] = {
+    count: (arr || []).length,
+    vals: (arr || []).flatMap(n => [...flat(n.obj), ...n.obj.scale.toArray(), ...(n.mat?.color?.toArray() || []), n.obj.intensity || 0])
+  };
   const st = s.state;
   return { towers, bld, elapsed: st ? st.elapsed : null,
            phase: st ? st.phase : null, fireStats: st ? st.fireStats : null };
@@ -186,14 +189,24 @@ async def main() -> int:
 
             bld = final["bld"] or {}
             bld_lists = {k: v for k, v in bld.items() if k.startswith("bld-")}
-            live = {k: v for k, v in bld_lists.items() if v > 0}
+            live = {k: v for k, v in bld_lists.items() if v["count"] > 0}
             assertions.append(report.check(
                 SECTION, "amplitude.building_idle",
                 "building idle animation lists are non-empty",
                 len(live) > 0,
-                expected=">= 1 building with a non-empty idle anim list",
+                expected=">= 1 building with authored idle animation nodes",
                 actual={"buildings": bld_lists},
                 detail="gamesync.genericAnims 'bld-' entries (radar/flame/smoke idles)"))
+            # Low-tier tanks/houses are authored static. For every loaded
+            # building that DOES have moving parts, measure real transforms
+            # or beacon colors instead of accepting a non-empty list alone.
+            for key in live:
+                series = [s["bld"][key]["vals"] for s in samples if key in s["bld"]]
+                width = min((len(x) for x in series), default=0)
+                amp = max((max(x[i] for x in series) - min(x[i] for x in series) for i in range(width)), default=0)
+                assertions.append(report.check(
+                    SECTION, f"amplitude.{key}", f"{key} authored transform or beacon color changes",
+                    amp > AMP_EPS, expected=f"amplitude > {AMP_EPS}", actual=round(amp, 4)))
             await harness.safe_close(pg)
         finally:
             await harness.safe_close(ctx)

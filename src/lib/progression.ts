@@ -58,6 +58,7 @@ export interface IdleState {
   boostRecharge: number;
   autoBattle: boolean;
   stars: Record<string, number>;
+  modeBest: Record<Mode, number>;
   lastBattle: BattleReport | null;
   waveStartedAt: number;
   waveStartKills: number;
@@ -71,19 +72,17 @@ export interface IdleState {
   port: PortState;
   platforms: number[];
   challengeRuns: number;
-  /** Rolling 6 h game-time export window: dollars actually banked from
-   *  tanker exports inside the current window (avgExportRate numerator). */
+  /** Smoothed export dollars over a six-hour horizon (avgExportRate numerator). */
   exportWindowDollars: number;
-  /** Game-time seconds elapsed inside the current export window. The
-   *  window restarts empty on expiry (6 h) and at prestige. */
+  /** Game-time denominator capped at six hours; reset on prestige. */
   exportWindowTime: number;
 }
-export interface PortState { tanker: { stage: "approach" | "loading" | "depart"; progress: number; load: number } | null; nextIn: number; cycles: number; /** Lifetime realized export income in $ — the basis of the realized export rate (R11). */ exportedDollars: number; }
+export interface PortState { tanker: { stage: "approach" | "loading" | "depart"; progress: number; load: number } | null; nextIn: number; cycles: number; /** Lifetime realized export income in $; not used for the smoothed rate. */ exportedDollars: number; }
 export function initialIdle(): IdleState {
   return {
     revision: 0, bank: 260, collected: 0, collections: 0, collectionStreak: 0, lastCollectionAt: -1000, lifetimeIncome: 0, xp: 0, upgradeCount: 0,
     claimedMissions: [], claimedMilestones: [], managerLevels: { harbor: 0, energy: 0, supply: 0 }, managerClock: 0,
-    boostCharges: 2, boostRemaining: 0, boostRecharge: 0, autoBattle: false, stars: {}, lastBattle: null,
+    boostCharges: 2, boostRemaining: 0, boostRecharge: 0, autoBattle: false, stars: {}, modeBest: { campaign: 0, endless: 0, challenge: 0 }, lastBattle: null,
     waveStartedAt: 0, waveStartKills: 0, rewards: [], lootSeed: 17381, openedChests: 0, completedContracts: 0,
     contract: null, offline: null, appliedDailyIds: [],
     port: { tanker: { stage: "approach", progress: 0, load: 0 }, nextIn: 0, cycles: 0, exportedDollars: 0 }, platforms: [], challengeRuns: 0,
@@ -111,6 +110,8 @@ export const CHAPTERS = [
   { title: "قدرت صنعتی", description: "اقتصادی که از تنگه پشتیبانی می‌کند", icon: "factory" },
   { title: "دفاع چندلایه", description: "پیشروی در برابر ناوگان‌های سنگین", icon: "shield" },
   { title: "فرمانروایی آب‌ها", description: "گسترش قلمرو و برتری راهبردی", icon: "crown" },
+  { title: "دفاع در اعماق", description: "فنّاوری ویژه و پوشش چندلایه", icon: "shield" },
+  { title: "آخرین آبراه", description: "نجات ناوگان و پایان کمپین", icon: "crown" },
 ];
 export type MissionTarget = { kind: "collect" | "building" | "manager" | "tower" | "battle" | "research" | "chest" | "contract" | "island" | "journal"; id?: string };
 export type Mission = {
@@ -141,6 +142,13 @@ export const MISSIONS: Mission[] = [
   { id:"oil-twenty-five", chapter:3, title:"مجتمع مدرن نفت", description:"سکوی نفتی را به سطح ۲۵ برسانید.", target:25, metric:"building", metricId:"oil", navigate:{kind:"building",id:"oil"}, cash:5000, xp:400, chests:2 },
   { id:"all-managers", chapter:3, title:"کشوری که خودکار کار می‌کند", description:"هر سه مدیر متخصص را استخدام کنید.", target:3, metric:"managers", navigate:{kind:"manager"}, cash:4000, xp:300, boosts:2 },
   { id:"tenth-wave", chapter:3, title:"فرمانروای تنگه", description:"موج ۱۰ و زیردریایی عظیم آن را پشت سر بگذارید.", target:10, metric:"wave", navigate:{kind:"battle"}, cash:8000, xp:600, chests:3 },
+  { id:"special-defense", chapter:4, title:"دفاع تخصصی", description:"فناوری برجک‌های ویژه را باز کنید و یک برجک سطح چهار بسازید.", target:4, metric:"towerTier", navigate:{kind:"research"}, cash:3500, xp:350 },
+  { id:"hormuz-network", chapter:4, title:"پوشش آبراه", description:"قلمرو را به پنج جزیره گسترش دهید و جایگاه‌های تازه را بررسی کنید.", target:5, metric:"islands", navigate:{kind:"island"}, cash:5000, xp:350 },
+  { id:"fifteenth-wave", chapter:4, title:"شکستن سپر تایتان", description:"عملیات پانزدهم را به پایان برسانید؛ پنجرهٔ خاموشی سپر را هدف بگیرید.", target:15, metric:"wave", navigate:{kind:"battle"}, cash:6500, xp:500, chests:3 },
+  { id:"supply-ten", chapter:4, title:"تدارکات پایدار", description:"کارخانهٔ مهمات را به سطح ۱۰ برسانید؛ تأمین سوخت و فولاد را هم متوازن نگه دارید.", target:10, metric:"building", metricId:"arms", navigate:{kind:"building",id:"arms"}, cash:5000, xp:400, boosts:2 },
+  { id:"research-fifteen", chapter:5, title:"دانش در خدمت دفاع", description:"۱۵ فناوری را پژوهش کنید.", target:15, metric:"research", navigate:{kind:"research"}, cash:7000, xp:500, chests:2 },
+  { id:"twentieth-wave", chapter:5, title:"پایان ناو هواپیمابر", description:"عملیات بیستم را با دفاع هوایی و پوشش خط رهگیری پشت سر بگذارید.", target:20, metric:"wave", navigate:{kind:"battle"}, cash:9000, xp:700, chests:3 },
+  { id:"campaign-finale", chapter:5, title:"فرمانروای آب‌های آزاد", description:"عملیات بیست‌وپنجم را کامل کنید. سپس ستاره‌های باقی‌مانده، چالش‌ها یا یک فصل تازهٔ توسعه را انتخاب کنید.", target:25, metric:"wave", navigate:{kind:"battle"}, cash:15000, xp:1200, chests:5 },
 ];
 export function missionProgress(state: GameState, mission: Mission) {
   const idle = state.idle;
@@ -159,7 +167,7 @@ export function missionProgress(state: GameState, mission: Mission) {
 }
 export function currentMission(state: GameState) { return MISSIONS.find(mission => !state.idle.claimedMissions.includes(mission.id)) ?? null; }
 export function currentChapter(state: GameState) {
-  const mission = currentMission(state), chapter = mission?.chapter ?? 3;
+  const mission = currentMission(state), chapter = mission?.chapter ?? CHAPTERS.length - 1;
   const items = MISSIONS.filter(m => m.chapter === chapter);
   return { ...CHAPTERS[chapter], index: chapter, completed: items.filter(m => state.idle.claimedMissions.includes(m.id)).length, total: items.length };
 }

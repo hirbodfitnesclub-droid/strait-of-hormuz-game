@@ -9,17 +9,19 @@ these probes prove what changed and lock what must not (the audit's
 ## Run
 
 ```bash
-npm run test:audit            # everything: build (if needed) + serve + probes
+npm run test:audit            # everything: fresh build + serve + probes
 python3 scripts/audit/runner.py --probe cadence   # one probe
 python3 scripts/audit/runner.py --port 3310 --no-build
 ```
 
 Exit codes: `0` all pass · `1` any assertion failed · `2` infra error.
 Combined output lands in `scripts/audit/results.json` (git-ignored).
+A skipped assertion is a failed acceptance gate. A stale JSON file is removed before each probe; a crashed process cannot reuse an old pass. Use `--no-build` only immediately after a successful build of the source being tested.
+
 The runner serves `out/` on port 3310 only if nothing is listening there,
 and stops a server it started. Probes use the Playwright venv at
 `~/tools/venv-geo` (override with `AUDIT_PYTHON`) and a persistent browser
-profile (override with `AUDIT_PROFILE`) so the 24MB of GLB models stay
+profile in `review/audit-profile` (override with `AUDIT_PROFILE`) so the 24MB of GLB models stay
 cached between runs.
 
 ## Files

@@ -8,7 +8,7 @@ import {
   Droplets, Rocket, Settings2, Shield, ShieldCheck, Ship, Sparkles, Sun, SunMoon, Swords, Target, Volume2,
   VolumeX, X, Zap, Star, UsersRound, ClipboardList, Gift,
 } from "lucide-react";
-import { SLOTS, BUILDINGS, TOWERS, gameReducer, getStats, hydrateGame, initialGame, enemyPosition, waveComposition, bossEnemy, antiAirWarning, interceptWarning, type BuildingId, type Spell, type TowerKind, platformCost } from "@/lib/game";
+import { SLOTS, BUILDINGS, TOWERS, gameReducer, getStats, hydrateGame, initialGame, enemyPosition, waveComposition, bossEnemy, antiAirWarning, interceptWarning, type BuildingId, type Spell, type TowerKind, platformCost, INTERCEPT_LINE } from "@/lib/game";
 import { BattleAudio, type BattleSound } from "@/lib/battle-audio";
 import { isWater, nearestWater } from "@/lib/navigation";
 import { compact, fa } from "./game-ui";
@@ -21,7 +21,7 @@ import { useDialog } from "./useDialog";
 import IdleHud from "./IdleHud";
 import ProgressionPanels, { type ProgressPanel } from "./ProgressionPanels";
 import { RewardView, BattleResultView, OfflineView } from "./RewardViews";
-import { currentMission, operationInfo, defeatReasonText, type MissionTarget } from "@/lib/progression";
+import { currentMission, missionProgress, operationInfo, defeatReasonText, type MissionTarget } from "@/lib/progression";
 import { scenarioForWave, loadDiary, appendDiary, type DiaryEntry, type Scenario } from "@/lib/news";
 import { scenarioContextFor } from "@/lib/scenario-mechanics";
 import type { DailyStatus } from "@/lib/daily";
@@ -30,10 +30,12 @@ import { Haptics, ImpactStyle } from "@capacitor/haptics";
 import { SimulationClock } from "@/lib/simulation-clock";
 import { localDailyStatus, readDailyReceipt } from "@/lib/local-daily";
 import { isNativeRuntime, serverApiEnabled } from "@/lib/runtime";
+import { recordGameEvent } from "@/lib/analytics";
+import { SAVE_KEY, SAVE_BACKUP_KEY, saveCandidates, writeSnapshot } from "@/lib/save-storage";
 
-const SAVE_KEY = "hormuz-game-v1", PLAYER_KEY = "hormuz-player-id", PREFERENCES_KEY = "hormuz-preferences-v2", DIARY_KEY = "hormuz-war-diary-v1";
+const PLAYER_KEY = "hormuz-player-id", PREFERENCES_KEY = "hormuz-preferences-v2", DIARY_KEY = "hormuz-war-diary-v1";
 // On a save conflict (409) the server's current state is backed up here
-// (with a timestamp) before this device overwrites it — see saveAll below.
+// (with a timestamp); automatic cloud writes stop instead of overwriting either save.
 const SERVER_BACKUP_KEY = "hormuz-server-backup-v1";
 const spells: { id: Spell; name: string; short: string; icon: typeof Rocket; cooldown: number; key: string }[] = [
   { id: "strike", name: "باران بالستیک", short: "موشکی", icon: Rocket, cooldown: 60, key: "1" },
@@ -57,19 +59,16 @@ export default function Game() {
   const [daily, setDaily] = useState<DailyStatus | null>(null);
   const [dailyBusy, setDailyBusy] = useState(false);
   const [dailyError, setDailyError] = useState(false);
-  // In the native (Capacitor) build there is no server, so the daily gift
-  // can never load: the panel and its shortcut show an honest "web only"
-  // status instead of a claim button stuck on "connecting…" (S-2).
-  const [dailyWebOnly, setDailyWebOnly] = useState(false);
-  useEffect(() => { setDailyWebOnly(false); }, []);
+  const [dailyEpoch, setDailyEpoch] = useState(0);
+  const dailyWebOnly = false;
   const [incomeBurst, setIncomeBurst] = useState<{id:number;cash:number}|null>(null);
   const incomeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const nativeHidden = useRef(false);
   const [exitOpen, setExitOpen] = useState(false);
   const hiddenAt = useRef<number | null>(null);
-  const [selectedSlot, setSelectedSlot] = useState<number | null>(null);
+  const [selectedSlot, setSelectedSlotState] = useState<number | null>(null);
   const [sheetSlot, setSheetSlot] = useState<number | null>(null);
-  useEffect(() => { if (selectedSlot === null) setSheetSlot(null); }, [selectedSlot]);
+  const setSelectedSlot = useCallback((slot: number | null) => { setSelectedSlotState(slot); setSheetSlot(null); }, []);
   /* Focus mode (D-023): the main screen shows ONLY the phase's essential
      set; the toggle's state is remembered per phase (war/peace separately)
      and focus is the default view state on load for both phases. The
@@ -83,6 +82,13 @@ export default function Game() {
   const [targeting, setTargeting] = useState<"strike" | "hero" | "hero2" | null>(null);
   const [targetPreview, setTargetPreview] = useState({ x: 68, y: 66 });
   const [paused, setPaused] = useState(false);
+  const [worldReady, setWorldReady] = useState(false);
+  const worldHasBeenReady = useRef(false);
+  const onWorldReady = useCallback((ready: boolean) => {
+    setWorldReady(ready);
+    if (!ready && worldHasBeenReady.current) setPaused(true);
+    if (ready) worldHasBeenReady.current = true;
+  }, []);
   const [moreOpen, setMoreOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
   const [coachDismissed, setCoachDismissed] = useState(false);
@@ -128,20 +134,23 @@ export default function Game() {
   // included — FREEZES the battle, and the bulletin queue never overlaps
   // the battle-result view (the render gate below shows the result first;
   // the bulletin waits in state until the report is claimed).
-  const battlePaused = exitOpen || paused || interfacePaused || bulletin !== null || diaryOpen;
+  const battlePaused = !worldReady || exitOpen || paused || interfacePaused || bulletin !== null || diaryOpen;
   const pauseRef = useRef(battlePaused);
   const interfaceRef = useRef(interfacePaused);
-  interfaceRef.current = interfacePaused;
-  gameRef.current = game; soundRef.current = sound; vibrationRef.current = vibration; pauseRef.current = battlePaused;
+  useEffect(() => { interfaceRef.current = interfacePaused; }, [interfacePaused]);
+  useEffect(() => { gameRef.current = game; soundRef.current = sound; vibrationRef.current = vibration; pauseRef.current = battlePaused; }, [game, sound, vibration, battlePaused]);
 
   // A full reset must also wipe everything that lives outside the game
   // state, or the pre-reset run resurrects: the war diary, the player
   // identity and the server-side save record all belong to the old run.
   const dispatch = useCallback((action: Parameters<typeof rawDispatch>[0]) => {
+    if (action.type === "claim-mission") { const mission = currentMission(gameRef.current); if (mission?.id === action.id && missionProgress(gameRef.current, mission).complete) recordGameEvent("mission", {reason:action.id}); }
+    if (action.type === "prestige" && gameRef.current.cash >= 100000 && gameRef.current.highestWave >= 10 && gameRef.current.phase !== "battle" && (!gameRef.current.idle.lastBattle || gameRef.current.idle.lastBattle.claimed)) recordGameEvent("prestige");
     if (action.type === "reset") {
       const oldId = playerRef.current;
       try {
         localStorage.removeItem(SAVE_KEY);
+        localStorage.removeItem(SAVE_BACKUP_KEY);
         localStorage.removeItem(DIARY_KEY);
         localStorage.removeItem(PLAYER_KEY);
         localStorage.removeItem(SERVER_BACKUP_KEY);
@@ -151,15 +160,16 @@ export default function Game() {
       playerRef.current = freshId;
       serverVersionRef.current = 0;
       setDiary([]);
-      setDaily(null); setDailyError(false);
+      setDaily(null); setDailyError(false); setDailyEpoch(value=>value+1);
       if (oldId && serverApiEnabled()) {
         void fetch(`/api/save?id=${encodeURIComponent(oldId)}`, { method: "DELETE", keepalive: true }).catch(() => {});
       }
     }
+    if (action.type === "hydrate") setPaused(action.game.phase === "battle");
     rawDispatch(action);
   }, []);
   const backAction = useRef(() => {});
-  backAction.current = () => {
+  useEffect(() => { backAction.current = () => {
     if (exitOpen) { setExitOpen(false); return; }
     if (targeting) { setTargeting(null); return; }
     if (sheetSlot !== null) { setSheetSlot(null); return; }
@@ -169,7 +179,7 @@ export default function Game() {
       setPanel(null); setProgressPanel(null); setMoreOpen(false); setHelpOpen(false); setDiaryOpen(false); return;
     }
     setPaused(true); setExitOpen(true);
-  };
+  }; }, [exitOpen, targeting, sheetSlot, selectedSlot, selectedBuilding, panel, progressPanel, moreOpen, helpOpen, diaryOpen, setSelectedSlot]);
   useEffect(() => {
     if (!isNativeRuntime()) return;
     const listener = App.addListener("backButton", () => backAction.current());
@@ -210,6 +220,8 @@ export default function Game() {
     audioRef.current = new BattleAudio();
     try {
       const saved = JSON.parse(localStorage.getItem(PREFERENCES_KEY) ?? "{}");
+      // Browser preferences are loaded once after SSR; this cannot form a render loop.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setSoundState(saved.sound !== false); setVibration(saved.vibration !== false); setCinematic(saved.cinematic !== false);
       setCoachDismissed(saved.coachDismissed === true);
       setFocusPeace(saved.focusPeace !== false); setFocusWar(saved.focusWar !== false);
@@ -249,16 +261,24 @@ export default function Game() {
       if (!saved) return false;
       dispatch({ type: "hydrate", game: saved.game });
       previousPhase.current = saved.game.phase; previousWave.current = saved.game.wave;
-      try { localStorage.setItem(SAVE_KEY, JSON.stringify(saved.game)); } catch { /* Offline receipt is kept in memory. */ }
+      if (saved.game.phase === "battle") setPaused(true);
+      try { writeSnapshot(localStorage, saved.game); } catch { notify("ذخیرهٔ دستگاه در دسترس نیست؛ پیشرفت فعلاً فقط در حافظه است."); }
       return true;
     };
     let id = "";
     try {
       id = localStorage.getItem(PLAYER_KEY) ?? crypto.randomUUID();
       localStorage.setItem(PLAYER_KEY, id); playerRef.current = id;
-      const local = localStorage.getItem(SAVE_KEY);
-      if (local && restore(JSON.parse(local))) { setLoaded(true); return; }
+      serverVersionRef.current = Number(localStorage.getItem(`hormuz-save-version-${id}`)) || 0;
+      for (const local of saveCandidates(localStorage)) if (restore(local.state)) {
+        // One-time recovery notice from external storage.
+        // eslint-disable-next-line react-hooks/set-state-in-effect
+        if (local.recovered) notify("پیشرفت از نسخهٔ پشتیبان بازیابی شد.");
+        // One-time local save hydration after SSR.
+        setLoaded(true); return;
+      }
     } catch { id = crypto.randomUUID(); playerRef.current = id; }
+    // Fresh native startup has no server round-trip.
     if (!serverApiEnabled()) { setLoaded(true); return; }
     fetch(`/api/save?id=${encodeURIComponent(id)}`).then(r => r.ok ? r.json() : null).then(data => {
       if (cancelled || !data) return;
@@ -266,21 +286,32 @@ export default function Game() {
       if (data.state) restore(data.state);
     }).catch(() => {}).finally(() => { if (!cancelled) setLoaded(true); });
     return () => { cancelled = true; };
-  }, [notify]);
+  }, [notify, dispatch]);
+
+  useEffect(() => {
+    if (!loaded) return;
+    const presence = () => { if (!document.hidden) recordGameEvent("session"); };
+    presence();
+    document.addEventListener("visibilitychange", presence);
+    const timer = setInterval(presence, 60000);
+    return () => { document.removeEventListener("visibilitychange", presence); clearInterval(timer); };
+  }, [loaded, dispatch]);
 
   const reloadDaily = useCallback(async () => {
     if(!playerRef.current)return;
     if (!serverApiEnabled()) {
-      const status = localDailyStatus(readDailyReceipt(localStorage.getItem("hormuz-daily-v1")), Date.now());
-      setDaily(status);
-      if (status.reward && !gameRef.current.idle.appliedDailyIds.includes(status.reward.id)) dispatch({type:"apply-daily", reward:status.reward});
+      try {
+        const status = localDailyStatus(readDailyReceipt(localStorage.getItem("hormuz-daily-v1")), Date.now());
+        setDaily(status); setDailyError(false);
+        if (status.reward && !gameRef.current.idle.appliedDailyIds.includes(status.reward.id)) dispatch({type:"apply-daily", reward:status.reward});
+      } catch { setDailyError(true); }
       return;
     }
     setDailyBusy(true);setDailyError(false);
     try { const response=await fetch(`/api/rewards?id=${encodeURIComponent(playerRef.current)}`);if(!response.ok)throw new Error("unavailable");const status=await response.json() as DailyStatus;setDaily(status);if(status.reward&&!gameRef.current.idle.appliedDailyIds.includes(status.reward.id))dispatch({type:"apply-daily",reward:status.reward}); }
     catch { setDailyError(true); }
     finally { setDailyBusy(false); }
-  }, []);
+  }, [dispatch]);
   const claimDaily = async () => {
     if(dailyBusy||!daily?.available)return;
     if (!serverApiEnabled()) {
@@ -288,7 +319,7 @@ export default function Game() {
         const now = Date.now();
         const status = localDailyStatus(readDailyReceipt(localStorage.getItem("hormuz-daily-v1")), now);
         if (!status.available) return;
-        const receipt = {day:Math.floor(now / 86400000), step:status.step, id:`local-daily-${Math.floor(now / 86400000)}`};
+        const receipt = {day:Number(status.serverDay), step:status.step, id:`local-daily-${status.serverDay}`};
         localStorage.setItem("hormuz-daily-v1", JSON.stringify(receipt));
         const claimed = localDailyStatus(receipt, now);
         if(claimed.reward) dispatch({type:"apply-daily",reward:claimed.reward});
@@ -301,11 +332,15 @@ export default function Game() {
     catch { setDailyError(true); }
     finally { setDailyBusy(false); }
   };
-  useEffect(()=>{if(loaded)void reloadDaily();},[loaded,reloadDaily]);
+  // Synchronizes an external daily receipt when loading completes.
+  // eslint-disable-next-line react-hooks/set-state-in-effect
+  useEffect(()=>{if(loaded)void reloadDaily();},[loaded,dailyEpoch,reloadDaily]);
   useEffect(()=>{
     if(!loaded)return;
-    try { localStorage.setItem(SAVE_KEY,JSON.stringify({...gameRef.current,shots:[],popups:[],lastSavedAt:Date.now()})); } catch { /* Automatic server save remains active. */ }
-  },[loaded,game.idle.revision]);
+    // Persist external storage; notify only on a storage failure.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    try { writeSnapshot(localStorage,{...gameRef.current,shots:[],popups:[],lastSavedAt:Date.now()}); } catch { notify("ذخیره انجام نشد؛ فضای خالی دستگاه را بررسی کنید."); }
+  },[loaded,game.idle.revision,notify]);
 
   useEffect(() => {
     if (!loaded) return;
@@ -313,18 +348,9 @@ export default function Game() {
     const update = () => dispatch({ type: "layout", layout: query.matches ? "portrait" : "landscape" });
     update(); query.addEventListener("change", update);
     return () => query.removeEventListener("change", update);
-  }, [loaded]);
+  }, [loaded, dispatch]);
 
-  const cameraInit = useRef(false);
-  useEffect(() => {
-    if (!loaded || cameraInit.current) return;
-    cameraInit.current = true;
-    if (window.innerWidth <= 700) {
-      const w = mapRef.current?.clientWidth ?? window.innerWidth, h = mapRef.current?.clientHeight ?? window.innerHeight, z = 4.2;
-      setZoom(z);
-      setPan({ x: -z * 0.1 * w, y: z * 0.12 * h }); // open on the strait core (60%, 38%) — the theater is one zoom-out away
-    }
-  }, [loaded]);
+
 
   useEffect(() => {
     if (!loaded) return;
@@ -335,29 +361,27 @@ export default function Game() {
       if (steps) dispatch({ type: "advance", steps, battlePaused: pauseRef.current });
     }, 125);
     return () => clearInterval(timer);
-  }, [loaded]);
+  }, [loaded, dispatch]);
 
   useEffect(() => {
     if (!loaded) return;
     const snapshot = () => ({ ...gameRef.current, shots: [], popups: [], lastSavedAt: Date.now() });
-    const saveLocal = () => { try { localStorage.setItem(SAVE_KEY, JSON.stringify(snapshot())); } catch { /* Server save remains available. */ } };
-    function saveAll(recovered = false) {
+    const saveLocal = () => { try { writeSnapshot(localStorage, snapshot()); } catch { notify("ذخیره انجام نشد؛ فضای خالی دستگاه را بررسی کنید."); } };
+    let saving = false, conflicted = false;
+    function saveAll() {
       const state = snapshot();
-      try { localStorage.setItem(SAVE_KEY, JSON.stringify(state)); } catch { /* Local snapshot is best-effort. */ }
-      if (!playerRef.current || !serverApiEnabled()) return;
-      void fetch("/api/save", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: playerRef.current, baseVersion: serverVersionRef.current, state }), keepalive: true }).then(async response => {
+      try { writeSnapshot(localStorage, state); } catch { notify("ذخیره انجام نشد؛ فضای خالی دستگاه را بررسی کنید."); }
+      if (!playerRef.current || !serverApiEnabled() || saving || conflicted) return;
+      saving = true;
+      const playerId = playerRef.current;
+      void fetch("/api/save", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: playerId, baseVersion: serverVersionRef.current, state }), keepalive: true }).then(async response => {
+        if (playerRef.current !== playerId) return;
         const data = await response.json().catch(() => null) as { version?: number; serverVersion?: number } | null;
         if (!data) return;
-        if (response.ok && typeof data.version === "number") { serverVersionRef.current = data.version; return; }
-        if (response.status !== 409 || typeof data.serverVersion !== "number" || recovered) return;
-        // Conflict policy: LAST-WRITER-WINS, guarded (official policy — see
-        // src/app/api/save/route.ts and fix-program.md, team SAVE). This
-        // device is about to overwrite a newer server record (e.g. progress
-        // made on a second device). Before rebasing, fetch the server's
-        // current state and keep a timestamped local backup of exactly what
-        // is being overwritten, so the loss is never silent; only then
-        // adopt the server version as the new base and save on top of it.
-        // `recovered` bounds this to a single recovery attempt per cycle.
+        if (response.ok && typeof data.version === "number") { serverVersionRef.current = data.version; try { localStorage.setItem(`hormuz-save-version-${playerId}`, String(data.version)); } catch {} return; }
+        if (response.status !== 409 || typeof data.serverVersion !== "number") return;
+        conflicted = true;
+        // Preserve both versions. A conflict must never silently replace progress.
         try {
           const current = await fetch(`/api/save?id=${encodeURIComponent(playerRef.current)}`).then(r => (r.ok ? r.json() : null)).catch(() => null) as { state?: unknown; version?: number } | null;
           if (current?.state) {
@@ -367,12 +391,11 @@ export default function Game() {
                 serverVersion: typeof current.version === "number" ? current.version : data.serverVersion,
                 state: current.state,
               }));
-            } catch { /* The backup is best-effort; the rebase still applies. */ }
+            } catch { /* Local play continues; cloud writes remain stopped. */ }
           }
-        } catch { /* The rebase below still applies. */ }
-        serverVersionRef.current = data.serverVersion;
-        saveAll(true);
-      }).catch(() => {});
+        } catch { /* Cloud writes remain stopped. */ }
+        notify("دو پیشرفت متفاوت پیدا شد؛ بازی این دستگاه ذخیره است و نسخهٔ ابری بازنویسی نشد.");
+      }).catch(() => {}).finally(() => { saving = false; });
     }
     const timer = setInterval(() => { if (!document.hidden) saveAll(); }, 8000);
     const onVisibility = () => {
@@ -384,11 +407,13 @@ export default function Game() {
     nativeListener?.then(handle => { if(stopped) void handle.remove(); }).catch(() => {});
     window.addEventListener("pagehide", saveLocal); window.addEventListener("beforeunload", saveLocal); document.addEventListener("visibilitychange", onVisibility);
     return () => { stopped = true; void nativeListener?.then(handle => handle.remove()).catch(() => {}); clearInterval(timer); window.removeEventListener("pagehide", saveLocal); window.removeEventListener("beforeunload", saveLocal); document.removeEventListener("visibilitychange", onVisibility); };
-  }, [loaded,reloadDaily]);
+  }, [loaded,reloadDaily,dispatch,notify]);
 
   useEffect(() => {
+    if (!loaded) return;
     const scenCtx = scenarioContextFor(gameRef.current);
     if (previousPhase.current !== "battle" && game.phase === "battle") {
+      recordGameEvent("battle_start", {wave:game.wave,mode:game.mode});
       const isBoss = game.wave % 5 === 0;
       announce(isBoss ? "یک ناو سنگین در راه است" : `موج ${fa(game.wave)} آغاز شد`, isBoss ? "برای غول‌آخر آماده شوید" : "برجک‌ها به‌صورت خودکار دفاع می‌کنند", "battle");
       const sc = scenarioForWave(game.wave, game.mode, scenCtx);
@@ -398,24 +423,29 @@ export default function Game() {
       if (vibrationRef.current && typeof navigator !== "undefined" && "vibrate" in navigator && isBoss) navigator.vibrate([40, 40, 60]);
     } else if (previousPhase.current === "battle" && game.phase === "intermission") {
       setAnnouncement(null); playSound("victory");
+      recordGameEvent("battle_win", {wave:game.wave-1,mode:game.mode});
       const completedWave = game.wave - 1; // reducer increments wave when a wave is cleared
       const sc = scenarioForWave(completedWave, game.mode, scenCtx);
       setBulletin({ kind: "victory", scenario: sc, wave: completedWave });
       setDiary(appendDiary({ at: Date.now(), wave: completedWave, kind: "victory", headline: sc.newsVictory.headline, body: sc.newsVictory.body, zone: sc.zone }));
     } else if (game.phase === "defeat" && previousPhase.current !== "defeat") {
+      recordGameEvent("battle_loss", {wave:game.wave,mode:game.mode,reason:game.idle.lastBattle?.reason});
       announce("خط دفاع شکسته شد", game.idle.lastBattle?.reason ? defeatReasonText(game.idle.lastBattle.reason) : "برجک‌ها را تقویت کنید و دوباره تلاش کنید", "battle");
       const sc = scenarioForWave(game.wave, game.mode, scenCtx);
       setBulletin({ kind: "defeat", scenario: sc, wave: game.wave });
       setDiary(appendDiary({ at: Date.now(), wave: game.wave, kind: "defeat", headline: sc.newsDefeat.headline, body: sc.newsDefeat.body, zone: sc.zone }));
       playSound("defeat");
     } else if (game.phase === "victory" && previousPhase.current !== "victory") {
+      recordGameEvent("battle_win", {wave:game.wave,mode:game.mode});
       const sc = scenarioForWave(game.wave, game.mode, scenCtx);
       setBulletin({ kind: "final", scenario: sc, wave: game.wave });
       setDiary(appendDiary({ at: Date.now(), wave: game.wave, kind: "victory", headline: sc.newsVictory.headline, body: sc.newsVictory.body, zone: sc.zone }));
     }
     previousPhase.current = game.phase; previousWave.current = game.wave;
-  }, [game.phase, game.wave, game.mode, announce, playSound]);
+  }, [loaded, game.phase, game.wave, game.mode, game.idle.lastBattle?.reason, announce, playSound]);
 
+  // One-time browser storage hydration, independent of rendered state.
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { setDiary(loadDiary()); }, []);
 
   const openPanel = (name: PanelName) => { setProgressPanel(null); setSelectedSlot(null); setSelectedBuilding(null); setTargeting(null); setMoreOpen(false); setShowMapTools(false); setPanel(name); feedback(); };
@@ -437,6 +467,9 @@ export default function Game() {
     if (game.cash < definition.cost || game.steel < definition.steel) { playSound("alarm"); notify(game.steel < definition.steel ? `فولاد کافی نیست؛ این برجک ${fa(definition.steel)} فولاد می‌خواهد — فولاد فقط از مجتمع فولاد به دست می‌آید.` : "دلار کافی نیست؛ درآمد بندر را جمع‌آوری کنید."); return; }
     dispatch({ type: "build-tower", slot: selectedSlot, kind }); setSelectedSlot(null); feedback(); playSound("build"); notify(`${definition.short} آمادهٔ دفاع است.`);
   };
+  const coachStep = !preferencesLoaded || coachDismissed || game.prestige > 0 || game.highestWave > 0 ? 0
+    : game.phase === "battle" ? 3
+    : game.towers.length === 0 ? 1 : 2;
   const activateSpell = (spell: Spell) => {
     if (!activeBattle) { notify("ابتدا موج را شروع کنید؛ سپس از مهارت‌ها کمک بگیرید."); return; }
     if (game.cooldowns[spell] > 0) return;
@@ -478,7 +511,7 @@ export default function Game() {
   const claimMission = (id:string) => {dispatch({type:"claim-mission",id});setProgressPanel(null);feedback();playSound("upgrade");};
   const activateProduction = () => {if(game.idle.boostRemaining>0)return;if(!game.idle.boostCharges){notify("شارژ تقویت تولید به‌مرور دوباره پر می‌شود.");return;}dispatch({type:"activate-production-boost"});feedback();playSound("overdrive");notify("تولید برای ۶۰ ثانیه دو برابر شد.");};
   const latestActions = useRef({ mainAction, activateSpell, quickBuild });
-  latestActions.current = { mainAction, activateSpell, quickBuild };
+  useEffect(() => { latestActions.current = { mainAction, activateSpell, quickBuild }; });
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (event.ctrlKey || event.metaKey || event.altKey || (event.target as HTMLElement).matches("input, textarea, select, [contenteditable]")) return;
@@ -547,9 +580,7 @@ export default function Game() {
      wave, no prestige), dismissible, and once dismissed or finished it
      never returns — the flag persists in preferences, and highestWave
      advancing past 0 retires it for good. */
-  const coachStep = !preferencesLoaded || coachDismissed || game.prestige > 0 || game.highestWave > 0 ? 0
-    : game.phase === "battle" ? 3
-    : game.towers.length === 0 ? 1 : 2;
+
   const showCoach = coachStep > 0;
   const boss = activeBattle ? bossEnemy(game) : null;
   const showCombo = activeBattle && (game.combo ?? 0) >= 3;
@@ -582,7 +613,7 @@ export default function Game() {
   const goMap = () => { setPanel(null); setProgressPanel(null); setMoreOpen(false); setTargeting(null); setSelectedSlot(null); setSelectedBuilding(null); feedback(); };
 
   return <div className={`game-shell ${activeBattle ? "in-battle" : ""} ${focus ? "focus-on" : "focus-off"} ${cinematic ? "cinematic" : "effects-light"} ${reducedMotion ? "reduce-motion" : ""} ${coachTarget ? `coach-${coachTarget}` : ""} ${coachStep === 3 ? "coach-spell" : ""} ${game.hearts <= 5 && activeBattle ? "danger-low" : ""}`} dir="rtl">
-    {exitOpen && <div className="compact-dialog-backdrop"><section className="exit-dialog" role="alertdialog" aria-modal="true" aria-label="خروج از بازی"><h2>فرمانده، استراحت می‌کنی؟</h2><p>پیشرفتت ذخیره می‌شود. نبرد تا بازگشتت متوقف می‌ماند.</p><button className="primary-action" autoFocus onClick={() => {setExitOpen(false);setPaused(false);}}>ادامهٔ بازی</button><button onClick={() => {try {localStorage.setItem(SAVE_KEY, JSON.stringify({...gameRef.current,shots:[],popups:[],lastSavedAt:Date.now()}));void App.exitApp();}catch{notify("ذخیره انجام نشد؛ بازی را باز نگه دارید.");}}}>ذخیره و خروج</button></section></div>}
+    {exitOpen && <div className="compact-dialog-backdrop"><section className="exit-dialog" role="alertdialog" aria-modal="true" aria-label="خروج از بازی"><h2>فرمانده، استراحت می‌کنی؟</h2><p>پیشرفتت ذخیره می‌شود. نبرد تا بازگشتت متوقف می‌ماند.</p><button className="primary-action" autoFocus onClick={() => {setExitOpen(false);setPaused(false);}}>ادامهٔ بازی</button><button onClick={() => {try {writeSnapshot(localStorage, {...gameRef.current,shots:[],popups:[],lastSavedAt:Date.now()});void App.exitApp();}catch{notify("ذخیره انجام نشد؛ بازی را باز نگه دارید.");}}}>ذخیره و خروج</button></section></div>}
     <header className="app-header">
       <div className="app-brand"><span className="brand-symbol"><Anchor size={22} /></span><div><strong>هرمز</strong><span>فرماندهی آب‌های آزاد</span></div></div>
       <div className="essential-resources" aria-label="منابع اصلی">
@@ -596,7 +627,7 @@ export default function Game() {
     </header>
 
     <main className={`game-map ${targeting ? "aiming" : ""} ${selectedSlot !== null || selectedBuilding !== null ? "choosing-tower" : ""}`} ref={mapRef} onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp} onPointerCancel={onPointerUp} onClick={onMapClick}>
-<WorldView3D game={game} selectedSlot={selectedSlot} targeting={targeting} targetPreview={targetPreview} isNight={isNight} timeMode={timeMode} onSlot={chooseSlot} onBuilding={chooseBuilding} onPlatform={id => { const built = game.idle.platforms ?? []; if (built.includes(id)) return; if (game.cash < platformCost(built.length)) { notify("دلار کافی برای ساخت سکوی نفتی ندارید."); return; } dispatch({ type: "build-platform", id }); notify("سکوی نفتی ساخته شد؛ +۸ بشکه بر ثانیه"); feedback(); }} onHero={() => { setTargeting("hero"); setTargetPreview(game.hero); setSelectedSlot(null); feedback(); }} onHero2={() => { if (game.hero2) { setTargeting("hero2"); setTargetPreview(game.hero2); setSelectedSlot(null); feedback(); } }} onInspect={id => { dispatch({ type: "inspect", id }); notify("محموله کشف شد؛ ۵۰ فولاد دریافت کردید."); feedback(); }} onGroundAction={handleGroundAction} onGroundHover={handleGroundHover} playSound={playSound} />
+<WorldView3D onReadyChange={onWorldReady} paused={battlePaused} game={game} selectedSlot={selectedSlot} targeting={targeting} targetPreview={targetPreview} isNight={isNight} timeMode={timeMode} onSlot={chooseSlot} onBuilding={chooseBuilding} onPlatform={id => { const built = game.idle.platforms ?? []; if (built.includes(id)) return; if (game.cash < platformCost(built.length)) { notify("دلار کافی برای ساخت سکوی نفتی ندارید."); return; } dispatch({ type: "build-platform", id }); notify("سکوی نفتی ساخته شد؛ +۸ بشکه بر ثانیه"); feedback(); }} onHero={() => { setTargeting("hero"); setTargetPreview(game.hero); setSelectedSlot(null); feedback(); }} onHero2={() => { if (game.hero2) { setTargeting("hero2"); setTargetPreview(game.hero2); setSelectedSlot(null); feedback(); } }} onInspect={id => { dispatch({ type: "inspect", id }); notify("محموله کشف شد؛ ۵۰ فولاد دریافت کردید."); feedback(); }} onGroundAction={handleGroundAction} onGroundHover={handleGroundHover} playSound={playSound} />
 
       <IdleHud game={game} hidden={interfacePaused||targeting!==null} focus={focus} onCollect={collectIncome} onBoost={activateProduction} onBattle={mainAction} onJournal={()=>openProgress("missions")} />
       {/* D-026 extension: intermission intercept warning, riding the wave
@@ -605,7 +636,7 @@ export default function Game() {
           player's FIRST intercept attempt — in battle the briefing chip
           carries the same teaching. Pointer-events are off (see CSS), so
           it never blocks the map beneath it. */}
-      {!activeBattle && !focus && !interfacePaused && !targeting && interceptPreviewWarn && <div className="intercept-preview-warning" role="alert"><strong>⚠ موج بعدی «رهگیری ناوگان» است</strong><span>{fa(interceptPreviewWarn.units)} شناور دشمن از خط میانیِ تنگه می‌گذرند، پیش از آنکه برجک‌های ساحلی به بردشان برسند؛ برجک‌ها به‌تنهایی نگهشان نمی‌دارند. پیش از شروع موج، کمبو را آماده کن: ۱) قهرمان نوع ۲ — فرماندهٔ زیردریایی فاتح، شکارچی ناوهای سنگین{interceptPreviewWarn.heroReady ? " (قهرمانت همین حالا نوع ۲ است)" : "؛ تعویض قهرمان فقط پیش از شروع نبرد ممکن است"}؛ ۲) با ورود گروه پیشرو، پالس EMP را بزن تا متوقف و بی‌دفاع شود؛ ۳) ضربه را روی گروه دوم فرود بیاور. بدون هر سه، ناوگان رد می‌شود و عملیات می‌بازد.</span></div>}
+      {!activeBattle && !focus && !interfacePaused && !targeting && interceptPreviewWarn && <div className="intercept-preview-warning" role="alert"><strong>⚠ موج بعدی «رهگیری ناوگان» است</strong><span>ناوگان را پیش از نشان نارنجیِ انتهای آبراه متوقف کن. برجک‌های قشم و هرمز، پشتیبانی جنگ الکترونیک و زمان‌بندی مهارت‌ها را ترکیب کن؛ هیچ ترکیب اجباری وجود ندارد.</span></div>}
       {/* Permanent HUD controls (D-023): focus toggle + the rehoused
           day/night tri-state (D-021) + the daily-reward ready dot. This
           stack replaces the removed wave-hud / world-status cluster; the
@@ -640,7 +671,7 @@ export default function Game() {
       {(game.event || game.warnings?.fuel || game.warnings?.power || game.ammo < 100 || stats.grid < 0.9 || game.oil >= stats.oilCapacity - 1) && <button className="context-alert" onClick={() => openPanel(game.event ? "events" : game.warnings?.power ? "city" : stats.grid < 0.9 ? "city" : "economy")}><span /><strong>{game.event ? `رویداد فعال در تنگه؛ پایان تا ${fa(Math.max(0, Math.ceil(60 - game.eventClock)))} ثانیه` : game.warnings?.fuel ? "سوخت رو به اتمام است؛ پیش از خفگی شبکه، پالایشگاه و نیروگاه را تقویت کنید" : game.warnings?.power ? "شبکهٔ برق زیر فشار پایدار است؛ نیروگاه را تقویت کنید" : game.ammo < 100 ? "مهمات رو به اتمام است" : stats.grid < 0.9 ? "برق شبکه را تقویت کنید" : "مخزن نفت پر شده است"}</strong><ChevronLeft size={15} /></button>}
 
       {announcement && !targeting && !interfacePaused && <div className={`battle-announcement ${announcement.type}`} key={`${announcement.title}-${announcement.subtitle}`} role="status"><span>{announcement.type === "success" ? <ShieldCheck size={24} /> : announcement.type === "power" ? <Sparkles size={24} /> : <Swords size={24} />}</span><div><strong>{announcement.title}</strong><p>{announcement.subtitle}</p></div></div>}
-      {bulletin && !otherInterface && !rewardInterface && <div className={`news-bulletin ${bulletin.kind}`} role="alertdialog" aria-label="بولتن خبری جنگ"><div className="news-head"><span className="news-live"><Bell size={13} /> خبرگزاری تنگه</span><span className="news-op">عملیات «{bulletin.scenario.operationName}» · {bulletin.scenario.zone}</span><button className="news-x" onClick={() => setBulletin(null)} aria-label="بستن بولتن"><X size={15} /></button></div><strong>{bulletin.kind === "briefing" ? bulletin.scenario.newsBefore.headline : bulletin.kind === "defeat" ? bulletin.scenario.newsDefeat.headline : bulletin.scenario.newsVictory.headline}</strong><p>{bulletin.kind === "briefing" ? bulletin.scenario.newsBefore.body : bulletin.kind === "defeat" ? bulletin.scenario.newsDefeat.body : bulletin.scenario.newsVictory.body}</p>{bulletin.kind === "briefing" && <><p className="news-brief">{bulletin.scenario.briefing}</p><div className="news-chips"><span>هدف: {bulletin.scenario.objective}</span><span>دشمن: {bulletin.scenario.enemyFlavor}</span>{bulletin.scenario.specialCondition && <span>شرایط: {bulletin.scenario.specialCondition}</span>}{airWarn && <span>⚠ هشدار پدافند هوایی: {fa(airWarn.airTotal)} پرندهٔ دشمن در راه است و {airWarn.capable ? "پدافند هوایی اختصاصی نداری" : "هیچ برجک ضدهوایی نداری"} — یک برجک پدافند هوایی بساز؛ نشت هواییِ بیش از حد، عملیات را می‌بازد.</span>}{interceptWarn && <span>⚠ هشدار رهگیری: این موج «رهگیری ناوگان» است — {fa(interceptWarn.units)} شناور دشمن از خط میانیِ تنگه می‌گذرند، پیش از آنکه برجک‌های ساحلی به بردشان برسند؛ برجک‌ها به‌تنهایی نگهشان نمی‌دارند. کمبوی لازم، هر سه با هم: ۱) قهرمان نوع ۲ — فرماندهٔ زیردریایی فاتح، شکارچی ناوهای سنگین{interceptWarn.heroReady ? " (قهرمانت همین حالا نوع ۲ است)" : "؛ تعویض قهرمان فقط بیرون از نبرد ممکن است، پس پیش از شروع موج انجامش بده"}؛ ۲) وقتی گروه پیشرو وارد شد، پالس EMP را بزن تا متوقف و بی‌دفاع شود؛ ۳) ضربه را روی گروه بعدی فرود بیاور. بدون هرکدام از این سه، ناوگان از خط میانی رد می‌شود و عملیات می‌بازد.</span>}</div></>}<div className="news-actions"><button onClick={() => setBulletin(null)}>{bulletin.kind === "briefing" ? "آغاز نبرد" : "بستن"}</button><button className="news-diary-btn" onClick={() => setDiaryOpen(true)}><ClipboardList size={14} /> دفترچه جنگ ({fa(diary.length)})</button></div></div>}
+      {bulletin && !otherInterface && !rewardInterface && <div className={`news-bulletin ${bulletin.kind}`} role="alertdialog" aria-label="بولتن خبری جنگ"><div className="news-head"><span className="news-live"><Bell size={13} /> خبرگزاری تنگه</span><span className="news-op">عملیات «{bulletin.scenario.operationName}» · {bulletin.scenario.zone}</span><button className="news-x" onClick={() => setBulletin(null)} aria-label="بستن بولتن"><X size={15} /></button></div><strong>{bulletin.kind === "briefing" ? bulletin.scenario.newsBefore.headline : bulletin.kind === "defeat" ? bulletin.scenario.newsDefeat.headline : bulletin.scenario.newsVictory.headline}</strong><p>{bulletin.kind === "briefing" ? bulletin.scenario.newsBefore.body : bulletin.kind === "defeat" ? bulletin.scenario.newsDefeat.body : bulletin.scenario.newsVictory.body}</p>{bulletin.kind === "briefing" && <><p className="news-brief">{bulletin.scenario.briefing}</p><div className="news-chips"><span>هدف: {bulletin.scenario.objective}</span><span>دشمن: {bulletin.scenario.enemyFlavor}</span>{bulletin.scenario.specialCondition && <span>شرایط: {bulletin.scenario.specialCondition}</span>}{airWarn && <span>⚠ هشدار پدافند هوایی: {fa(airWarn.airTotal)} پرندهٔ دشمن در راه است و {airWarn.capable ? "پدافند هوایی اختصاصی نداری" : "هیچ برجک ضدهوایی نداری"} — یک برجک پدافند هوایی بساز؛ نشت هواییِ بیش از حد، عملیات را می‌بازد.</span>}{interceptWarn && <span>هدف رهگیری: نابودی دشمن پیش از نشان نارنجی در {fa(INTERCEPT_LINE * 100)}٪ مسیر. دفاع ساحلی و کندسازی را آماده کن؛ EMP و موشک برای نجات موقعیت‌های دشوارند.</span>}</div></>}<div className="news-actions"><button onClick={() => setBulletin(null)}>{bulletin.kind === "briefing" ? "آغاز نبرد" : "بستن"}</button><button className="news-diary-btn" onClick={() => setDiaryOpen(true)}><ClipboardList size={14} /> دفترچه جنگ ({fa(diary.length)})</button></div></div>}
       {diaryOpen && !otherInterface && <div className="diary-overlay" role="dialog" aria-label="دفترچه جنگ"><div className="diary-card"><div className="news-head"><span className="news-live"><ClipboardList size={13} /> دفترچه جنگ</span><button className="news-x" onClick={() => setDiaryOpen(false)} aria-label="بستن دفترچه"><X size={15} /></button></div><div className="diary-list">{diary.length === 0 ? <p className="diary-empty">هنوز خبری ثبت نشده است؛ نخستین نبرد، اولین صفحهٔ دفترچه را می‌نویسد.</p> : [...diary].reverse().map((e, i) => <article key={i} className={`diary-item ${e.kind}`}><small>موج {fa(e.wave)} · {e.kind === "before" ? "پیش از نبرد" : e.kind === "victory" ? "پیروزی" : "شکست"}</small><strong>{e.headline}</strong><p>{e.body}</p></article>)}</div></div></div>}
       {paused && activeBattle && !interfacePaused && !targeting && !announcement && <div className="pause-indicator"><Pause size={20} /><strong>نبرد در مکث است</strong><span>برای ادامه، دکمهٔ پخش را بزنید.</span></div>}
 

@@ -1,0 +1,14 @@
+PERF { calls: 314, tris: 413695, dpr: 1, fps: 1 }
+DAILY [
+  'دلار نفتی۱٬۲۰۰+۱۰٫۱/ث', 'نفت خام۴۹۹',
+  'سوخت۱۷۶',               'فولاد · بدون تولید۱۵۰',
+  'مهمات۳۰۰',              '',
+  '',                      '',
+  '',                      '',
+  'خودکار',                '',
+  '',                      'مخزن نفت پر شده است',
+  'اقتصاد',                'برجک‌ها',
+  'عملیات',                'بیشتر',
+  '',                      'دریافت هدیهٔ امروز'
+]
+PASS mobile layout, economy, 25-operation grid, challenge preparation and tower action, command navigation and native daily claim

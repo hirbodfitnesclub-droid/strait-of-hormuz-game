@@ -104,7 +104,7 @@ TELEMETRY_SNAPSHOT_JS = """() => {
 # Disk-backed (NOT /tmp: the shared 512MB tmpfs fills up with every team's
 # artifacts and Chromium renderers start dying when it nears capacity).
 PROFILE_DIR = os.environ.get(
-    "AUDIT_PROFILE", os.path.expanduser("~/.cache/hormuz-audit-profile"))
+    "AUDIT_PROFILE", os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "review", "audit-profile")))
 LAUNCH_ARGS = ["--no-sandbox", "--use-gl=swiftshader",
                "--enable-unsafe-swiftshader", "--no-zygote"]
 
@@ -202,6 +202,11 @@ async def open_seeded_page(ctx, base_url: str, seed_js: str, *,
         await pg.wait_for_timeout(2000)
     if not sync_ready:
         raise RuntimeError("gamesync/tower models did not become ready in time")
+    # Restored combat deliberately waits for the player. Resume through its
+    # real control before measuring fire cadence or animation amplitude.
+    resume = pg.locator('.main-battle-action.is-paused')
+    if await resume.count():
+        await resume.click(timeout=90000)
     return pg, errors
 
 

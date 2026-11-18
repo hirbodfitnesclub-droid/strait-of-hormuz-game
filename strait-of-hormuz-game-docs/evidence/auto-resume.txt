@@ -1,0 +1,1 @@
+PASS opted-in intermission reload enters battle after world becomes ready { phase: 'battle', wave: 1, auto: true }

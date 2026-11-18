@@ -55,36 +55,19 @@ export async function POST(request: Request) {
     if (JSON.stringify(body.state).length > 200_000) {
       return Response.json({ error: "Save too large" }, { status: 413 });
     }
-    // baseVersion is optional (legacy clients omit it), but when present it
-    // must be a non-negative integer. An invalid value (string, float,
-    // negative, ...) is a client error — 400 — and must never silently
-    // degrade into a legacy unconditional write, which would bypass
-    // conflict detection entirely.
-    if (
-      body.baseVersion !== undefined &&
-      !(typeof body.baseVersion === "number" && Number.isInteger(body.baseVersion) && body.baseVersion >= 0)
-    ) {
+    // Compare-and-swap is mandatory; omitted or future versions cannot bypass it.
+    if (!(typeof body.baseVersion === "number" && Number.isSafeInteger(body.baseVersion) && body.baseVersion >= 0)) {
       return Response.json({ error: "Invalid baseVersion" }, { status: 400 });
     }
-    const baseVersion = body.baseVersion === undefined ? null : (body.baseVersion as number);
+    const baseVersion = body.baseVersion;
     const saveId = body.id as string; // validated by validId above
     const result = await db.transaction(async transaction => {
       // Serialize writes per save id so the version check cannot race.
       await transaction.execute(sql`select pg_advisory_xact_lock(hashtext(${saveId}))`);
       const [existing] = await transaction.select().from(gameSaves).where(eq(gameSaves.id, saveId)).limit(1);
       const current = existing ? readRecord(existing.state) : { state: null, version: 0 };
-      // Conflict policy: LAST-WRITER-WINS, guarded (official policy — see
-      // fix-program.md, team SAVE). The version counter is owned by the
-      // server: every successful write stores current + 1, so a client can
-      // never jump the version. A client whose baseVersion is behind the
-      // server has lost the race and gets a 409; per the client-side half
-      // of this policy it then fetches the current server state, keeps a
-      // timestamped local backup of it (localStorage key
-      // "hormuz-server-backup-v1") and only then rebases onto the server
-      // version and overwrites — last writer wins, but the overwritten
-      // progress is never lost silently. Legacy clients that send no
-      // baseVersion keep the old unconditional-write behaviour.
-      if (baseVersion !== null && baseVersion < current.version) {
+      // Preserve the existing record on any revision mismatch.
+      if (baseVersion !== current.version) {
         return {
           conflict: true as const,
           serverVersion: current.version,

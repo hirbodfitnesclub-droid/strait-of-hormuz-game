@@ -81,11 +81,11 @@ function Flare({ pos, h = 2.6, k, big = false }: { pos: V3; h?: number; k: Kit; 
     <group position={pos}>
       <mesh position={[0, h / 2, 0]} material={k.steel}><cylinderGeometry args={[0.05, 0.09, h, 10]} /></mesh>
       {[0.3, 0.55, 0.8].map((f) => <mesh key={f} position={[0, h * f, 0]} material={k.gun}><torusGeometry args={[0.09 - f * 0.03, 0.012, 6, 16]} /></mesh>)}
-      <group ref={flame} position={[0, h + 0.35 * s, 0]}>
+      <group ref={flame} name="anim:flame" position={[0, h + 0.35 * s, 0]}>
         <mesh material={mat}><coneGeometry args={[0.14 * s, 0.7 * s, 12, 1, true]} /></mesh>
         <mesh material={new THREE.MeshBasicMaterial({ color: new THREE.Color("#ffd9a0").multiplyScalar(7), toneMapped: false })}><sphereGeometry args={[0.08 * s, 10, 8]} /></mesh>
       </group>
-      <pointLight ref={light} position={[0, h + 0.4, 0]} color="#ff8a3a" intensity={9} distance={7} decay={1.6} />
+      <pointLight ref={light} name="anim:flameLight" position={[0, h + 0.4, 0]} color="#ff8a3a" intensity={9} distance={7} decay={1.6} />
       {B && null}
     </group>
   );
@@ -105,7 +105,7 @@ function SmokeStack({ pos, h = 2.2, r = 0.16, k, rate = 0.5, dark = true }: { po
     }
   });
   return (
-    <group ref={grp} position={pos}>
+    <group ref={grp} name="anim:smoke" userData={{smokeHeight:h+0.1,smokeRate:rate,smokeDark:dark}} position={pos}>
       <mesh position={[0, h / 2, 0]} material={k.armor}><cylinderGeometry args={[r * 0.8, r, h, 16]} /></mesh>
       <mesh position={[0, h - 0.12, 0]} material={k.accent}><cylinderGeometry args={[r * 0.85, r * 0.85, 0.22, 16]} /></mesh>
       <Beacon pos={[0, h + 0.05, 0]} color="#ff3030" size={0.04} />
@@ -142,7 +142,7 @@ function PumpJack({ pos, k }: { pos: V3; k: Kit }) {
       <RBox args={[0.7, 0.25, 0.4]} r={0.03} pos={[0, 0.12, 0]} m={k.accent} />
       <Strut a={[-0.2, 0.25, 0]} b={[0, 0.85, 0]} r={0.045} m={k.gun} />
       <Strut a={[0.2, 0.25, 0]} b={[0, 0.85, 0]} r={0.045} m={k.gun} />
-      <group ref={arm} position={[0, 0.85, 0]}>
+      <group ref={arm} name="anim:swing" position={[0, 0.85, 0]}>
         <RBox args={[1.3, 0.14, 0.16]} r={0.04} pos={[0.1, 0.05, 0]} m={k.accent} />
         <RBox args={[0.3, 0.3, 0.2]} r={0.05} pos={[0.72, 0, 0]} m={k.gun} />
         <mesh position={[-0.5, -0.25, 0]} material={k.gun}><cylinderGeometry args={[0.06, 0.06, 0.5, 10]} /></mesh>
@@ -160,7 +160,7 @@ function WindTurbine({ pos, h = 2.2, k }: { pos: V3; h?: number; k: Kit }) {
       <mesh position={[0, h / 2, 0]} material={k.white}><cylinderGeometry args={[0.05, 0.09, h, 10]} /></mesh>
       <group position={[0, h, 0.12]}>
         <mesh rotation={[PI / 2, 0, 0]} material={k.white}><capsuleGeometry args={[0.07, 0.25, 6, 10]} /></mesh>
-        <group ref={rotor} position={[0, 0, 0.22]}>
+        <group ref={rotor} name="anim:rotZ" position={[0, 0, 0.22]}>
           {[0, 1, 2].map((i) => (
             <group key={i} rotation={[0, 0, (i / 3) * PI * 2]}>
               <mesh position={[0, 0.42, 0]} material={k.white}><boxGeometry args={[0.05, 0.85, 0.02]} /></mesh>
@@ -227,7 +227,7 @@ function Crane({ pos, k, h = 2.6, span = 3.4, animated = true }: { pos: V3; k: K
       ))}
       <RBox args={[span + 0.8, 0.22, 0.3]} r={0.04} pos={[0, h, 0]} m={k.accent} />
       <RBox args={[span * 0.5, 0.12, 0.2]} r={0.03} pos={[-span * 0.45, h - 0.25, 0]} rot={[0, 0, 0.35]} m={k.accent} />
-      <group ref={trolley} position={[0, h - 0.15, 0]}>
+      <group ref={trolley} name={animated ? "anim:trolley" : undefined} userData={{travel:span*0.32}} position={[0, h - 0.15, 0]}>
         <RBox args={[0.35, 0.25, 0.4]} r={0.04} m={k.gun} />
         <group position={[0, -0.9, 0]}>
           <mesh position={[0, 0.45, 0]} material={k.steel}><cylinderGeometry args={[0.008, 0.008, 0.9, 4]} /></mesh>
@@ -279,7 +279,7 @@ function Palm({ pos, h = 0.9, k }: { pos: V3; h?: number; k: Kit }) {
 function Bobbing({ children, pos, amp = 0.05, speed = 1.4 }: { children: React.ReactNode; pos: V3; amp?: number; speed?: number }) {
   const g = useRef<THREE.Group>(null);
   useFrame((s) => { if (g.current) { g.current.position.y = pos[1] + Math.sin(s.clock.elapsedTime * speed + pos[0]) * amp; g.current.rotation.z = Math.sin(s.clock.elapsedTime * speed * 0.7) * 0.02; } });
-  return <group ref={g} position={pos}>{children}</group>;
+  return <group ref={g} name="anim:bob" userData={{bobAmp:amp,bobSpeed:speed}} position={pos}>{children}</group>;
 }
 
 function Cars({ k, tier }: { k: Kit; tier: number }) {
@@ -299,7 +299,7 @@ function Cars({ k, tier }: { k: Kit; tier: number }) {
       <mesh position={[0, BY + 0.02, 1.3]} material={k.rubber}><boxGeometry args={[4.6, 0.02, 0.8]} /></mesh>
       {Array.from({ length: 8 }).map((_, i) => <mesh key={i} position={[-2 + i * 0.55, BY + 0.035, 1.3]} material={k.white}><boxGeometry args={[0.25, 0.005, 0.04]} /></mesh>)}
       {refs.slice(0, tier >= 4 ? 3 : 2).map((r, i) => (
-        <group key={i} ref={r}>
+        <group key={i} ref={r} name="anim:car" userData={{carIndex:i}} position={[i%2 ? 2.2 : -2.2,BY+0.09,1.15+(i%2)*0.35]}>
           <RBox args={[0.16, 0.09, 0.36]} r={0.03} pos={[0, 0.05, 0]} m={new THREE.MeshStandardMaterial({ color: colors[i], metalness: 0.6, roughness: 0.3 })} />
           <RBox args={[0.14, 0.07, 0.2]} r={0.02} pos={[0, 0.12, -0.02]} m={k.cockpit} />
         </group>
@@ -506,7 +506,7 @@ function Steel({ tier, k }: P) {
         <mesh position={[0, 1.1, 0]} material={k.armor}><cylinderGeometry args={[0.55, 0.8, 2.2, 20]} /></mesh>
         <mesh position={[0, 2.35, 0]} material={k.armorDark}><cylinderGeometry args={[0.3, 0.5, 0.4, 16]} /></mesh>
         <SmokeStack pos={[0, 2.4, 0]} h={0.9} r={0.16} k={k} rate={0.4} />
-        <mesh ref={door} position={[0, 0.35, 0.72]} material={glowMat}><boxGeometry args={[0.4, 0.45, 0.02]} /></mesh>
+        <mesh ref={door} name="anim:door" position={[0, 0.35, 0.72]} material={glowMat}><boxGeometry args={[0.4, 0.45, 0.02]} /></mesh>
         <mesh position={[0, 0.1, 0.9]} rotation={[0.5, 0, 0]} material={k.gun}><boxGeometry args={[0.35, 0.06, 0.7]} /></mesh>
       </group>
       {tier >= 3 && (
@@ -788,7 +788,7 @@ function Research({ tier, k }: P) {
       {/* شتاب‌دهنده حلقوی */}
       <group position={[1.0, BY + 0.15, -0.6]}>
         <mesh material={k.armorDark}><torusGeometry args={[0.85, 0.14, 12, 36]} /></mesh>
-        <group ref={ring}>
+        <group ref={ring} name="anim:rot" userData={{spin:0.8}}>
           {[0, 1, 2, 3, 4, 5].map((i) => {
             const a = (i / 6) * PI * 2;
             return <mesh key={i} position={[Math.cos(a) * 0.85, 0, Math.sin(a) * 0.85]} material={k.glow}><sphereGeometry args={[0.07, 8, 8]} /></mesh>;
@@ -882,7 +882,7 @@ function Customs({ tier, k }: P) {
           {[-2.6, 2.6].map((x) => <mesh key={x} position={[x, 1.1, 0]} material={k.accent}><boxGeometry args={[0.3, 2.2, 0.4]} /></mesh>)}
           <RBox args={[5.5, 0.35, 0.5]} r={0.05} pos={[0, 2.3, 0]} m={k.accent} />
           {[0, 1, 2, 3, 4].map((i) => <mesh key={i} position={[-2 + i, 2.05, 0]} material={k.glow}><sphereGeometry args={[0.05, 8, 6]} /></mesh>)}
-          <mesh ref={scan} material={scanMat}><planeGeometry args={[0.7, 2.1]} /></mesh>
+          <mesh ref={scan} name="anim:scan" position={[0,1.1,3.4]} material={scanMat}><planeGeometry args={[0.7, 2.1]} /></mesh>
         </group>
       )}
       <Bobbing pos={[1.8, 0, 2.6]} amp={0.05} speed={1.6}>
@@ -968,7 +968,7 @@ function HQ({ tier, k }: P) {
             {tier >= 4 && <mesh position={[0, floors * 0.3 + 0.1, 0]} material={k.glow}><torusGeometry args={[0.66, 0.02, 6, 32]} /></mesh>}
           </group>
           {/* هولوگرام نقشه */}
-          <group ref={holo} position={[-0.5, BY + 3.6, -0.7]}>
+          <group ref={holo} name="anim:holo" position={[-0.5, BY + 3.6, -0.7]}>
             <mesh material={k.glass}><cylinderGeometry args={[0.55, 0.55, 0.02, 24]} /></mesh>
             <mesh rotation={[PI / 2, 0, 0]} material={k.glow}><torusGeometry args={[0.55, 0.015, 6, 32]} /></mesh>
             {[[0.2, 0.1], [-0.25, -0.15], [0.05, -0.3]].map(([x, z], i) => (

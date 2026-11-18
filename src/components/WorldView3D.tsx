@@ -9,6 +9,8 @@ const ThreeMap = dynamic(() => import('./ThreeMap'), { ssr: false });
 
 type Props = {
   game: GameState;
+  paused?: boolean;
+  onReadyChange?: (ready: boolean) => void;
   selectedSlot: number | null;
   targeting: 'strike' | 'hero' | 'hero2' | null;
   targetPreview: { x: number; y: number };
@@ -38,13 +40,13 @@ type Props = {
 // All HUD/panels stay DOM (Game.tsx); this component owns only the world.
 export default function WorldView3D(props: Props) {
   const syncRef = useRef<import('../three-map/gamesync').GameSync3D | null>(null);
-  useEffect(() => () => { syncRef.current?.dispose(); syncRef.current = null; }, []);
-  const [loadPct, setLoadPct] = useState<number | null>(null);
+  const mounted = useRef(false);
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false; syncRef.current?.dispose(); syncRef.current = null; }; }, []);
+  const [loadPct, setLoadPct] = useState<number | null>(0);
 
   // Preload all placeable models behind a loading veil (Phase 3): no mid-battle decode hitches.
   useEffect(() => {
     let dead = false;
-    setLoadPct(0);
     const killer = setTimeout(() => { if (!dead) { dead = true; setLoadPct(null); } }, 30000);
     (async () => {
       try {
@@ -58,12 +60,13 @@ export default function WorldView3D(props: Props) {
   const mapRef = useRef<unknown>(null);
   const fpsRef = useRef<HTMLDivElement | null>(null);
   const propsRef = useRef(props);
-  propsRef.current = props;
+  useEffect(() => { propsRef.current = props; }, [props]);
 
-  const [showMetrics, setShowMetrics] = useState(false);
+  const [mapReady, setMapReady] = useState(false);
+  useEffect(() => { propsRef.current.onReadyChange?.(mapReady && loadPct === null); }, [mapReady, loadPct]);
+  const [showMetrics] = useState(() => typeof location !== "undefined" && new URLSearchParams(location.search).has("fpslog"));
   useEffect(() => {
     const enabled = new URLSearchParams(location.search).has('fpslog');
-    setShowMetrics(enabled);
     if (!enabled) return;
     const timer = setInterval(() => {
       const fps = syncRef.current?.perfInfo().fps ?? 0;
@@ -147,7 +150,7 @@ export default function WorldView3D(props: Props) {
 
   useEffect(() => {
     const sync = syncRef.current;
-    if (sync) sync.setState(props.game, { selectedSlot: props.selectedSlot, targeting: props.targeting, targetPreview: props.targetPreview });
+    if (sync) sync.setState(props.game, { selectedSlot: props.selectedSlot, targeting: props.targeting, targetPreview: props.targetPreview, paused: props.paused });
   });
 
   return (
@@ -158,11 +161,11 @@ export default function WorldView3D(props: Props) {
         <div style={{ width: 'min(260px, 70%)', height: 8, borderRadius: 4, background: 'rgba(147,197,253,0.18)', overflow: 'hidden' }}><div style={{ width: `${loadPct}%`, height: '100%', borderRadius: 4, background: 'linear-gradient(90deg,#53d769,#9be15d)', transition: 'width .25s' }} /></div>
         <div style={{ fontSize: 12, color: '#9fc3dd' }}>بارگذاری ناوگان و برجک‌ها · {loadPct}٪</div>
       </div>}
-      <ThreeMap
+      <ThreeMap onReadyChange={setMapReady}
         onMapReady={async map => {
           mapRef.current = map;
           const { GameSync3D } = await import('../three-map/gamesync');
-          if (syncRef.current) return;
+          if (!mounted.current || syncRef.current) return;
           const sync = new GameSync3D(map as never, {
             onSound: kind => propsRef.current.playSound(kind),
             onSlot: id => propsRef.current.onSlot(id),
@@ -178,7 +181,7 @@ export default function WorldView3D(props: Props) {
           (window as unknown as { __gamesync3d?: unknown }).__gamesync3d = sync;
           (window as unknown as { __map3d?: unknown }).__map3d = map;
           const p = propsRef.current;
-          sync.setState(p.game, { selectedSlot: p.selectedSlot, targeting: p.targeting, targetPreview: p.targetPreview });
+          sync.setState(p.game, { selectedSlot: p.selectedSlot, targeting: p.targeting, targetPreview: p.targetPreview, paused: p.paused });
           const mm = map as unknown as { flyTo(x: number, z: number, d: number, dur?: number): void };
           mm.flyTo(85, -20, 120, 1.4);
           // The VIS2 time driver (effect above) owns the map clock from

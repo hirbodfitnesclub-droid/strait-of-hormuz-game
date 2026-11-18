@@ -1,5 +1,5 @@
 /** Reproducible game-asset export from the authored building pack. */
-import React, { Suspense, useEffect, useRef, useState } from 'react';
+import { Suspense, useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { Canvas } from '@react-three/fiber';
 import { GLTFExporter } from 'three/examples/jsm/exporters/GLTFExporter.js';
@@ -24,6 +24,6 @@ function ExportApp(){
   let binary='';const array=new Uint8Array(bytes);for(let i=0;i<array.length;i+=8192)binary+=String.fromCharCode(...array.subarray(i,i+8192));
   return btoa(binary);
  };},[]);
- return <Canvas frameloop="demand" camera={{position:[9,7,9],fov:42}}><ambientLight intensity={1.2}/><directionalLight position={[5,10,5]} intensity={3}/><BattleCtx.Provider value={battle}><Suspense fallback={null}>{asset&&<Asset key={`${asset.kind}-${asset.tier}`} {...asset} onReady={g=>resolve.current?.(g)}/>}</Suspense></BattleCtx.Provider></Canvas>;
+ return <Canvas frameloop="demand" onCreated={({clock})=>{clock.stop();clock.elapsedTime=0;}} camera={{position:[9,7,9],fov:42}}><ambientLight intensity={1.2}/><directionalLight position={[5,10,5]} intensity={3}/><BattleCtx.Provider value={battle}><Suspense fallback={null}>{asset&&<Asset key={`${asset.kind}-${asset.tier}`} {...asset} onReady={g=>resolve.current?.(g)}/>}</Suspense></BattleCtx.Provider></Canvas>;
 }
 createRoot(document.getElementById('root')!).render(<ExportApp/>);

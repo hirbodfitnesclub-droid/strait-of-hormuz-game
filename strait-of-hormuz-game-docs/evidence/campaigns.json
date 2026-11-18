@@ -1,0 +1,465 @@
+[
+  {
+    "gate": "25 authored operations; fully equipped fixture; not fresh-player pacing",
+    "rows": [
+      {
+        "wave": 1,
+        "hearts": 20,
+        "seconds": 7.875,
+        "objective": "repel"
+      },
+      {
+        "wave": 2,
+        "hearts": 20,
+        "seconds": 38.125,
+        "objective": "escort"
+      },
+      {
+        "wave": 3,
+        "hearts": 20,
+        "seconds": 10.5,
+        "objective": "airdef"
+      },
+      {
+        "wave": 4,
+        "hearts": 20,
+        "seconds": 16.875,
+        "objective": "intercept"
+      },
+      {
+        "wave": 5,
+        "hearts": 20,
+        "seconds": 32.875,
+        "objective": "repel"
+      },
+      {
+        "wave": 6,
+        "hearts": 20,
+        "seconds": 20.75,
+        "objective": "structure"
+      },
+      {
+        "wave": 7,
+        "hearts": 20,
+        "seconds": 28.375,
+        "objective": "siege"
+      },
+      {
+        "wave": 8,
+        "hearts": 20,
+        "seconds": 19.375,
+        "objective": "airdef"
+      },
+      {
+        "wave": 9,
+        "hearts": 20,
+        "seconds": 38.125,
+        "objective": "escort"
+      },
+      {
+        "wave": 10,
+        "hearts": 20,
+        "seconds": 70.75,
+        "objective": "structure"
+      },
+      {
+        "wave": 11,
+        "hearts": 20,
+        "seconds": 42.125,
+        "objective": "intercept"
+      },
+      {
+        "wave": 12,
+        "hearts": 20,
+        "seconds": 33.25,
+        "objective": "structure"
+      },
+      {
+        "wave": 13,
+        "hearts": 20,
+        "seconds": 44.75,
+        "objective": "repel"
+      },
+      {
+        "wave": 14,
+        "hearts": 20,
+        "seconds": 42.25,
+        "objective": "structure"
+      },
+      {
+        "wave": 15,
+        "hearts": 20,
+        "seconds": 63.75,
+        "objective": "siege"
+      },
+      {
+        "wave": 16,
+        "hearts": 20,
+        "seconds": 48.625,
+        "objective": "rescue"
+      },
+      {
+        "wave": 17,
+        "hearts": 20,
+        "seconds": 44,
+        "objective": "airdef"
+      },
+      {
+        "wave": 18,
+        "hearts": 20,
+        "seconds": 77.25,
+        "objective": "escort"
+      },
+      {
+        "wave": 19,
+        "hearts": 20,
+        "seconds": 85.5,
+        "objective": "repel"
+      },
+      {
+        "wave": 20,
+        "hearts": 20,
+        "seconds": 105.125,
+        "objective": "intercept"
+      },
+      {
+        "wave": 21,
+        "hearts": 20,
+        "seconds": 86.875,
+        "objective": "structure"
+      },
+      {
+        "wave": 22,
+        "hearts": 20,
+        "seconds": 67.375,
+        "objective": "siege"
+      },
+      {
+        "wave": 23,
+        "hearts": 20,
+        "seconds": 62.5,
+        "objective": "structure"
+      },
+      {
+        "wave": 24,
+        "hearts": 20,
+        "seconds": 89,
+        "objective": "rescue"
+      },
+      {
+        "wave": 25,
+        "hearts": 20,
+        "seconds": 196.75,
+        "objective": "repel"
+      }
+    ]
+  },
+  {
+    "gate": "legal-action fresh campaign; expert policy; no human retention inference",
+    "actions": 19976,
+    "hours": 0.5645138888888889,
+    "failures": [],
+    "rows": [
+      {
+        "wave": 1,
+        "retry": 0,
+        "won": true,
+        "prepareSeconds": 180,
+        "battleSeconds": 24.875,
+        "elapsed": 204.875,
+        "cash": 1078,
+        "hearts": 20,
+        "towers": 4,
+        "research": 1
+      },
+      {
+        "wave": 2,
+        "retry": 0,
+        "won": true,
+        "prepareSeconds": 11,
+        "battleSeconds": 38.125,
+        "elapsed": 254,
+        "cash": 2912,
+        "hearts": 20,
+        "towers": 5,
+        "research": 2
+      },
+      {
+        "wave": 3,
+        "retry": 0,
+        "won": true,
+        "prepareSeconds": 324,
+        "battleSeconds": 16.5,
+        "elapsed": 594.5,
+        "cash": 37259,
+        "hearts": 20,
+        "towers": 6,
+        "research": 4
+      },
+      {
+        "wave": 4,
+        "retry": 0,
+        "won": true,
+        "prepareSeconds": 55,
+        "battleSeconds": 28.5,
+        "elapsed": 678,
+        "cash": 44013,
+        "hearts": 20,
+        "towers": 7,
+        "research": 6
+      },
+      {
+        "wave": 5,
+        "retry": 0,
+        "won": true,
+        "prepareSeconds": 2,
+        "battleSeconds": 63.125,
+        "elapsed": 743.125,
+        "cash": 52970,
+        "hearts": 20,
+        "towers": 8,
+        "research": 8
+      },
+      {
+        "wave": 6,
+        "retry": 0,
+        "won": true,
+        "prepareSeconds": 3,
+        "battleSeconds": 38.5,
+        "elapsed": 784.625,
+        "cash": 47226,
+        "hearts": 20,
+        "towers": 9,
+        "research": 10
+      },
+      {
+        "wave": 7,
+        "retry": 0,
+        "won": true,
+        "prepareSeconds": 2,
+        "battleSeconds": 35.375,
+        "elapsed": 822,
+        "cash": 51851,
+        "hearts": 20,
+        "towers": 10,
+        "research": 12
+      },
+      {
+        "wave": 8,
+        "retry": 0,
+        "won": true,
+        "prepareSeconds": 3,
+        "battleSeconds": 19.375,
+        "elapsed": 844.375,
+        "cash": 36213,
+        "hearts": 20,
+        "towers": 11,
+        "research": 14
+      },
+      {
+        "wave": 9,
+        "retry": 0,
+        "won": true,
+        "prepareSeconds": 3,
+        "battleSeconds": 44.625,
+        "elapsed": 892,
+        "cash": 29681,
+        "hearts": 20,
+        "towers": 12,
+        "research": 16
+      },
+      {
+        "wave": 10,
+        "retry": 0,
+        "won": true,
+        "prepareSeconds": 3,
+        "battleSeconds": 61.875,
+        "elapsed": 956.875,
+        "cash": 37206,
+        "hearts": 20,
+        "towers": 13,
+        "research": 18
+      },
+      {
+        "wave": 11,
+        "retry": 0,
+        "won": true,
+        "prepareSeconds": 3,
+        "battleSeconds": 39.125,
+        "elapsed": 999,
+        "cash": 25220,
+        "hearts": 20,
+        "towers": 13,
+        "research": 20
+      },
+      {
+        "wave": 12,
+        "retry": 0,
+        "won": true,
+        "prepareSeconds": 12,
+        "battleSeconds": 32.5,
+        "elapsed": 1043.5,
+        "cash": 9443,
+        "hearts": 20,
+        "towers": 13,
+        "research": 22
+      },
+      {
+        "wave": 13,
+        "retry": 0,
+        "won": true,
+        "prepareSeconds": 1,
+        "battleSeconds": 41.125,
+        "elapsed": 1085.625,
+        "cash": 20097,
+        "hearts": 20,
+        "towers": 13,
+        "research": 24
+      },
+      {
+        "wave": 14,
+        "retry": 0,
+        "won": true,
+        "prepareSeconds": 1,
+        "battleSeconds": 41.25,
+        "elapsed": 1127.875,
+        "cash": 30552,
+        "hearts": 20,
+        "towers": 13,
+        "research": 26
+      },
+      {
+        "wave": 15,
+        "retry": 0,
+        "won": true,
+        "prepareSeconds": 1,
+        "battleSeconds": 67.75,
+        "elapsed": 1196.625,
+        "cash": 49878,
+        "hearts": 20,
+        "towers": 13,
+        "research": 28
+      },
+      {
+        "wave": 16,
+        "retry": 0,
+        "won": true,
+        "prepareSeconds": 3,
+        "battleSeconds": 45.875,
+        "elapsed": 1245.5,
+        "cash": 63865,
+        "hearts": 20,
+        "towers": 13,
+        "research": 30
+      },
+      {
+        "wave": 17,
+        "retry": 0,
+        "won": true,
+        "prepareSeconds": 0,
+        "battleSeconds": 30.625,
+        "elapsed": 1276.125,
+        "cash": 83693,
+        "hearts": 20,
+        "towers": 13,
+        "research": 30
+      },
+      {
+        "wave": 18,
+        "retry": 0,
+        "won": true,
+        "prepareSeconds": 0,
+        "battleSeconds": 75.25,
+        "elapsed": 1351.375,
+        "cash": 116184,
+        "hearts": 20,
+        "towers": 13,
+        "research": 30
+      },
+      {
+        "wave": 19,
+        "retry": 0,
+        "won": true,
+        "prepareSeconds": 0,
+        "battleSeconds": 88.5,
+        "elapsed": 1439.875,
+        "cash": 160777,
+        "hearts": 20,
+        "towers": 13,
+        "research": 30
+      },
+      {
+        "wave": 20,
+        "retry": 0,
+        "won": true,
+        "prepareSeconds": 0,
+        "battleSeconds": 106.125,
+        "elapsed": 1546,
+        "cash": 208927,
+        "hearts": 20,
+        "towers": 13,
+        "research": 30
+      },
+      {
+        "wave": 21,
+        "retry": 0,
+        "won": true,
+        "prepareSeconds": 3,
+        "battleSeconds": 100.625,
+        "elapsed": 1649.625,
+        "cash": 195657,
+        "hearts": 19,
+        "towers": 13,
+        "research": 30
+      },
+      {
+        "wave": 22,
+        "retry": 0,
+        "won": true,
+        "prepareSeconds": 0,
+        "battleSeconds": 64.875,
+        "elapsed": 1714.5,
+        "cash": 224895,
+        "hearts": 20,
+        "towers": 13,
+        "research": 30
+      },
+      {
+        "wave": 23,
+        "retry": 0,
+        "won": true,
+        "prepareSeconds": 0,
+        "battleSeconds": 50.5,
+        "elapsed": 1765,
+        "cash": 251831,
+        "hearts": 20,
+        "towers": 13,
+        "research": 30
+      },
+      {
+        "wave": 24,
+        "retry": 0,
+        "won": true,
+        "prepareSeconds": 0,
+        "battleSeconds": 87.375,
+        "elapsed": 1852.375,
+        "cash": 293946,
+        "hearts": 17,
+        "towers": 13,
+        "research": 30
+      },
+      {
+        "wave": 25,
+        "retry": 0,
+        "won": true,
+        "prepareSeconds": 0,
+        "battleSeconds": 179.875,
+        "elapsed": 2032.25,
+        "cash": 376985,
+        "hearts": 19,
+        "towers": 13,
+        "research": 30
+      }
+    ]
+  }
+]

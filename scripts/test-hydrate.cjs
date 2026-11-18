@@ -143,7 +143,7 @@ ok('scalar tampering: cooldowns, stuns, combo, counters stay numeric', () => {
   assert.equal(game.cooldowns.emp, 0);
   assert.deepEqual(game.towerStuns, { 4: 2 });
   assert.equal(game.combo, 0);
-  assert.equal(game.nextId, 1);
+  assert.ok(game.nextId > Math.max(...game.merchants.map(ship => ship.id)));
   assert.equal(game.chests, 1);
 });
 ok('tower branch/priority are sanitized with the tier', () => {

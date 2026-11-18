@@ -11,6 +11,9 @@ export type Mode = "campaign" | "endless" | "challenge";
 export type Phase = "peace" | "battle" | "intermission" | "defeat" | "victory";
 export type Priority = "first" | "strongest" | "weakest" | "air";
 export type Spell = "strike" | "emp" | "overdrive";
+// The starting islands begin engaging near 0.68 of the shipping lane.
+// Interception must leave a playable defensive approach before the boundary.
+export const INTERCEPT_LINE = BALANCE.combat.interceptLine;
 
 export interface Tower {
   slot: number;
@@ -221,6 +224,8 @@ export interface BattleEvent {
 export interface FireStat { shots: number; hits: number; fizzled: number; }
 export interface GameState {
   version: number;
+  /** Saved PRNG state: replaying a reducer action must produce the same battle. */
+  rngState: number;
   idle: IdleState;
   cash: number; oil: number; fuel: number; steel: number; ammo: number;
   oilSplit: number;
@@ -373,7 +378,7 @@ export const RESEARCH: { id: string; branch: "energy" | "defense" | "city"; name
 
 export function initialGame(): GameState {
   return {
-    version: 1, idle: initialIdle(), cash: 1200, oil: 300, fuel: 200, steel: 150, ammo: 300, oilSplit: 40,
+    version: 1, rngState: 0x484f524d, idle: initialIdle(), cash: 1200, oil: 300, fuel: 200, steel: 150, ammo: 300, oilSplit: 40,
     combo: 0, comboTimer: 0, maxCombo: 0, waveLeaked: false, slowmo: 0,
     lowFuelTime: 0, lowGridTime: 0, lowFuelStart: -1, warnings: { fuel: false, power: false },
     buildings: { oil: 1, tank: 1, dock: 1, refinery: 0, steel: 0, arms: 0, power: 1, water: 1, city: 1, welfare: 0, optical: 0 },
@@ -398,6 +403,14 @@ export function upgradeCost(id: BuildingId, level: number) { return Math.ceil(BU
 export function towerUpgradeCost(tower: Tower) {
   const def = TOWERS[tower.kind];
   return { cash: Math.ceil(def.cost * Math.pow(1.55, tower.tier)), steel: Math.ceil(def.steel * (1 + tower.tier * 0.6)) };
+}
+export function towerSellRefund(s: GameState, tower: Tower) {
+  let cash = TOWERS[tower.kind].cost, steel = TOWERS[tower.kind].steel;
+  for (let tier = 1; tier < tower.tier; tier++) {
+    const cost = towerUpgradeCost({ ...tower, tier }); cash += cost.cash; steel += cost.steel;
+  }
+  const rate = s.research.includes("recycle") ? .8 : .5;
+  return { rate, cash: Math.floor(cash * rate), steel: Math.floor(steel * rate) };
 }
 export function positionAt(progress: number, layout: MapLayout = "landscape") { return sampleLane(getLane(layout, "enemy"), progress); }
 export function enemyPosition(enemy: Enemy, layout: MapLayout = "landscape") {
@@ -448,16 +461,16 @@ export function getStats(s: GameState) {
   const oilRate = output("oil") * (s.research.includes("drill") ? 1.25 : 1) * (s.research.includes("seabed") ? 1.1 : 1) + (s.idle.platforms?.length ?? 0) * 8 * grid;
   const dockRate = output("dock") * (s.research.includes("dockauto") ? 1.25 : 1) * (s.research.includes("pipe") ? 1.5 : 1);
   const exportRate = Math.min(oilRate * s.oilSplit / 100, dockRate);
-  const dollarRate = exportRate * 2 * (s.research.includes("trade") ? 1.5 : 1) * (1 + .1 * s.idle.managerLevels.harbor);
+  const dollarRate = exportRate * 2 * (s.research.includes("trade") ? 1.5 : 1);
   // R11: the REAL export rate — money only flows while a tanker is berthed
   // and loading. The theoretical dollarRate above is a planning number; it
   // must never again drive real money (bank capacity, offline income).
   const portTanker = s.idle.port?.tanker;
   const loadingNow = !!portTanker && portTanker.stage === "loading" && portTanker.load < (500 + b.dock * 500) - 0.001 && s.oil > 0.001;
   const realExportRate = loadingNow ? exportRate * 2 * (s.research.includes("trade") ? 1.5 : 1) : 0;
-  // Realized export rate over a rolling 6 h game-time window (the two
-  // window counters live on idle; the window restarts on expiry and at
-  // prestige). The lifetime ledger (port.exportedDollars) must NOT feed
+  // Realized export rate over a smoothed 6 h game-time horizon (the two
+  // counters live on idle, decay proportionally after six hours, and reset
+  // at prestige). The lifetime ledger (port.exportedDollars) must NOT feed
   // this: an early export hoard diluted over a whole save — or a fresh
   // prestige — would otherwise size the bank and pay offline income on
   // a rate the port no longer earns. 60 s floor against opening spikes.
@@ -530,6 +543,12 @@ export function getOfflineReward(s: GameState, now: number) {
   const rate = getStats(s).avgExportRate;
   const managerBonus = s.idle.managerLevels.harbor > 0 ? BALANCE.economy.harborOfflineBonus : 1;
   return { seconds, ratio, amount: seconds > BALANCE.economy.offlineGraceSeconds ? rate * seconds * BALANCE.economy.offlineEfficiency * ratio * managerBonus : 0 };
+}
+function randomBattle(s: GameState): number {
+  let x = s.rngState || 0x484f524d;
+  x ^= x << 13; x ^= x >>> 17; x ^= x << 5;
+  s.rngState = x >>> 0;
+  return s.rngState / 0x100000000;
 }
 function advanceOfflineTimers(s: GameState, seconds: number) {
   s.idle.boostRemaining = Math.max(0, s.idle.boostRemaining - seconds);
@@ -644,6 +663,7 @@ export function hydrateGame(raw: unknown): { game: GameState; offline: number } 
       boostRecharge: Math.max(0, num(v.boostRecharge, 0)),
       autoBattle: v.autoBattle === true,
       stars,
+      modeBest: { campaign: intIn(isRec(v.modeBest) ? v.modeBest.campaign : saved.highestWave, 0, 0, 25), endless: intIn(isRec(v.modeBest) ? v.modeBest.endless : 0, 0, 0, 1000), challenge: intIn(isRec(v.modeBest) ? v.modeBest.challenge : 0, 0, 0, 1000) },
       lastBattle: sanitizeBattle(v.lastBattle),
       waveStartedAt: num(v.waveStartedAt, 0),
       waveStartKills: intIn(v.waveStartKills, 0, 0, Number.MAX_SAFE_INTEGER),
@@ -683,10 +703,11 @@ export function hydrateGame(raw: unknown): { game: GameState; offline: number } 
       progress: clampNum(v.progress, 0, 0, 1),
       stun: Math.max(0, num(v.stun, 0)), specialClock: Math.max(0, num(v.specialClock, 0)),
     };
-    for (const key of ["burn", "burnDamage", "intercept", "armorBreak", "hitFlash"] as const) {
+    for (const key of ["burn", "burnDamage", "intercept", "armorBreak", "hitFlash", "weaponDownUntil", "radarDownUntil", "empSlow", "hackTimer", "fireClock", "addsSpawned"] as const) {
       const n = optNum(v[key]);
       if (n !== undefined) enemy[key] = n;
     }
+    for (const key of ["rev", "noReward", "isAdd", "shieldUp"] as const) if (typeof v[key] === "boolean") enemy[key] = v[key];
     return enemy;
   };
   // Wave-2 follow-up (QA-SHIPS advisory): the VIP-escort flag (pirates)
@@ -726,10 +747,11 @@ export function hydrateGame(raw: unknown): { game: GameState; offline: number } 
   // record would carry arbitrary keys (including "__proto__") into the
   // state, the same prototype-chain hole the contract check had.
   const game: GameState = { ...base, ...saved, buildings: { ...base.buildings }, cards: sanitizeCards(saved.cards), cooldowns: { ...base.cooldowns, ...saved.cooldowns }, idle: sanitizeIdle(saved.idle), shots: [], popups: [], pendingImpacts: [], boats: [], mines: [], enemyMissiles: [], events: [] };
+  game.rngState = intIn(saved.rngState, base.rngState, 1, 0xffffffff);
   game.cash = Math.max(0, num(game.cash, base.cash)); game.oil = num(game.oil, base.oil); game.fuel = num(game.fuel, base.fuel); game.steel = num(game.steel, base.steel); game.ammo = num(game.ammo, base.ammo);
   game.hearts = Math.max(0, Math.min(20, num(game.hearts, 20))); game.wave = Math.max(1, Math.floor(num(game.wave, 1))); game.highestWave = Math.max(0, Math.floor(num(game.highestWave, 0)));
   game.security = Math.max(0, Math.min(100, num(game.security, 70))); game.prestige = Math.max(0, Math.floor(num(game.prestige, 0))); game.oilSplit = Math.max(0, Math.min(100, num(game.oilSplit, 40)));
-  (Object.keys(game.buildings) as BuildingId[]).forEach(k => { game.buildings[k] = Math.max(0, Math.floor(num(saved.buildings[k], base.buildings[k]))); });
+  (Object.keys(game.buildings) as BuildingId[]).forEach(k => { game.buildings[k] = intIn(saved.buildings[k], base.buildings[k], 0, 100); });
   game.towers = (Array.isArray(game.towers) ? game.towers : []).filter(t => t && typeof t === "object" && (TOWER_KINDS as string[]).includes(t.kind) && Number.isInteger(t.slot) && t.slot >= 0 && t.slot < SLOTS.length).map(t => {
     const tier = Math.max(1, Math.min(4, Math.floor(num(t.tier, 1))));
     // CIWS recharge timers survive a mid-battle save (MECH-B QA round 2);
@@ -742,10 +764,14 @@ export function hydrateGame(raw: unknown): { game: GameState; offline: number } 
       branch: tier === 4 && (t.branch === 0 || t.branch === 1) ? t.branch : null,
       priority: (["first", "strongest", "weakest", "air"] as string[]).includes(t.priority) ? t.priority : "first" as Priority,
       cooldown: Math.max(0, num((t as Tower).cooldown, 0)),
+      abilityClock: clampNum(t.abilityClock, 0, 0, 60), salvoLeft: optNum(t.salvoLeft) === undefined ? undefined : intIn(t.salvoLeft, 0, 0, 12),
       focusId: optNum(t.focusId), focusTime: optNum(t.focusTime), lastPopup: optNum(t.lastPopup),
       interceptLeft: undefined, interceptWindow: undefined, interceptCharges: charges.length ? charges : undefined,
     };
   });
+  game.towers = game.towers.filter((t, i, all) => all.findIndex(other => other.slot === t.slot) === i);
+  for (const key of ["oil", "fuel", "steel", "ammo"] as const) game[key] = Math.max(0, game[key]);
+  game.wave = Math.min(1000, game.wave); game.highestWave = Math.min(25, game.highestWave);
   game.battleTime = Math.max(0, num(game.battleTime, 0));
   // ECO state hardening: VIP ship, event counter, pirate counter and the
   // port's realized-export ledger survive only when well-formed.
@@ -809,8 +835,13 @@ export function hydrateGame(raw: unknown): { game: GameState; offline: number } 
     if (n !== undefined && Number.isInteger(slot) && slot >= 0) stuns[slot] = Math.max(0, n);
   }
   game.towerStuns = stuns;
-  game.hero = { x: num(game.hero?.x, base.hero.x), y: num(game.hero?.y, base.hero.y), active: [0, 1, 2].includes(game.hero?.active) ? game.hero.active : 0 };
-  game.hero2 = game.hero2 && typeof game.hero2 === "object" ? { x: num(game.hero2.x, 50), y: num(game.hero2.y, 50), active: [0, 1, 2].includes(game.hero2.active) ? game.hero2.active : 1 } : null;
+  const restoreHero = (value: GameState["hero"]): GameState["hero"] => {
+    const position = nearestWater({ x: num(value?.x, base.hero.x), y: num(value?.y, base.hero.y) }, game.layout);
+    const route = Array.isArray(value?.route) ? value.route.filter(p => p && Number.isFinite(p.x) && Number.isFinite(p.y)).slice(0, 2048) : undefined;
+    return { ...position, active: intIn(value?.active, 0, 0, 2), attackClock: clampNum(value?.attackClock, 0, 0, 60), slow: clampNum(value?.slow, 0, 0, 60), route, routeIndex: route ? intIn(value.routeIndex, 1, 0, route.length) : undefined };
+  };
+  game.hero = restoreHero(saved.hero);
+  game.hero2 = saved.hero2 && typeof saved.hero2 === "object" ? restoreHero(saved.hero2) : null;
   // Telemetry counters: keep only well-formed non-negative entries; a save
   // predating fireStats (or a tampered one) falls back to an empty map.
   game.fireStats = {};
@@ -860,11 +891,29 @@ export function hydrateGame(raw: unknown): { game: GameState; offline: number } 
       // The minefield cap (6) is re-applied on load, not just at laying
       // time — a tampered save cannot smuggle in a bigger field (QA).
       mines: Array.isArray(rawBattle.mines) ? rawBattle.mines.filter(m => m && typeof m === "object" && Number.isFinite((m as EnemyMine).progress)).map(m => ({ id: Math.floor(num((m as EnemyMine).id, 0)), progress: Math.max(0, Math.min(1, (m as EnemyMine).progress)) })).slice(0, 6) : [],
-      mineClock: Math.max(0, num(rawBattle.mineClock, 4)), sweep: {}, failed: false,
+      mineClock: Math.max(0, num(rawBattle.mineClock, 4)), sweep: {}, failed: rawBattle.failed === true,
       failReason: (DEFEAT_REASONS as readonly string[]).includes(rawBattle.failReason as string) ? (rawBattle.failReason as DefeatReason) : null,
       fatalLeak: (ENEMY_KINDS as readonly string[]).includes(rawBattle.fatalLeak as string) ? (rawBattle.fatalLeak as Enemy["kind"]) : null,
     };
+    if (isRec(rawBattle.sweep)) for (const [slot, value] of Object.entries(rawBattle.sweep)) {
+      if (game.towers.some(t => String(t.slot) === slot)) game.battle.sweep[Number(slot)] = clampNum(value, 0, 0, 60);
+    }
   } else game.battle = null;
+  if (game.phase === "battle" && game.battle) {
+    const validSlot = (v: unknown) => Number.isInteger(v) && game.towers.some(t => t.slot === v);
+    const models = new Set(TOWER_KINDS.flatMap(k => [modelKindFor(k, 1, null), modelKindFor(k, 4, 0), modelKindFor(k, 4, 1)]));
+    game.pendingImpacts = (Array.isArray(saved.pendingImpacts) ? saved.pendingImpacts : []).filter(p => p && isRec(p) && game.enemies.some(e => e.id === p.targetId) && (p.slot === -1 || validSlot(p.slot)) && (p.kind === "hero" || TOWER_KINDS.includes(p.kind)) && (p.modelKind === "hero" || models.has(p.modelKind))).slice(0, 2048).map(p => ({
+      targetId: p.targetId, slot: p.slot, kind: p.kind, modelKind: p.modelKind,
+      eta: clampNum(p.eta, 0, 0, 60), damage: clampNum(p.damage, 0, 0, 1e12), crit: p.crit === true,
+      branch: p.branch === 0 || p.branch === 1 ? p.branch : null,
+      heroType: p.heroType === undefined ? undefined : intIn(p.heroType, 0, 0, 2), boatId: optNum(p.boatId),
+    }));
+    game.enemyMissiles = (Array.isArray(saved.enemyMissiles) ? saved.enemyMissiles : []).filter(m => m && isRec(m) && validSlot(m.targetSlot) && (m.source === "boss" || m.source === "destroyer")).slice(0, 256).map(m => ({
+      id: intIn(m.id, 0, 0, Number.MAX_SAFE_INTEGER), sourceId: intIn(m.sourceId, 0, 0, Number.MAX_SAFE_INTEGER), source: m.source, targetSlot: m.targetSlot,
+      eta: clampNum(m.eta, 0, 0, 60), total: clampNum(m.total, 1, .001, 60), x1: num(m.x1, 0), y1: num(m.y1, 0), x2: num(m.x2, 0), y2: num(m.y2, 0),
+    }));
+  }
+  for (const entity of [...game.enemies, ...game.pirates, ...game.merchants, ...game.contraband, ...game.enemyMissiles]) game.nextId = Math.max(game.nextId, entity.id + 1);
   if (game.phase === "battle" && !game.battle) { game.phase = "peace"; game.enemies = []; game.spawnRemaining = 0; game.pendingImpacts = []; }
   game.challengeRule = [0, 1, 2].includes(game.challengeRule) ? game.challengeRule : 0;
   game.combo = intIn(saved.combo, 0, 0, Number.MAX_SAFE_INTEGER);
@@ -877,7 +926,7 @@ export function hydrateGame(raw: unknown): { game: GameState; offline: number } 
   game.lowFuelStart = num(game.lowFuelStart, -1);
   game.warnings = { fuel: (saved.warnings as { fuel?: unknown } | null)?.fuel === true, power: (saved.warnings as { power?: unknown } | null)?.power === true };
   const safeHero = nearestWater(game.hero, game.layout);
-  game.hero = { ...game.hero, ...safeHero, route: undefined, routeIndex: undefined };
+  game.hero = { ...game.hero, ...safeHero };
   const reward = getOfflineReward(game, Date.now());
   // Offline timers (contracts, boost recharge) advance with real absence
   // whether or not the cash reward is positive — they used to freeze
@@ -983,6 +1032,7 @@ function startWave(s: GameState, early: boolean) {
   if (s.earlyBonus) s.ammo = Math.min(5000, s.ammo + 25);
   if (s.mode === "challenge") { s.challengeRule = (s.idle.challengeRuns ?? 0) % 3; s.idle.challengeRuns = (s.idle.challengeRuns ?? 0) + 1; }
   s.phase = "battle";
+  s.hearts = 20;
   s.pendingImpacts = []; // no projectiles carry over between waves
   s.enemyMissiles = []; // enemy projectiles don't carry over either (MECH-B)
   for (const t of s.towers) { t.cooldown = 0; t.salvoLeft = undefined; } // every tower opens fire ready, MLRS with a full salvo loaded
@@ -1217,6 +1267,7 @@ function resolveImpact(s: GameState, p: PendingImpact) {
   if (p.heroType === 2) target.armorBreak = 5; // hero type 2 cracks armor on impact
   if (dealt <= 0) { bumpFireStat(s, p.modelKind, "fizzled"); return; } // intercepted at the destroyer's point-defense: no effects ride along
   bumpFireStat(s, p.modelKind, "hits");
+  if (!p.crit && ["silo", "hypersonic", "swarm", "bavar"].includes(p.modelKind)) s.popups.push({ id: s.nextId++, ...targetPos, text: `−${Math.max(1, Math.round(dealt))}`, life: 1.2 });
   if (p.crit) s.popups.push({ id: s.nextId++, x: targetPos.x, y: targetPos.y - 1.5, text: `✸−${Math.max(1, Math.round(dealt))}`, life: 1.2 });
   if (!tower) return;
   const splashSource: DamageSource = { ...source, direct: false };
@@ -1466,7 +1517,7 @@ function boatFirePhase(s: GameState, battleDt: number, stats: ReturnType<typeof 
       const ammoCost = s.overdrive > 0 ? 0 : spec.ammoPerShot;
       if (ammoCost > 0 && s.ammo < ammoCost) { boat.cooldown = interval * 3; break; } // same starved-stock ruling as towers
       if (ammoCost > 0) s.ammo -= ammoCost;
-      const crit = Math.random() < spec.critChance;
+      const crit = randomBattle(s) < spec.critChance;
       let damage = spec.damage * damageTech(s, tower) * stats.grid;
       if (crit) damage *= 2;
       const targetPos = enemyPosition(target, s.layout);
@@ -1663,11 +1714,17 @@ function tick(s: GameState, delta: number, battlePaused = false) {
     const t = Math.min(1, Math.max(0, age / 3));
     return 0.2 + 0.8 * t * t * (3 - 2 * t);
   };
-  s.elapsed += dt; s.eventClock += dt;
+  s.elapsed += dt;
+  if (!battlePaused) s.eventClock += dt;
   // Rolling 6 h export window (game time): fills with the realized
   // export flow and restarts empty on expiry — avgExportRate reads it.
   s.idle.exportWindowTime = (s.idle.exportWindowTime ?? 0) + dt;
-  if (s.idle.exportWindowTime >= 6 * 3600) { s.idle.exportWindowTime = 0; s.idle.exportWindowDollars = 0; }
+  if (s.idle.exportWindowTime > 6 * 3600) {
+    // Bounded weighted history: preserve the observed rate at the horizon.
+    // Clearing both counters made offline earnings collapse every six hours.
+    s.idle.exportWindowDollars *= (6 * 3600) / s.idle.exportWindowTime;
+    s.idle.exportWindowTime = 6 * 3600;
+  }
   s.idle.boostRemaining = Math.max(0, s.idle.boostRemaining - dt);
   if (s.idle.boostCharges < 3) { s.idle.boostRecharge += dt; if (s.idle.boostRecharge >= 300) { s.idle.boostCharges++; s.idle.boostRecharge = 0; } }
   if (s.idle.contract) s.idle.contract.elapsed = Math.min(CONTRACTS[s.idle.contract.id].duration, s.idle.contract.elapsed + dt);
@@ -2066,7 +2123,7 @@ function tick(s: GameState, delta: number, battlePaused = false) {
           enemy.specialClock = 0;
           if (enemy.boss === 1) spawnAdds(enemy, ["speed", "speed", "speed", "speed", "air", "air"]);
           if (enemy.boss === 2 && s.towers.length) {
-            const victim = s.towers[Math.floor(Math.random() * s.towers.length)], vslot = getSlots(s.layout)[victim.slot];
+            const victim = s.towers[Math.floor(randomBattle(s) * s.towers.length)], vslot = getSlots(s.layout)[victim.slot];
             launchEnemyMissile(s, enemy, "boss", victim.slot);
             s.events.push({ type: "boss-stun", x: pos.x, y: pos.y, x2: vslot?.x, y2: vslot?.y, slot: victim.slot, enemyId: enemy.id });
           }
@@ -2130,7 +2187,7 @@ function tick(s: GameState, delta: number, battlePaused = false) {
     };
     // Intercept (رهگیری ناوگان): no enemy may cross the mid-channel line.
     if (ctx.objective === "intercept") {
-      const crosser = s.enemies.find(e => e.hp > 0 && e.progress >= 0.5);
+      const crosser = s.enemies.find(e => e.hp > 0 && (e.hackTimer ?? 0) <= 0 && e.progress >= INTERCEPT_LINE);
       if (crosser) { const p = enemyPosition(crosser, s.layout); failObjective("دشمن از خط رهگیری گذشت!", p.x, p.y, "intercept-crossed"); }
     }
     // Objective ships under fire: live enemies close aboard engage the ship
@@ -2138,7 +2195,7 @@ function tick(s: GameState, delta: number, battlePaused = false) {
     // This proximity fire is what makes escort/rescue losable at all.
     const shipFire = (pos: { x: number; y: number }) => {
       let attackers = 0;
-      for (const e of s.enemies) if (e.hp > 0 && distance(pos, enemyPosition(e, s.layout)) < 12) attackers++;
+      for (const e of s.enemies) if (e.hp > 0 && (e.hackTimer ?? 0) <= 0 && distance(pos, enemyPosition(e, s.layout)) < 12) attackers++;
       return Math.min(attackers, 4) * 6 * battleDt;
     };
     if (ctx.escort) {
@@ -2320,7 +2377,7 @@ function tick(s: GameState, delta: number, battlePaused = false) {
         for (let i = 0; i < spec.volleySize; i++) {
           const lock = locks[i % locks.length];
           const lockPos = enemyPosition(lock, s.layout);
-          const crit = Math.random() < spec.critChance;
+          const crit = randomBattle(s) < spec.critChance;
           let damage = spec.damage * damageTech(s, tower) * stats.grid;
           if (crit) damage *= 2;
           const flightDur = flightTime(spec.modelKind, distance(slot, lockPos));
@@ -2334,7 +2391,7 @@ function tick(s: GameState, delta: number, battlePaused = false) {
         const left = tower.salvoLeft ?? spec.salvoSize;
         tower.salvoLeft = left <= 1 ? spec.salvoSize : left - 1;
       }
-      const crit = Math.random() < spec.critChance;
+      const crit = randomBattle(s) < spec.critChance;
       let damage = spec.damage * damageTech(s, tower) * stats.grid;
       if (crit) damage *= 2;
       const flightDur = flightTime(spec.modelKind, distance(origin, targetPos));
@@ -2427,7 +2484,7 @@ function tick(s: GameState, delta: number, battlePaused = false) {
     s.idle.lastBattle = { id:`battle-${s.nextId++}`, wave:s.wave, title:operationInfo(s.wave, s.mode).title, victory:false, stars:0, cash:0, xp:0, chests:0, destroyed:s.destroyed-s.idle.waveStartKills, seconds:s.elapsed-s.idle.waveStartedAt, hearts:0, claimed:false, reason: s.battle?.fatalLeak === "boss" ? "boss-breakthrough" : "line-broken" };
     s.idle.revision++; s.phase = "defeat"; s.enemies = []; s.spawnRemaining = 0; s.pendingImpacts = []; s.enemyMissiles = []; return;
   }
-  if (s.spawnRemaining === 0 && s.enemies.every(e => (e.hackTimer ?? 0) > 0)) {
+  if (s.spawnRemaining === 0 && s.enemies.every(e => (e.hackTimer ?? 0) > 0) && !s.battle?.escort) {
     // Studio ruling (QA round-2 متوسط-۳): hacked units are the player's
     // own assets at cleanup — they are silently recalled with the wave
     // (no leak, no bounty, no waiting out the hack timer while the wave
@@ -2445,11 +2502,13 @@ function tick(s: GameState, delta: number, battlePaused = false) {
     }
     if (s.battle) s.battle.mines = []; // the minefield dies with the battle
 
-    s.idle.stars[String(s.wave)] = Math.max(s.idle.stars[String(s.wave)] ?? 0, stars);
+    if (s.mode === "campaign") s.idle.stars[String(s.wave)] = Math.max(s.idle.stars[String(s.wave)] ?? 0, stars);
+    s.idle.modeBest[s.mode] = Math.max(s.idle.modeBest[s.mode], s.wave);
     const perfect = !s.waveLeaked;
     const perfectBonus = perfect ? 1.25 : 1;
     s.idle.lastBattle = { id:`battle-${s.nextId++}`, wave:s.wave, title:info.title, victory:true, stars, cash:Math.round(info.cash*(s.earlyBonus?1.25:1)*(1+stars*.08)*perfectBonus*(s.mode==="challenge"&&s.challengeRule===1?1.5:1)), xp:Math.round((info.xp+stars*20+(perfect?40:0))*(s.mode==="challenge"&&s.challengeRule===2?1.5:1)), chests:s.wave%5===0?2:s.wave===1||s.mode==="challenge"?1:0, destroyed:s.destroyed-s.idle.waveStartKills, seconds:s.elapsed-s.idle.waveStartedAt, hearts:s.hearts, claimed:false };
-    s.idle.revision++; s.highestWave = Math.max(s.highestWave, s.wave);
+    s.idle.revision++;
+    if (s.mode === "campaign") s.highestWave = Math.max(s.highestWave, s.wave);
     s.security = Math.min(100, s.security + (s.research.includes("repair") ? 2 : 1));
     if (s.mode === "campaign" && s.wave >= 25) { s.phase = "victory"; return; }
     s.wave++; s.phase = "intermission"; s.countdown = 15;
@@ -2473,6 +2532,7 @@ export function cloneForTick(state: GameState): GameState {
       port: idle.port ? { ...idle.port, tanker: idle.port.tanker ? { ...idle.port.tanker } : null } : idle.port,
       contract: idle.contract ? { ...idle.contract } : null,
       stars: { ...idle.stars },
+      modeBest: { ...idle.modeBest },
       managerLevels: { ...idle.managerLevels },
     },
     buildings: { ...state.buildings },
@@ -2517,7 +2577,7 @@ export function gameReducer(state: GameState, action: Action | {type:"advance";s
     }
     return {...next, shots, events};
   }
-  if (action.type === "tick") { const s = cloneForTick(state); tick(s, action.dt, action.battlePaused); return s; }
+  if (action.type === "tick") { if (!Number.isFinite(action.dt) || action.dt <= 0) return state; const s = cloneForTick(state); tick(s, action.dt, action.battlePaused); return s; }
   const s = structuredClone(state);
   // Shot records are one-render FX events: a non-tick action must not let
   // gamesync replay the previous tick's shots (and double-count telemetry).
@@ -2525,7 +2585,7 @@ export function gameReducer(state: GameState, action: Action | {type:"advance";s
   s.events = []; // same one-tick lifecycle for battle events (MECH-B)
   switch (action.type) {
     case "layout": if (s.layout !== action.layout) { s.layout = action.layout; const point = nearestWater(s.hero, action.layout); s.hero.x = point.x; s.hero.y = point.y; s.hero.route = undefined; s.hero.routeIndex = undefined; } break;
-    case "split": s.oilSplit = Math.max(0, Math.min(100, action.value)); break;
+    case "split": if (Number.isFinite(action.value)) s.oilSplit = Math.max(0, Math.min(100, action.value)); break;
     case "upgrade-building": {
       const quote = buildingUpgradeQuote(s, action.id, action.quantity ?? 1), oldLevel = s.buildings[action.id];
       if (!quote.affordable) break;
@@ -2575,7 +2635,7 @@ export function gameReducer(state: GameState, action: Action | {type:"advance";s
     case "offline-elapsed": {
       const reward=getOfflineReward({...s,lastSavedAt:action.now-Math.max(0,action.seconds)*1000},action.now);
       // Timers advance on any real absence, independent of the cash reward.
-      if(action.seconds>0)advanceOfflineTimers(s,Math.max(0,action.seconds));
+      if(reward.seconds>0)advanceOfflineTimers(s,reward.seconds);
       if(reward.amount>0){s.idle.offline={cash:(s.idle.offline?.cash??0)+reward.amount,seconds:reward.seconds,defense:reward.ratio};}
       s.lastSavedAt=action.now;break;
     }
@@ -2602,7 +2662,7 @@ export function gameReducer(state: GameState, action: Action | {type:"advance";s
     }
     case "sell-tower": {
       const tower = s.towers.find(t => t.slot === action.slot);
-      if (tower) { const refund = s.research.includes("recycle") ? 0.8 : 0.5; s.cash += TOWERS[tower.kind].cost * refund; s.steel += TOWERS[tower.kind].steel * refund; s.towers = s.towers.filter(t => t.slot !== action.slot); }
+      if (tower) { const refund = towerSellRefund(s, tower); s.cash += refund.cash; s.steel = Math.min(2000, s.steel + refund.steel); s.towers = s.towers.filter(t => t.slot !== action.slot); }
       // MECH-A entities retire with their tower in EVERY phase (QA
       // round-2 جزئی-۳): cleanup used to wait for the next battle tick,
       // leaving ghost boats/mines rendered through peacetime.
@@ -2627,10 +2687,11 @@ export function gameReducer(state: GameState, action: Action | {type:"advance";s
     case "speed": s.speed = (s.speed === 1 ? 2 : s.speed === 2 ? 3 : 1); break;
     case "start": startWave(s, !!action.early); break;
     case "select-operation": {
+      if (s.phase === "battle" || (s.idle.lastBattle && !s.idle.lastBattle.claimed)) break;
       if(!Number.isInteger(action.wave)||action.wave<1||action.wave>Math.min(25,s.highestWave+1))break;
       s.mode="campaign";s.wave=action.wave;s.hearts=20;s.phase="peace";s.enemies=[];s.enemyMissiles=[];s.battle=null;s.spawnRemaining=0;s.idle.lastBattle=null;break;
     }
-    case "mode": s.mode = action.mode; s.wave = action.mode === "campaign" ? Math.min(25,s.highestWave+1) : 1; s.hearts = 20; s.phase = "peace"; s.enemies = []; s.enemyMissiles = []; s.battle = null; s.spawnRemaining = 0; s.idle.lastBattle=null; break;
+    case "mode": if (s.phase === "battle" || (s.idle.lastBattle && !s.idle.lastBattle.claimed)) break; s.mode = action.mode; s.wave = action.mode === "campaign" ? Math.min(25,s.highestWave+1) : 1; s.hearts = 20; s.phase = "peace"; s.enemies = []; s.enemyMissiles = []; s.battle = null; s.spawnRemaining = 0; s.idle.lastBattle=null; break;
     case "spell": {
       if (s.cooldowns[action.spell] > 0 || s.phase !== "battle") break;
       if (action.spell === "strike") {
@@ -2652,9 +2713,11 @@ export function gameReducer(state: GameState, action: Action | {type:"advance";s
     case "hero2-select": { if (s.hero2 && s.phase !== "battle" && action.hero !== s.hero.active) s.hero2.active = action.hero; break; }
     case "deploy-hero2": { if (!s.hero2 && s.highestWave >= 5 && s.cash >= 3000 && action.hero !== s.hero.active) { s.cash -= 3000; s.hero2 = { ...sampleLane(getLane(s.layout, "enemy"), .3), active: action.hero }; } break; }
     case "recall-hero2": { s.hero2 = null; break; }
-    case "hero-select": if (s.phase !== "battle") s.hero.active = action.hero; break; // R9: hero type swap is locked mid-battle
+    case "hero-select": if (s.phase !== "battle" && s.hero2?.active !== action.hero) s.hero.active = action.hero; break;
     case "unlock": {
-      const cost = ISLANDS.find(i => i.id === action.island)?.cost ?? 0;
+      const island = ISLANDS.find(i => i.id === action.island);
+      if (!island) break;
+      const cost = island.cost;
       if (!s.islands.includes(action.island) && s.cash >= cost) { s.cash -= cost; s.islands.push(action.island); }
       break;
     }
@@ -2689,13 +2752,14 @@ export function gameReducer(state: GameState, action: Action | {type:"advance";s
     }
     case "night": s.manualNight = !s.manualNight; break;
     case "prestige": {
-      if (s.cash >= 100000 && s.highestWave >= 10) {
+      if (s.phase !== "battle" && !(s.idle.lastBattle && !s.idle.lastBattle.claimed) && s.cash >= 100000 && s.highestWave >= 10) {
         const fresh=initialGame();s.cash=fresh.cash;s.oil=fresh.oil;s.fuel=fresh.fuel;s.steel=fresh.steel;s.ammo=fresh.ammo;s.buildings=fresh.buildings;s.idle.platforms=[];s.idle.port=fresh.idle.port;s.prestige++;s.phase="peace";s.wave=1;s.hearts=20;s.enemies=[];s.spawnRemaining=0;s.battle=null;
         s.lowFuelTime=0;s.lowGridTime=0;s.lowFuelStart=-1;s.warnings={fuel:false,power:false}; // D-024: warning history restarts with the economy
         // R7: prestige resets planted towers (research, cards, managers,
         // islands and heroes are kept) — and the harbor bank restarts at
         // 0, NOT the 260 gift that only a brand-new game receives.
         s.towers=[];s.pendingImpacts=[];s.towerStuns={};
+        s.boats=[];s.mines=[];s.enemyMissiles=[];s.pirates=[];s.vipShip=null;s.event=null;s.eventClock=0;
         s.idle.bank=0;s.idle.collected=0;s.idle.collections=0;s.idle.claimedMissions=[];s.idle.claimedMilestones=[];s.idle.lastBattle=null;s.idle.contract=null;s.idle.offline=null;s.idle.rewards=[];
         // The rolling export window restarts at prestige too: the new
         // run's bank capacity and offline income build on fresh exports.

@@ -10,6 +10,11 @@ const manifest = 'src/app/manifest.ts';
 const manifestAside = 'src/app/_manifest_aside.ts';
 const hadManifest = fs.existsSync(manifest);
 try {
+  // Next's generated development route types still reference server-only API
+  // routes after those routes are excluded. Regenerate against this build.
+  for (const generated of ['.next/types', '.next/dev/types']) {
+    fs.rmSync(generated, { recursive: true, force: true });
+  }
   if (had) fs.renameSync(api, aside);
   if (hadManifest) fs.renameSync(manifest, manifestAside);
   execSync('npx next build', {

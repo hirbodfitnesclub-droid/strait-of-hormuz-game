@@ -1,0 +1,266 @@
+{
+  "schema_version": 1,
+  "version": "0.7.0",
+  "recorded_at_utc": "2026-11-17T16:07:40.593355+00:00",
+  "baseline_commit": "575163b08aaa6bb2c41917e07738834332668e06",
+  "branch": "work",
+  "changes_uncommitted": true,
+  "published": false,
+  "environment": {
+    "node": "24.22.1",
+    "npm": "11.9.0",
+    "chromium": "156.0.8078.79",
+    "python_playwright": "1.62.0",
+    "java": "21.0.13",
+    "android_compile_target": 36,
+    "android_min": 23,
+    "gradle": "8.11.1",
+    "agp": "8.9.1",
+    "renderer": "SwiftShader software; not representative of mobile FPS"
+  },
+  "source_snapshot": {
+    "files": 188,
+    "sha256": "21a4db4444893a73e54833e217e2c1889dd44478aef7405fe848c851e792e69b",
+    "includes": "Git-listed tracked and untracked src/, android/app/src/main/, package manifests, Next/Capacitor and principal Gradle config; includes building GLBs and their three authored exporter/source files; excludes Android generated assets, docs and tests"
+  },
+  "browser_audit_1_bundle": {
+    "files": 428,
+    "sha256": "c0223d618bdaab6ec6b6637b91715221850c9711aae87ca2926a8d1a0147c6a2",
+    "scope": "First 20-assertion browser audit, before the final preparation-preview correction and building-animation export fix. Audit 2, scene, mobile, offline and lifecycle are retested against the delivery bundle."
+  },
+  "browser_audit_2_bundle": {
+    "sha256": "4a620838b9bd3f432a87354f4172ae9c45cb2063e72cb5c2a02ffe10cee48803",
+    "files": 428,
+    "scope": "Audit 2 (30 assertions), final scene and auto-resume; before sale-refund notification text correction. Only that UI text changes in the final bundle; mobile/offline/lifecycle run on the final bundle."
+  },
+  "delivery_bundle": {
+    "files": 428,
+    "sha256": "71a106b2de48bedee77fc96dc6351508427c9fe947d3b03613d58f27cbcd3f2d"
+  },
+  "checks": {
+    "verify": {
+      "exit_code": 0,
+      "lint_errors": 0,
+      "lint_warnings": 12,
+      "integrity_checks": 11,
+      "evidence": {
+        "path": "evidence/verify.txt",
+        "sha256": "d0aedbdec20a8c386aa7efea855d1e0f40224e4972e2de9bfa5083d27622cf9b"
+      }
+    },
+    "campaigns": {
+      "equipped_operations": 25,
+      "legal_action_operations": 25,
+      "legal_policy_simulated_seconds": 2032.25,
+      "retries": 0,
+      "human_pacing_validated": false,
+      "evidence": "evidence/campaigns.json"
+    },
+    "browser_audit_1": {
+      "total": {
+        "pass": 20,
+        "fail": 0,
+        "skip": 0
+      },
+      "generated_at": "2026-11-17T15:31:32",
+      "evidence": {
+        "path": "evidence/audit-1.json",
+        "sha256": "cb744b8a8a2105474b7ea1c5f5a0578827e0609de31415e9d9d05035764a51f9"
+      }
+    },
+    "browser_audit_2": {
+      "total": {
+        "pass": 30,
+        "fail": 0,
+        "skip": 0
+      },
+      "generated_at": "2026-11-17T15:50:23",
+      "evidence": {
+        "path": "evidence/audit-2.json",
+        "sha256": "6d8e21cfc815d4655550210bba1b3bfb1a1719564332e319bde5cd3d210b6b2f"
+      }
+    },
+    "mobile": {
+      "status": "pass",
+      "evidence": {
+        "path": "evidence/mobile.txt",
+        "sha256": "b555ec83cb0c9072b32a1db01ea4f8713552106a4c11de399112afefa94464fa"
+      },
+      "native_detection_only": "Browser bridge mock; physical plugins untested"
+    },
+    "offline": {
+      "status": "pass",
+      "evidence": {
+        "path": "evidence/offline.txt",
+        "sha256": "6b35697547c86ad55c48ad31848b5c822a89eb1cff1eaad500f0312d4455a95a"
+      },
+      "bundled_asset_requests": 96,
+      "method": "Playwright offline context; asset route fulfillment from out/; not a physical Android device"
+    },
+    "lifecycle": {
+      "status": "pass",
+      "evidence": {
+        "path": "evidence/lifecycle.txt",
+        "sha256": "24ae09e6cd4cef99c7baa097a1381dc4440e493447cf67d2b3501cdcd4840153"
+      },
+      "webgl_loss_method": "synthetic context lost/restored DOM events, not driver loss"
+    },
+    "auto_resume": {
+      "status": "pass",
+      "evidence": {
+        "path": "evidence/auto-resume.txt",
+        "sha256": "9b8edd26f4dc2f05be4ceeb35b22d83a3bef64027f04aa177be94fd1e6865373"
+      }
+    },
+    "npm_audit": {
+      "vulnerabilities": {
+        "info": 0,
+        "low": 0,
+        "moderate": 0,
+        "high": 0,
+        "critical": 0,
+        "total": 0
+      },
+      "evidence": {
+        "path": "evidence/npm-audit.json",
+        "sha256": "0ddcaeff9fa495e5da9a1af82f9c781e20210fd724f0ff62d894e97115163f75"
+      }
+    },
+    "delivery_scene": {
+      "total": {
+        "pass": 3,
+        "fail": 0,
+        "skip": 0
+      },
+      "evidence": {
+        "path": "evidence/scene-final.json",
+        "sha256": "3025a1329a85c8edb0880a9f9b88f5f228ae539d94badbfce4b751a6ad6657b2"
+      }
+    },
+    "asset_toolchain": {
+      "vite": "7.3.8",
+      "esbuild": "0.28.2",
+      "typecheck": "pass",
+      "build": "pass",
+      "vulnerabilities": {
+        "info": 0,
+        "low": 0,
+        "moderate": 0,
+        "high": 0,
+        "critical": 0,
+        "total": 0
+      },
+      "audit_evidence": {
+        "path": "evidence/asset-toolchain-audit.json",
+        "sha256": "65e2683c08eb06999db6ec9e9ba9511ef6057913d01cc9f3a1ff2a0350b4337c"
+      },
+      "build_evidence": {
+        "path": "evidence/asset-toolchain-build.txt",
+        "sha256": "39f3b42d2e8e312e2cbaad2a14890a90464e3672ccb5322c71bf05e130b490f8"
+      }
+    },
+    "apk_signature": {
+      "status": "verified",
+      "schemes": [
+        "v1",
+        "v2"
+      ],
+      "debug_key": true,
+      "evidence": {
+        "path": "evidence/apk-signature.txt",
+        "sha256": "0e108a4ccd900f38b5aaa3ff0c8ae4977c3f7815835a9b57ba94823f3778118f"
+      }
+    },
+    "static_build": {
+      "status": "pass",
+      "evidence": {
+        "path": "evidence/static-build.txt",
+        "sha256": "cdf198ce967b6204b5dfd8d29151a0f180f6df256e29253b1d72a979c25b5afa"
+      }
+    },
+    "android_build": {
+      "status": "pass",
+      "tasks": [
+        "assembleDebug",
+        "bundleRelease",
+        ":app:lintDebug",
+        ":app:lintRelease"
+      ],
+      "evidence": {
+        "path": "evidence/android-build.txt",
+        "sha256": "116b7af584de66bbc3a2a481ab414abc1ffd7c9abf56cef7bdd2ad9b127812e6"
+      },
+      "lint": {
+        "debug": {
+          "errors": 0,
+          "warnings": 27,
+          "types": {
+            "GradleDependency": 3,
+            "LockedOrientationActivity": 1,
+            "DiscouragedApi": 1,
+            "UnusedResources": 8,
+            "IconLauncherShape": 5,
+            "MonochromeLauncherIcon": 1,
+            "IconDipSize": 1,
+            "IconDuplicatesConfig": 1,
+            "IconLocation": 1,
+            "IconDuplicates": 5
+          },
+          "evidence": {
+            "path": "evidence/android-lint-debug.xml",
+            "sha256": "9d34cc33e77839a3309b5cb5446aad47152c2e04c0035ea2b66f17a37c30b863"
+          }
+        },
+        "release": {
+          "errors": 0,
+          "warnings": 27,
+          "types": {
+            "GradleDependency": 3,
+            "LockedOrientationActivity": 1,
+            "DiscouragedApi": 1,
+            "UnusedResources": 8,
+            "IconLauncherShape": 5,
+            "MonochromeLauncherIcon": 1,
+            "IconDipSize": 1,
+            "IconDuplicatesConfig": 1,
+            "IconLocation": 1,
+            "IconDuplicates": 5
+          },
+          "evidence": {
+            "path": "evidence/android-lint-release.xml",
+            "sha256": "9d34cc33e77839a3309b5cb5446aad47152c2e04c0035ea2b66f17a37c30b863"
+          }
+        }
+      }
+    }
+  },
+  "artifacts": [
+    {
+      "path": "review/release/hormuz-0.7.0-debug.apk",
+      "bytes": 170313869,
+      "sha256": "f0e31353da7057933a92a8f013394e317147166b0b0006c2fe1514a94a4089c8",
+      "native_libraries": [],
+      "jar_signatures": [
+        "META-INF/CERT.RSA"
+      ]
+    },
+    {
+      "path": "review/release/hormuz-0.7.0-unsigned.aab",
+      "bytes": 166403589,
+      "sha256": "4c26f3d3da53b023d134966a1090ec0d74673487a4f09bd2330596aaafea0715",
+      "native_libraries": [],
+      "jar_signatures": []
+    }
+  ],
+  "limitations": [
+    "No physical-device or real GPU-driver-loss validation",
+    "No thermal, battery, memory or mobile frame-percentile acceptance",
+    "Native Share, file picker, haptics, hardware back and kill/relaunch require device QA",
+    "Server-save handler tested with a transactional adapter, not live PostgreSQL",
+    "AAB unsigned; owner signing, publisher privacy contact/URL, store metadata and store review remain",
+    "No real mature cohort or full install denominator; D20 >= 90% not validated",
+    "Expert policy completes 25 authored operations in ~34 simulated minutes; post-campaign content depth and human pacing unvalidated",
+    "No IAP, ad SDK, remote LiveOps or population analytics backend in this free offline version",
+    "GitHub Actions workflow prepared but not executed; no publication or push"
+  ]
+}

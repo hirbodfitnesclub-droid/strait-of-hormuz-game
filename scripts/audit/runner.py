@@ -3,11 +3,11 @@
 Runs every probe in scripts/audit/ against the static Android-web build,
 collects their structured assertions, prints a per-DoD-section pass/fail
 summary plus a combined results.json, and exits:
-  0 = all assertions pass (skips allowed)
-  1 = at least one assertion failed
-  2 = infrastructure error (build/server/probe produced no result)
+  0 = every assertion passes (no skips)
+  1 = at least one assertion failed/skipped, or a probe produced no result
+  2 = build/server setup error
 
-The runner builds out/ if missing and serves it on its own port (3310)
+The runner rebuilds out/ unless --no-build is explicit, and serves it on port 3310
 when nothing is already listening there; a server it started is stopped
 again at the end. Other teams' servers (3200/3300/3400) are never touched.
 
@@ -46,11 +46,11 @@ def http_up(url: str) -> bool:
 
 
 def ensure_build(no_build: bool) -> bool:
-    if os.path.exists(os.path.join(REPO, "out", "index.html")):
-        return True
     if no_build:
-        print("ERROR: out/index.html missing and --no-build given", file=sys.stderr)
-        return False
+        exists = os.path.exists(os.path.join(REPO, "out", "index.html"))
+        if not exists:
+            print("ERROR: out/index.html missing and --no-build given", file=sys.stderr)
+        return exists
     print("building static web bundle (scripts/build-android-web.mjs) ...", flush=True)
     r = subprocess.run(["node", "scripts/build-android-web.mjs"], cwd=REPO)
     return r.returncode == 0 and os.path.exists(os.path.join(REPO, "out", "index.html"))
@@ -76,23 +76,30 @@ def ensure_server(port: int) -> subprocess.Popen | None:
 
 def run_probe(name: str, base_url: str, tmp_dir: str) -> dict:
     out_json = os.path.join(tmp_dir, f"{name}.json")
+    if os.path.exists(out_json):
+        os.remove(out_json)  # a crashed probe must not reuse yesterday's PASS
     cmd = [probe_python(), os.path.join(HERE, f"{name}.py"),
            "--base-url", base_url, "--out-json", out_json]
     print(f"\n=== {name} ===", flush=True)
-    r = subprocess.run(cmd, cwd=HERE, capture_output=True, text=True)
-    for line in r.stdout.splitlines():
-        if line.startswith(("[PASS]", "[FAIL]", "[SKIP]")):
-            print(" ", line, flush=True)
-    if r.returncode not in (0, 1) and r.stderr:
-        print(r.stderr[-2000:], file=sys.stderr)
-    if os.path.exists(out_json):
+    process = subprocess.Popen(cmd, cwd=HERE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1)
+    lines = []
+    assert process.stdout is not None
+    for line in process.stdout:
+        lines.append(line)
+        if line.startswith(("[PASS]", "[FAIL]", "[SKIP]", "[CASE]")):
+            print(" ", line.rstrip(), flush=True)
+    returncode = process.wait()
+    output = "".join(lines)
+    if returncode not in (0, 1):
+        print(output[-2000:], file=sys.stderr)
+    if returncode in (0, 1) and os.path.exists(out_json):
         with open(out_json, encoding="utf-8") as f:
             return json.load(f)
     return {"probe": name, "section": "(unknown)", "meta": {},
             "assertions": [{"section": "(infra)", "id": f"{name}.infra",
                             "name": "probe produced no result", "status": "fail",
-                            "expected": "JSON result", "actual": f"exit {r.returncode}",
-                            "detail": (r.stderr or "")[-300:]}]}
+                            "expected": "JSON result", "actual": f"exit {returncode}",
+                            "detail": output[-300:]}]}
 
 
 def main() -> int:
@@ -146,7 +153,7 @@ def main() -> int:
         print(f"  {sec}: {c['pass']} pass / {c['fail']} fail / {c['skip']} skip")
     print(f"  TOTAL: {total['pass']} pass / {total['fail']} fail / {total['skip']} skip")
     print(f"  results: {args.out}")
-    return 1 if total["fail"] else 0
+    return 1 if total["fail"] or total["skip"] or not total["pass"] else 0
 
 
 if __name__ == "__main__":

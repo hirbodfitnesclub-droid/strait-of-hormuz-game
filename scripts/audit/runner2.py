@@ -85,7 +85,7 @@ def main() -> int:
         print(f"  {sec}: {c['pass']} pass / {c['fail']} fail / {c['skip']} skip")
     print(f"  TOTAL: {total['pass']} pass / {total['fail']} fail / {total['skip']} skip")
     print(f"  results: {args.out}")
-    return 1 if total["fail"] else 0
+    return 1 if total["fail"] or total["skip"] or not total["pass"] else 0
 
 
 if __name__ == "__main__":

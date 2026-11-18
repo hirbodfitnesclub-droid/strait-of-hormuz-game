@@ -1,5 +1,4 @@
 import type { Metadata, Viewport } from "next";
-import MobileExperience from "@/components/MobileExperience";
 
 export const viewport: Viewport = { themeColor: "#11282a", width: "device-width", initialScale: 1, viewportFit: "cover" };
 import type { ReactNode } from "react";
@@ -21,7 +20,7 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="fa" dir="rtl">
-      <body><MobileExperience />{children}</body>
+      <body>{children}</body>
     </html>
   );
 }

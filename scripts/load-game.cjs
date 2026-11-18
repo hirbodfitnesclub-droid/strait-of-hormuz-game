@@ -6,7 +6,7 @@ function load(source) {
   const file = path.resolve(source);
   if (file.endsWith('.json')) return require(file);
   if (cache.has(file)) return cache.get(file).exports;
-  const module = { exports: {} }; cache.set(file, module);
+  const loadedModule = { exports: {} }; cache.set(file, loadedModule);
   const code = ts.transpileModule(fs.readFileSync(file, 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true } }).outputText;
   const localRequire = id => {
     if (id.startsWith('./') || id.startsWith('../') || id.startsWith('@/')) {
@@ -15,7 +15,7 @@ function load(source) {
     }
     return require(id);
   };
-  new Function('exports','module','require',code)(module.exports,module,localRequire);
-  return module.exports;
+  new Function('exports','module','require',code)(loadedModule.exports,loadedModule,localRequire);
+  return loadedModule.exports;
 }
 module.exports = { load };

@@ -480,7 +480,7 @@ class NavalRenderer {
 export default function BattleCanvas(props: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const propsRef = useRef(props);
-  propsRef.current = props;
+  useEffect(() => { propsRef.current = props; }, [props]);
 
   useEffect(() => {
     const canvas = canvasRef.current;

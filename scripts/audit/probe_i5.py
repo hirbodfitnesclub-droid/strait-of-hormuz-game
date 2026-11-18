@@ -123,17 +123,17 @@ async def main() -> int:
                 except Exception:  # noqa: BLE001 - degrade to a verdict
                     return None
 
-            battle_start = None
             deadline = time.monotonic() + WALL_DEADLINE_S
             while time.monotonic() < deadline:
+                # Auto-start opens a real briefing after the page is ready.
+                # Acknowledge it as a player does; economy elapsed continues
+                # while that dialog pauses combat, so it is not battle time.
+                await ev(harness.DISMISS_BULLETIN_JS)
                 smp = await ev(SAMPLE_JS)
                 if smp:
-                    if battle_start is None and smp["phase"] == "battle":
-                        battle_start = smp["elapsed"]
-                    smp["battleT"] = (round(smp["elapsed"] - battle_start, 2)
-                                      if battle_start is not None else None)
+                    smp["battleT"] = round(smp["battle"]["elapsed"], 2) if smp["battle"] else None
                     samples.append(smp)
-                    if battle_start is not None and smp["elapsed"] - battle_start >= TARGET_BATTLE_S:
+                    if smp["battleT"] is not None and smp["battleT"] >= TARGET_BATTLE_S:
                         break
                     if smp["phase"] in ("defeat", "victory"):
                         break

@@ -110,6 +110,7 @@ async def main() -> int:
         ctx = await harness.open_context(pw)
         try:
             for wave in WAVES:
+                print(f"[CASE] wave composition {wave}", flush=True)
                 expected, total = expected_composition(wave)
                 try:
                     pg, _ = await harness.open_seeded_page(
@@ -120,7 +121,7 @@ async def main() -> int:
                     # when the countdown ends. The briefing bulletin pauses
                     # the battle at spawn 0, so keep dismissing it while
                     # waiting for the battle phase to actually begin.
-                    start_deadline = time.monotonic() + 300
+                    start_deadline = time.monotonic() + 120
                     while time.monotonic() < start_deadline:
                         await pg.evaluate(harness.DISMISS_BULLETIN_JS)
                         phase = await pg.evaluate(
@@ -129,6 +130,8 @@ async def main() -> int:
                         if phase == "battle":
                             break
                         await pg.wait_for_timeout(2000)
+                    if phase != "battle":
+                        raise RuntimeError(f"Auto-battle did not start; phase={phase}")
                     try:
                         counts, gaps, _ = await run_wave(pg, wave)
                     finally:

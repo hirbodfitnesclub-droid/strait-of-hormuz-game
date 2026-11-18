@@ -13,6 +13,7 @@ android/local.properties
 android/app/build/
 android/build/
 **/build/
+first-asset/**/dist/
 .DS_Store
 .vercel/
 *.log

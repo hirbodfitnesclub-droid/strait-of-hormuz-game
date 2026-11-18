@@ -47,7 +47,7 @@
  * 14) The inspect action itself enforces the optical-outpost gate in
  *     the reducer (not just the hidden UI button).
  * 15) avgExportRate is a ROLLING 6 h game-time window (idle counters
- *     exportWindowDollars/exportWindowTime, restarted on expiry and at
+ *     exportWindowDollars/exportWindowTime, smoothed after 6h and restarted at
  *     prestige) — bank capacity and offline income read the window;
  *     the lifetime ledger no longer feeds the rate.
  *
@@ -455,13 +455,13 @@ assert.equal(upgradeCost('oil', 9), Math.ceil(100 * Math.pow(1.15, 9)));
   assert.ok(near(after2.idle.exportWindowDollars, after2.idle.port.exportedDollars, 1e-9), 'window $ == lifetime $ inside the first window');
   assert.ok(near(after2.idle.exportWindowTime, 8, 1e-9), 'window time tracks game time');
 
-  // Expiry: crossing 6 h of game time restarts the window empty.
+  // A six-hour horizon must not erase an established export rate.
   const g3 = ecoBase();
   g3.idle.exportWindowDollars = 5000; g3.idle.exportWindowTime = 6 * 3600 - 0.5;
   const after3 = tick(g3, 1, 1);
-  assert.equal(after3.idle.exportWindowTime, 0, 'expired window restarts (time)');
-  assert.equal(after3.idle.exportWindowDollars, 0, 'expired window restarts (dollars)');
-  assert.equal(getStats(after3).avgExportRate, 0, 'the rate restarts with the window');
+  assert.equal(after3.idle.exportWindowTime, 21600, 'rate window stays capped at six hours');
+  assert.ok(after3.idle.exportWindowDollars > 4999 && after3.idle.exportWindowDollars < 5000, 'crossing the horizon decays smoothly instead of erasing offline earnings');
+  assert.ok(Math.abs(getStats(after3).avgExportRate - 5000/21600) < .00001, 'offline earning rate remains continuous at the horizon');
 
   // Prestige restarts the window.
   const g4 = ecoBase(); Object.assign(g4, { cash: 200000, highestWave: 12 });

@@ -1,5 +1,5 @@
 {
-  "name": "nextjs-postgresql-template",
+  "name": "strait-of-hormuz-game",
   "private": true,
   "scripts": {
     "dev": "next dev",
@@ -11,18 +11,26 @@
     "test:audit2": "python3 scripts/audit/runner2.py",
     "test:core": "node scripts/test-hydrate.cjs && node scripts/test-navigation.cjs && node scripts/test-progression.cjs && node scripts/test-mobile-core.cjs && node scripts/test-asset-catalog.cjs",
     "balance:report": "node scripts/balance-report.cjs",
-    "build:android": "node scripts/build-android-web.mjs && cap sync android"
+    "build:android": "node scripts/build-android-web.mjs && cap sync android",
+    "retention:report": "node scripts/retention-report.cjs",
+    "test:integrity": "node scripts/test-integrity.cjs && node scripts/test-save-storage.cjs && node scripts/test-analytics.cjs && node scripts/test-save-api.cjs",
+    "test:campaign": "node scripts/test-campaign.cjs",
+    "test:fresh-campaign": "node scripts/test-fresh-campaign.cjs",
+    "verify": "npm run typecheck && npm run lint && npm run test:core && npm run test:integrity && npm run test:campaign && npm run test:fresh-campaign && node scripts/audit/test-tick-immutability.cjs && node scripts/audit/test-mech-a.cjs && node scripts/audit/test-mech-b.cjs && node scripts/audit/test-scen.cjs && node scripts/audit/test-economy.cjs && node scripts/audit/test-ui-round2.cjs && node scripts/audit/probe_wave3.cjs && node scripts/audit/probe_wave4_teaching.cjs",
+    "test:mobile": "node scripts/test-auto-resume.cjs && node scripts/test-mobile-ui.cjs && node scripts/test-offline.cjs && node scripts/test-lifecycle.cjs"
   },
   "dependencies": {
     "@capacitor/android": "^7.6.10",
     "@capacitor/app": "^7.1.2",
     "@capacitor/core": "^7.6.10",
+    "@capacitor/filesystem": "^7.1.9",
     "@capacitor/haptics": "^7.0.5",
+    "@capacitor/share": "^7.0.4",
     "@fontsource/vazirmatn": "^5.3.0",
     "dotenv": "17.3.1",
     "drizzle-orm": "0.45.2",
     "lucide-react": "^1.69.0",
-    "next": "16.2.6",
+    "next": "16.4.6",
     "pg": "8.20.0",
     "playwright": "^1.64.1",
     "react": "19.2.6",
@@ -39,9 +47,18 @@
     "@types/three": "^0.187.0",
     "drizzle-kit": "0.31.10",
     "eslint": "9.39.4",
-    "eslint-config-next": "16.2.6",
-    "postcss": "8.5.8",
+    "eslint-config-next": "16.4.6",
+    "postcss": "8.5.33",
     "tailwindcss": "4.1.17",
     "typescript": "5.9.3"
+  },
+  "version": "0.7.0",
+  "overrides": {
+    "@esbuild-kit/core-utils": {
+      "esbuild": "0.25.12"
+    },
+    "@typescript-eslint/typescript-estree": {
+      "minimatch": "11.0.4"
+    }
   }
 }

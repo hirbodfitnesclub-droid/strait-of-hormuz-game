@@ -15,7 +15,7 @@ check('stall catch-up is bounded',()=>{const c=new SimulationClock();c.reset(0);
 check('daily receipt replays the same reward after crash and rejects clock rollback',()=>{
  const r={day:20000,step:3,id:'receipt'};
  for(const d of [20000,19999]){const s=localDailyStatus(r,d*86400000);assert.equal(s.available,false);assert.equal(s.reward.id,'receipt');}
- assert.equal(localDailyStatus(r,20001*86400000).step,4);assert.equal(localDailyStatus(r,20002*86400000).step,1);
+ assert.equal(localDailyStatus(r,20001*86400000).step,4);assert.equal(localDailyStatus(r,20002*86400000).step,4);
  assert.equal(localDailyStatus({day:20000,step:7,id:'end'},20001*86400000).step,1);
  assert.equal(readDailyReceipt('{broken'),null);assert.equal(readDailyReceipt('{"day":3,"step":999,"id":"x"}'),null);
 });

@@ -1,0 +1,31 @@
+const {chromium}=require('playwright'),assert=require('node:assert/strict'),fs=require('node:fs');
+const {load}=require('./load-game.cjs'),G=load('src/lib/game.ts');
+(async()=>{const b=await chromium.launch({executablePath:process.env.AUDIT_CHROMIUM||'/usr/bin/chromium',args:['--no-sandbox','--enable-unsafe-swiftshader']});try{
+ const p=await b.newPage({viewport:{width:390,height:844},isMobile:true,hasTouch:true});const errors=[];p.on('pageerror',e=>errors.push(e.message));
+ let seed=G.gameReducer(G.initialGame(),{type:'start'});seed.spawnClock=500;
+ await p.addInitScript(seed=>{if(!localStorage.getItem('lifecycle-seed')){localStorage.setItem('hormuz-game-v1',JSON.stringify({...seed,lastSavedAt:Date.now()}));localStorage.setItem('hormuz-preferences-v2',JSON.stringify({coachDismissed:true,sound:false}));localStorage.setItem('lifecycle-seed','1');}},seed);
+ await p.goto(process.env.TEST_URL||'http://127.0.0.1:3310',{waitUntil:'domcontentloaded'});
+ await p.waitForFunction(()=>window.__gamesync3d?.perfInfo().calls>0,null,{timeout:180000});await p.waitForTimeout(33000);
+ const time=()=>p.evaluate(()=>window.__gamesync3d.state.battleTime);
+ assert.equal(await time(),0,'restored battle must await consent to resume');
+ assert.equal(await p.locator('.news-bulletin').count(),0,'reload must not fabricate another battle-start event');
+ await p.locator('.main-battle-action.is-paused').click({timeout:90000});
+ await p.waitForFunction(()=>window.__gamesync3d.state.battleTime>.5);
+ await p.evaluate(()=>document.querySelector('canvas').dispatchEvent(new Event('webglcontextlost',{cancelable:true})));
+ await p.locator('.world-error').waitFor();const frozen=await time();await p.waitForTimeout(1500);assert.equal(await time(),frozen,'lost graphics must freeze combat');
+ await p.evaluate(()=>document.querySelector('canvas').dispatchEvent(new Event('webglcontextrestored')));
+ await p.locator('.world-error').waitFor({state:'hidden'});await p.waitForTimeout(1000);assert.equal(await time(),frozen,'restored graphics still require manual battle resume');
+ await p.locator('.nav-item').filter({hasText:'بیشتر'}).click();await p.getByRole('button',{name:/تنظیمات/}).last().click();
+ const [download]=await Promise.all([p.waitForEvent('download'),p.getByRole('button',{name:'دریافت فایل پشتیبان'}).click()]);
+ const saved=JSON.parse(fs.readFileSync(await download.path(),'utf8'));assert.equal(saved.format,'hormuz-save');assert.equal(saved.state.phase,'battle');
+ const input=p.locator('input[type=file]');await input.setInputFiles({name:'bad.json',mimeType:'application/json',buffer:Buffer.from('{bad')});await p.getByText(/بازیابی انجام نشد/).waitFor();
+ p.on('dialog',d=>d.accept());saved.state.cash=12345;
+ await input.setInputFiles({name:'save.json',mimeType:'application/json',buffer:Buffer.from(JSON.stringify(saved))});
+ await p.waitForFunction(()=>window.__gamesync3d.state.cash===12345);assert.ok(await p.locator('.main-battle-action.is-paused').count());
+ await p.setViewportSize({width:320,height:568});await p.waitForTimeout(500);assert.ok(await p.evaluate(()=>document.documentElement.scrollWidth<=320),'no narrow-screen horizontal overflow');
+ fs.mkdirSync('review/mobile',{recursive:true});await p.screenshot({path:'review/mobile/08-narrow.png'});
+ // Production reset keeps today's receipt, and its daily panel must reload.
+ await p.locator('.nav-item').filter({hasText:'بیشتر'}).click();await p.getByRole('button',{name:/تنظیمات/}).last().click();await p.locator('.danger-settings summary').click();await p.getByRole('button',{name:/شروع دوباره بازی/}).click();await p.keyboard.press('Escape');
+ await p.locator('.nav-item').filter({hasText:'بیشتر'}).click();await p.getByRole('button',{name:/هدیهٔ روزانه/}).last().click();await p.getByRole('button',{name:'دریافت هدیهٔ امروز'}).waitFor();
+ assert.deepEqual(errors,[]);console.log('PASS load pause, no duplicate briefing, WebGL lifecycle events freeze/resume, backup export, invalid/valid restore, narrow layout and daily panel after reset');
+}finally{await b.close()}})().catch(e=>{console.error(e);process.exit(1)});

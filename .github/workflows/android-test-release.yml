@@ -9,18 +9,25 @@ on:
         required: true
         type: string
 
+concurrency:
+  group: android-test-release-${{ inputs.expected_source_sha }}
+  cancel-in-progress: false
+
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   publish-debug-apk:
-    name: Build APK and attach to v0.7.0-test
+    name: Build and verify debug APK
     runs-on: ubuntu-24.04
     timeout-minutes: 60
 
     steps:
       - name: Check out selected ref
         uses: actions/checkout@v4
+
+        with:
+          persist-credentials: false
 
       - name: Require the intended source commit
         env:
@@ -37,21 +44,21 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          node-version: '24'
           cache: npm
 
       - name: Set up Java
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: '17'
+          java-version: '21'
 
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
 
       - name: Install Android platform
         shell: bash
-        run: sdkmanager 'platforms;android-35' 'build-tools;35.0.0'
+        run: sdkmanager 'platforms;android-36' 'build-tools;35.0.0'
 
       - name: Install dependencies
         run: npm ci
@@ -66,35 +73,93 @@ jobs:
           cd android
           ./gradlew --no-daemon assembleDebug
 
-      - name: Prepare installable APK
+      - name: Verify Android manifest and debug signature
+        id: package
         shell: bash
         run: |
           set -euo pipefail
+          version="$(node -p 'require("./package.json").version')"
+          [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "::error::Invalid package version"; exit 1; }
+          tag="v${version}-test"
+          tools="$ANDROID_HOME/build-tools/35.0.0"
           mkdir -p release
-          cp android/app/build/outputs/apk/debug/app-debug.apk release/hormuz-0.7.0-debug.apk
-          sha256sum release/hormuz-0.7.0-debug.apk
+          apk="release/hormuz-${version}-debug.apk"
+          cp android/app/build/outputs/apk/debug/app-debug.apk "$apk"
+          "$tools/aapt" dump badging "$apk" > /tmp/hormuz-badging
+          grep -F "versionName='$version'" /tmp/hormuz-badging
+          "$tools/apksigner" verify --print-certs "$apk" > /tmp/hormuz-signature
+          grep -F 'CN=Android Debug' /tmp/hormuz-signature
+          cp "strait-of-hormuz-game-docs/release-notes/$tag.md" release/notes.md
+          sha="$(sha256sum "$apk" | cut -d' ' -f1)"
+          printf '\n**Commit:** `%s`\n\n**SHA-256:** `%s`\n' "$GITHUB_SHA" "$sha" >> release/notes.md
+          printf 'tag=%s\napk=%s\nsha=%s\n' "$tag" "${apk##*/}" "$sha" >> "$GITHUB_OUTPUT"
+          echo "Verified APK SHA-256: $sha"
 
-      - name: Keep a backup artifact even if release upload fails
+      - name: Save APK as an Actions artifact
         uses: actions/upload-artifact@v4
         with:
-          name: hormuz-0.7.0-debug-apk
-          path: release/hormuz-0.7.0-debug.apk
+          name: android-${{ steps.package.outputs.tag }}
+          path: release/
           if-no-files-found: error
           retention-days: 14
 
-      - name: Upload APK to the existing draft release and publish prerelease
+    outputs:
+      tag: ${{ steps.package.outputs.tag }}
+      apk: ${{ steps.package.outputs.apk }}
+      sha: ${{ steps.package.outputs.sha }}
+
+  publish:
+    needs: publish-debug-apk
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    concurrency:
+      group: android-release-${{ needs.publish-debug-apk.outputs.tag }}
+      cancel-in-progress: false
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: android-${{ needs.publish-debug-apk.outputs.tag }}
+          path: release
+      - name: Upload to draft, verify GitHub checksum, then publish
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
+          TAG: ${{ needs.publish-debug-apk.outputs.tag }}
+          APK: ${{ needs.publish-debug-apk.outputs.apk }}
+          SHA: ${{ needs.publish-debug-apk.outputs.sha }}
         shell: bash
         run: |
           set -euo pipefail
-          tag='v0.7.0-test'
-          is_draft="$(gh release view "$tag" --json isDraft --jq '.isDraft')"
-          if [[ "$is_draft" != 'true' ]]; then
-            echo "::error::The $tag release must still be a draft; not overwriting a published release."
-            exit 1
+          trap 'echo "::error::Android release failed at line $LINENO. Inspect the draft and the Actions artifact."' ERR
+          printf '%s  %s\n' "$SHA" "release/$APK" | sha256sum -c -
+          id="$(gh api --paginate "repos/$GH_REPO/releases" --jq ".[] | select(.tag_name == \"$TAG\") | .id")"
+          if [[ -z "$id" ]]; then
+            gh release create "$TAG" --draft --prerelease --target "$GITHUB_SHA" --title "آزمایشی اندروید $TAG" --notes-file release/notes.md
+            id="$(gh api --paginate "repos/$GH_REPO/releases" --jq ".[] | select(.tag_name == \"$TAG\") | .id")"
           fi
-          gh release upload "$tag" release/hormuz-0.7.0-debug.apk --clobber
-          gh release edit "$tag" --draft=false --prerelease
-          echo "Published: https://github.com/$GH_REPO/releases/tag/$tag"
+          [[ "$id" =~ ^[0-9]+$ ]]
+          release="repos/$GH_REPO/releases/$id"
+          [[ "$(gh api "$release" --jq .draft)" == true ]] || { echo "::error::Release $TAG is already published"; exit 1; }
+          if existing="$(gh api "repos/$GH_REPO/commits/$TAG" --jq .sha 2>/dev/null)"; then
+            [[ "$existing" == "$GITHUB_SHA" ]] || { echo "::error::Existing tag points at $existing instead of $GITHUB_SHA"; exit 1; }
+          fi
+          upload="$(gh api "$release" --jq .upload_url)"
+          asset="$(gh api "$release/assets" --jq ".[] | select(.name == \"$APK\") | .id")"
+          if [[ -n "$asset" ]]; then gh api -X DELETE "repos/$GH_REPO/releases/assets/$asset"; fi
+          [[ "$upload" == "https://uploads.github.com/repos/$GH_REPO/releases/"* ]]
+          curl --fail-with-body --silent --show-error \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H 'Content-Type: application/vnd.android.package-archive' \
+            --data-binary "@release/$APK" "${upload%%\{*}?name=$APK" > /tmp/apk-asset.json
+          asset="$(jq -er '.id' /tmp/apk-asset.json)"
+          gh api "repos/$GH_REPO/releases/assets/$asset" |
+            jq -e --arg apk "$APK" --arg sha "sha256:$SHA" '.state == "uploaded" and .name == $apk and .digest == $sha'
+          if [[ -z "$existing" ]]; then
+            gh api -X POST "repos/$GH_REPO/git/refs" -f ref="refs/tags/$TAG" -f sha="$GITHUB_SHA" --jq .ref
+          fi
+          [[ "$(gh api "repos/$GH_REPO/commits/$TAG" --jq .sha)" == "$GITHUB_SHA" ]]
+          gh api -X PATCH "$release" -f target_commitish="$GITHUB_SHA" -F draft=false -F prerelease=true -f body="$(cat release/notes.md)" --jq .html_url
+          [[ "$(gh api "repos/$GH_REPO/commits/$TAG" --jq .sha)" == "$GITHUB_SHA" ]]
+          gh api "repos/$GH_REPO/releases/assets/$asset" --jq .browser_download_url

@@ -185,7 +185,7 @@ const counts = queue => { const c = {}; for (const u of queue) c[u.kind] = (c[u.
 
   // intercept: crossing the mid-channel line loses the operation
   let i4 = startAt(4); assert.equal(i4.battle.objective, 'intercept');
-  i4 = tick(i4, 1); i4.enemies[0].progress = 0.499;
+  i4 = tick(i4, 1); i4.enemies[0].progress = G.INTERCEPT_LINE - 0.001;
   i4 = tick(i4, 1);
   assert.equal(i4.phase, 'defeat', 'intercept line crossed → defeat');
   assert.equal(i4.idle.lastBattle.victory, false);

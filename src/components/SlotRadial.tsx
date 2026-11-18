@@ -56,7 +56,7 @@ export default function SlotRadial({ game, slot, dispatch, close, openSheet, onB
     if (!confirmSell) { setConfirmSell(true); return; }
     dispatch({ type: "sell-tower", slot });
     feedback();
-    notify("برجک فروخته شد و هزینهٔ ساخت پایه بازگشت.");
+    notify("برجک فروخته شد و سهم بازپرداختِ ساخت و ارتقا برگشت.");
     close();
   };
 

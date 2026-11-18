@@ -1,0 +1,61 @@
+{
+ "generated_at": "2026-11-17T15:51:53",
+ "base_url": "http://localhost:3310",
+ "probes": [
+  {
+   "probe": "probe_scene",
+   "section": "§map/scene basics",
+   "assertions": [
+    {
+     "section": "§map/scene basics",
+     "id": "scene.pads29",
+     "name": "29 slot pads present",
+     "status": "pass",
+     "expected": 29,
+     "actual": 29,
+     "detail": "pad ids=[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28]"
+    },
+    {
+     "section": "§map/scene basics",
+     "id": "scene.render_alive",
+     "name": "renderer drawing, veil lifted",
+     "status": "pass",
+     "expected": "calls > 0 and no loading veil",
+     "actual": {
+      "calls": 335,
+      "fps": 1,
+      "veil": false
+     },
+     "detail": "page errors: []"
+    },
+    {
+     "section": "§map/scene basics",
+     "id": "scene.tower_model",
+     "name": "tower GLB model loads",
+     "status": "pass",
+     "expected": "slot 2 record with loaded model obj",
+     "actual": {
+      "2": {
+       "url": "/models/towers/autocannon-L50.glb",
+       "descendants": 340
+      }
+     },
+     "detail": "cannon tier 3 on the Bandar Abbas slot"
+    }
+   ],
+   "meta": {}
+  }
+ ],
+ "sections": {
+  "§map/scene basics": {
+   "pass": 3,
+   "fail": 0,
+   "skip": 0
+  }
+ },
+ "total": {
+  "pass": 3,
+  "fail": 0,
+  "skip": 0
+ }
+}

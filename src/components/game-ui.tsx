@@ -1,7 +1,7 @@
 "use client";
 
 import { Anchor, Crosshair, Radar, Radio, Rocket, Ship, Target, Plane } from "lucide-react";
-import { TOWERS, type GameState, type Tower, type TowerKind } from "@/lib/game";
+import { towerSellRefund, TOWERS, type GameState, type Tower, type TowerKind } from "@/lib/game";
 
 export function fa(value: number, maximumFractionDigits = 0) {
   return new Intl.NumberFormat("fa-IR", { maximumFractionDigits }).format(Number.isFinite(value) ? value : 0);
@@ -30,15 +30,8 @@ export function TargetEmojis({ targets }: { targets: string[] }) {
   return <span className="target-emojis" aria-label="انواع هدف">{targets.map(t => <span key={t} title={t === "sea" ? "دریایی" : t === "air" ? "هوایی" : "زیرسطحی"}>{TARGET_EMOJI[t]}</span>)}</span>;
 }
 
-/** Exact sell refund, mirroring the reducer's "sell-tower" rule in game.ts:
- *  only the BASE build cost is refunded (50%, or 80% with the recycling
- *  research) — upgrade and branch investment never comes back. The UI must
- *  show this real amount, not a bare percentage (audit متوسط-۲۷). */
-export function sellRefund(game: GameState, tower: Tower) {
-  const rate = game.research.includes("recycle") ? 0.8 : 0.5;
-  const def = TOWERS[tower.kind];
-  return { rate, cash: def.cost * rate, steel: def.steel * rate };
-}
+/** UI and reducer share the refund quote, including upgrade investment. */
+export const sellRefund = towerSellRefund;
 
 /** Stability components, mirroring the five-part formula in getStats
  *  (game.ts, ruling R8): infrastructure 40 + city 30 + welfare 20 +

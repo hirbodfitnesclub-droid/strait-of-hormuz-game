@@ -47,6 +47,8 @@ const ANIM_KEYS = new Set([
   'orb', 'ping', 'rings', 'rot', 'rotZ', 'scan', 'shell', 'smoke', 'sub',
   'sweep', 'swing', 'trolley',
   'beam', 'outer',
+  // Building pack export contract: blinking navigation lights and city traffic.
+  'beacon', 'car',
 ]);
 
 const DELIVERED_RE = /^anim([A-Za-z]+?)(?:_(\d+))?$/;

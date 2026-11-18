@@ -31,5 +31,5 @@ export function isNativeRuntime(win?: unknown): boolean {
 
 /** Server features (/api/save, /api/rewards) only exist on the web build. */
 export function serverApiEnabled(win?: unknown): boolean {
-  return !isNativeRuntime(win);
+  return process.env.NEXT_PUBLIC_STATIC_GAME !== "1" && !isNativeRuntime(win);
 }

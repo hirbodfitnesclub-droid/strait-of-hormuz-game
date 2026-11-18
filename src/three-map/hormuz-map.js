@@ -2395,39 +2395,46 @@ class HormuzMap {
     const P = this.cb.onProgress ?? (() => {});
     P('پردازش خطوط ساحلی واقعی تنگه هرمز…', 5);
     await nextFrame();
+    if (this.disposed) return;
     const mobile = /Android|iPhone|iPad/i.test(navigator.userAgent);
     this.field = new TerrainField(mobile ? 1408 : 1920);
     P('ساخت توپوگرافی ۱۷ جزیره، سواحل جنوب ایران، خلیج فارس و دریای عمان…', 25);
     await nextFrame();
+    if (this.disposed) return;
     const terrain = buildTerrainMesh(this.field, mobile ? 600 : 880, this.renderer.capabilities.getMaxAnisotropy());
     this.scene.add(terrain);
     P('شبیه‌سازی آب، عمق دریا و امواج ساحلی…', 55);
     await nextFrame();
+    if (this.disposed) return;
     const water = buildWater(this.field);
     this.waterU = water.uniforms;
     this.scene.add(water.mesh);
     this.buildEnvironment();
     P('ترسیم مسیرهای دشمن، کریدور تجاری و مناطق عملیاتی…', 65);
     await nextFrame();
+    if (this.disposed) return;
     this.buildLanes();
     this.buildZones();
     P('استقرار جایگاه‌های برجک و سکوهای دریایی…', 75);
     await nextFrame();
+    if (this.disposed) return;
     this.buildSlots();
     P('ساخت شهرها، پالایشگاه و اسکله شهید رجایی…', 85);
     await nextFrame();
+    if (this.disposed) return;
     this.buildCities();
     this.buildInfrastructure();
     this.buildShips();
     this.buildLabels();
     P('آماده‌سازی نهایی…', 98);
     await nextFrame();
+    if (this.disposed) return;
     this.onResize();
     this.setTime(this.hours);
     this.applyLayers();
     this.freezeStaticScene();
     this.loop();
-    this.cb.onReady?.();
+    await this.cb.onReady?.();
   }
 
   /* PERF2 (D-020): the built world is ~3,000 objects whose local matrices
@@ -3793,6 +3800,19 @@ class HormuzMap {
     window.removeEventListener('resize', this.onResize);
     this._ro?.disconnect();
     this.controls.dispose();
+    // Renderer.dispose releases renderer caches, not scene-owned GPU assets.
+    const geometries = new Set(), materials = new Set(), textures = new Set();
+    this.scene.traverse(obj => {
+      if (obj.geometry) geometries.add(obj.geometry);
+      for (const material of Array.isArray(obj.material) ? obj.material : obj.material ? [obj.material] : []) {
+        materials.add(material);
+        for (const value of Object.values(material)) if (value?.isTexture) textures.add(value);
+        for (const uniform of Object.values(material.uniforms || {})) if (uniform.value?.isTexture) textures.add(uniform.value);
+      }
+    });
+    geometries.forEach(value => value.dispose());
+    materials.forEach(value => value.dispose());
+    textures.forEach(value => value.dispose());
     this.renderer.dispose();
     this.renderer.domElement.remove();
     this.labelRenderer.domElement.remove();
@@ -3860,7 +3880,7 @@ function App() {
   const [wave, setWave] = useState(false);
   const [panel, setPanel] = useState(false);
   const [builtCount, setBuiltCount] = useState(0);
-  const totalSlots = useRef(0);
+  const [totalSlots, setTotalSlots] = useState(0);
   useEffect(() => {
     if (!hostRef.current) return;
     const map = new HormuzMap(hostRef.current, {
@@ -3869,7 +3889,7 @@ function App() {
         pct
       }),
       onReady: () => {
-        totalSlots.current = map.getSlots().length;
+        setTotalSlots(map.getSlots().length);
         // demo: a few pre-built defenses
         map.build('HRZ-1', 'missile', 2);
         map.build('HRZ-4', 'autocannon', 3);
@@ -3968,7 +3988,7 @@ function App() {
     className: "rounded-full bg-cyan-400/15 px-2 py-0.5 text-cyan-200"
   }, "\u0628\u0632\u0631\u06AF\u200C\u0646\u0645\u0627\u06CC\u06CC: ", LEVELS[level]), /*#__PURE__*/React.createElement("span", {
     className: "rounded-full bg-amber-400/15 px-2 py-0.5 text-amber-200"
-  }, "\u0628\u0631\u062C\u06A9\u200C\u0647\u0627: ", fa(builtCount), "/", fa(totalSlots.current)), /*#__PURE__*/React.createElement("span", {
+  }, "\u0628\u0631\u062C\u06A9\u200C\u0647\u0627: ", fa(builtCount), "/", fa(totalSlots)), /*#__PURE__*/React.createElement("span", {
     dir: "ltr",
     ref: coordRef,
     className: "hidden font-mono text-slate-400 sm:inline"

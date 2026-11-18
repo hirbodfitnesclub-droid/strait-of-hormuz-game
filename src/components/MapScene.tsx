@@ -1,6 +1,6 @@
 "use client";
 
-import type { CSSProperties, RefObject } from "react";
+import { useEffect, useState, type CSSProperties, type RefObject } from "react";
 import { Anchor, LockKeyhole, Plus } from "lucide-react";
 import { getSlots, TOWERS, getRange, contrabandPosition, type GameState, type TowerKind, type BuildingId, PLATFORM_SLOTS, platformCost } from "@/lib/game";
 import { getLane, isWater } from "@/lib/navigation";
@@ -21,6 +21,17 @@ type Props = {
 
 export default function MapScene(props: Props) {
   const { game, selectedSlot, previewKind, targeting, targetPreview, worldRef } = props;
+  const [worldSize, setWorldSize] = useState({ width: 1200, height: 720 });
+  useEffect(() => {
+    const element = worldRef.current;
+    if (!element) return;
+    const observer = new ResizeObserver(entries => {
+      const { width, height } = entries[0].contentRect;
+      setWorldSize({ width, height });
+    });
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [worldRef]);
   const slots = getSlots(game.layout);
   const selectedPosition = selectedSlot === null ? null : slots[selectedSlot];
   const selectedTower = game.towers.find(t => t.slot === selectedSlot);
@@ -59,14 +70,14 @@ export default function MapScene(props: Props) {
     {slots.map(slot => {
       const tower = game.towers.find(t => t.slot === slot.id), locked = !game.islands.includes(slot.island);
       const shot = game.shots.find(s => s.x1 === slot.x && s.y1 === slot.y);
-      const width = worldRef.current?.clientWidth ?? 1200, height = worldRef.current?.clientHeight ?? 720;
+      const width = worldSize.width, height = worldSize.height;
       const angle = shot ? Math.atan2((shot.y2 - shot.y1) * height, (shot.x2 - shot.x1) * width) * 180 / Math.PI : -35;
       return <button className={`tower-pad ${tower ? "built" : "empty"} ${selectedSlot === slot.id ? "selected" : ""} ${locked ? "locked" : ""} ${shot && !props.paused ? "is-firing" : ""}`} key={slot.id} style={{ left: `${slot.x}%`, top: `${slot.y}%` }} onPointerDown={e => e.stopPropagation()} onClick={e => { e.stopPropagation(); props.onSlot(slot.id); }} aria-label={tower ? `${TOWERS[tower.kind].short}، سطح ${fa(tower.tier)}` : locked ? `آزادسازی ${slot.label}` : `ساخت برجک در ${slot.label}`} title={tower ? TOWERS[tower.kind].short : `ساخت در ${slot.label}`}>
         {tower ? <><TowerModel kind={tower.kind} tier={tower.tier} branch={tower.branch} angle={angle} firing={!!shot && !props.paused} /><span className="tower-tier">{Array.from({ length: tower.tier }, (_, i) => <i key={i} />)}</span><span className="tower-caption">{TOWERS[tower.kind].short}</span></> : <span className="empty-pad">{locked ? <LockKeyhole size={15} /> : <Plus size={21} />}<span>{locked ? "قفل" : "ساخت"}</span></span>}
       </button>;
     })}
     <button className={`hero-marker ${targeting === "hero" ? "chosen" : ""}`} style={{ left: `${game.hero.x}%`, top: `${game.hero.y}%` }} onPointerDown={e => e.stopPropagation()} onClick={e => { e.stopPropagation(); props.onHero(); }} aria-label="جابه‌جایی ناو فرمانده" title="جابجایی فرمانده">
-      <img className="hero-ship-sprite" src="/assets/ships/cruiser.png" alt="" draggable={false} style={{ transform: `rotate(${game.hero.route?.[game.hero.routeIndex ?? 1] ? Math.atan2((game.hero.route[game.hero.routeIndex ?? 1].y-game.hero.y)*(worldRef.current?.clientHeight ?? 700), (game.hero.route[game.hero.routeIndex ?? 1].x-game.hero.x)*(worldRef.current?.clientWidth ?? 1200))*180/Math.PI+90 : -40}deg)` }} /><span className="hero-star">✦</span><small>فرمانده</small>
+      <img className="hero-ship-sprite" src="/assets/ships/cruiser.png" alt="" draggable={false} style={{ transform: `rotate(${game.hero.route?.[game.hero.routeIndex ?? 1] ? Math.atan2((game.hero.route[game.hero.routeIndex ?? 1].y-game.hero.y)*(worldSize.height), (game.hero.route[game.hero.routeIndex ?? 1].x-game.hero.x)*(worldSize.width))*180/Math.PI+90 : -40}deg)` }} /><span className="hero-star">✦</span><small>فرمانده</small>
     </button>
     {game.hero2 && <button className={`hero-marker hero2 ${targeting === "hero2" ? "chosen" : ""}`} style={{ left: `${game.hero2.x}%`, top: `${game.hero2.y}%` }} onPointerDown={e => e.stopPropagation()} onClick={e => { e.stopPropagation(); props.onHero2(); }} aria-label="جابه‌جایی ناو فرمانده دوم" title="جابجایی فرمانده دوم">
       <img className="hero-ship-sprite" src="/assets/ships/destroyer.png" alt="" draggable={false} style={{ transform: "rotate(-40deg)" }} /><span className="hero-star">✦</span><small>فرمانده ۲</small>

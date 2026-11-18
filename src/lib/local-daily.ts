@@ -5,9 +5,9 @@ const DAY = 86_400_000;
 /** Device-local rewards are available offline. A rolled-back clock cannot
  * mint another receipt. No local-only game can prevent deliberate save edits. */
 export function localDailyStatus(receipt: DailyReceipt | null, now: number): DailyStatus {
-  const day = Math.floor(now / DAY);
+  const day = Math.floor((now + 3.5 * 3_600_000) / DAY); // Asia/Tehran, same boundary as the optional server
   const claimed = !!receipt && receipt.day >= day;
-  const step = claimed ? receipt!.step : receipt && day === receipt.day + 1 ? receipt.step % 7 + 1 : 1;
+  const step = claimed ? receipt!.step : receipt ? receipt.step % 7 + 1 : 1;
   return { available: !claimed, step, serverDay: String(day), reward: claimed ? dailyReward(receipt!.id, step) : null };
 }
 export function readDailyReceipt(raw: string | null): DailyReceipt | null {

@@ -7,8 +7,8 @@ android {
         applicationId "ir.hormuz.sovereign"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 1
-        versionName "1.0"
+        versionCode 7
+        versionName "0.7.0"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
@@ -23,8 +23,19 @@ android {
             pickFirsts += "META-INF/kotlin-project-structure-metadata.json"
         }
     }
+    signingConfigs {
+        release {
+            if (System.getenv("HORMUZ_KEYSTORE")) {
+                storeFile file(System.getenv("HORMUZ_KEYSTORE"))
+                storePassword System.getenv("HORMUZ_STORE_PASSWORD")
+                keyAlias System.getenv("HORMUZ_KEY_ALIAS")
+                keyPassword System.getenv("HORMUZ_KEY_PASSWORD")
+            }
+        }
+    }
     buildTypes {
         release {
+            if (System.getenv("HORMUZ_KEYSTORE")) signingConfig signingConfigs.release
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
         }
