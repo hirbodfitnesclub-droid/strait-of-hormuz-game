@@ -7,7 +7,19 @@ import { DayNightDriver, hourForNightness, type TimeMode } from '../lib/daynight
 
 const ThreeMap = dynamic(() => import('./ThreeMap'), { ssr: false });
 
+export const HOME_VIEW = { x: 85, z: -20, distance: 120 };
+export type WorldCamera = {
+  distance(): number;
+  zoomBy(factor: number): void;
+  resetNorth(): void;
+  flyTo(x: number, z: number, distance: number, duration?: number): void;
+  controls: {
+    addEventListener(event: 'change', callback: () => void): void;
+    removeEventListener(event: 'change', callback: () => void): void;
+  };
+};
 type Props = {
+  onCameraReady: (camera: WorldCamera) => void;
   game: GameState;
   paused?: boolean;
   onReadyChange?: (ready: boolean) => void;
@@ -63,7 +75,17 @@ export default function WorldView3D(props: Props) {
   useEffect(() => { propsRef.current = props; }, [props]);
 
   const [mapReady, setMapReady] = useState(false);
-  useEffect(() => { propsRef.current.onReadyChange?.(mapReady && loadPct === null); }, [mapReady, loadPct]);
+  const sceneAvailable = useRef(false);
+  const assetsReady = useRef(false);
+  const onMapAvailability = (ready: boolean) => {
+    sceneAvailable.current = ready;
+    propsRef.current.onReadyChange?.(ready && assetsReady.current);
+    setMapReady(ready);
+  };
+  useEffect(() => {
+    assetsReady.current = loadPct === null;
+    propsRef.current.onReadyChange?.(sceneAvailable.current && assetsReady.current);
+  }, [loadPct]);
   const [showMetrics] = useState(() => typeof location !== "undefined" && new URLSearchParams(location.search).has("fpslog"));
   useEffect(() => {
     const enabled = new URLSearchParams(location.search).has('fpslog');
@@ -88,12 +110,10 @@ export default function WorldView3D(props: Props) {
     const driver = new DayNightDriver();
     const state = { mode: 'auto' as string, source: 'auto' as string, target: 0, display: 0, hour: 10, pin: null as number | null };
     (window as unknown as { __hormuzTimeState?: unknown }).__hormuzTimeState = state;
-    let raf = 0;
-    let dead = false;
+    if (!mapReady) return;
+    const map = mapRef.current as { onBeforeFrame(cb: () => void): () => void };
     let lastHour = Number.NaN;
     const loop = () => {
-      if (dead) return;
-      raf = requestAnimationFrame(loop);
       const m = mapRef.current as { setTime?: (h: number) => void } | null;
       if (!m || typeof m.setTime !== 'function') return;
       const p = propsRef.current;
@@ -118,9 +138,8 @@ export default function WorldView3D(props: Props) {
         try { m.setTime(state.hour); } catch { /* noop */ }
       }
     };
-    raf = requestAnimationFrame(loop);
-    return () => { dead = true; cancelAnimationFrame(raf); };
-  }, []);
+    return map.onBeforeFrame(loop);
+  }, [mapReady]);
 
   // PERF (§16.8): calm-render signal for the map loop — outside the battle
   // phase (or while a slot/targeting UI is open) the map may cap at 30fps
@@ -133,19 +152,26 @@ export default function WorldView3D(props: Props) {
   // Phone frame-time recorder (?fpslog=1) — dynamic import keeps it at zero
   // cost for normal sessions. Evidence tool for DoD §16.1 / ticket T-001.
   useEffect(() => {
-    if (!new URLSearchParams(window.location.search).has('fpslog')) return;
-    let stop: (() => void) | null = null;
     let dead = false;
-    (async () => {
-      const { startFrameRecorder } = await import('../lib/frame-recorder');
-      if (dead) return;
-      stop = startFrameRecorder(() => {
-        const s = syncRef.current;
-        if (s) { const p = s.perfInfo(); return { calls: p.calls, tris: p.tris, dpr: p.dpr }; }
-        return { calls: -1, tris: -1, dpr: window.devicePixelRatio || 1 };
-      });
-    })().catch(() => { /* recorder is best-effort */ });
-    return () => { dead = true; stop?.(); };
+    let starting = false;
+    let stop: (() => void) | null = null;
+    const start = async () => {
+      if (starting || (window as { __hormuzFrameHook?: unknown }).__hormuzFrameHook) return;
+      starting = true;
+      try {
+        const { startFrameRecorder } = await import('../lib/frame-recorder');
+        if (dead) return;
+        stop = startFrameRecorder(() => syncRef.current?.perfInfo() ??
+          { calls: -1, tris: -1, dpr: window.devicePixelRatio || 1 });
+      } finally { starting = false; }
+    };
+    window.addEventListener('hormuz:record-frames', start);
+    if (new URLSearchParams(window.location.search).has('fpslog')) void start();
+    return () => {
+      dead = true;
+      window.removeEventListener('hormuz:record-frames', start);
+      stop?.();
+    };
   }, []);
 
   useEffect(() => {
@@ -161,7 +187,7 @@ export default function WorldView3D(props: Props) {
         <div style={{ width: 'min(260px, 70%)', height: 8, borderRadius: 4, background: 'rgba(147,197,253,0.18)', overflow: 'hidden' }}><div style={{ width: `${loadPct}%`, height: '100%', borderRadius: 4, background: 'linear-gradient(90deg,#53d769,#9be15d)', transition: 'width .25s' }} /></div>
         <div style={{ fontSize: 12, color: '#9fc3dd' }}>بارگذاری ناوگان و برجک‌ها · {loadPct}٪</div>
       </div>}
-      <ThreeMap onReadyChange={setMapReady}
+      <ThreeMap onReadyChange={onMapAvailability}
         onMapReady={async map => {
           mapRef.current = map;
           const { GameSync3D } = await import('../three-map/gamesync');
@@ -182,8 +208,9 @@ export default function WorldView3D(props: Props) {
           (window as unknown as { __map3d?: unknown }).__map3d = map;
           const p = propsRef.current;
           sync.setState(p.game, { selectedSlot: p.selectedSlot, targeting: p.targeting, targetPreview: p.targetPreview, paused: p.paused });
-          const mm = map as unknown as { flyTo(x: number, z: number, d: number, dur?: number): void };
-          mm.flyTo(85, -20, 120, 1.4);
+          const camera = map as WorldCamera;
+          p.onCameraReady(camera);
+          camera.flyTo(HOME_VIEW.x, HOME_VIEW.z, HOME_VIEW.distance, 1.4);
           // The VIS2 time driver (effect above) owns the map clock from
           // its first frame — no setTime snap here anymore.
         }}

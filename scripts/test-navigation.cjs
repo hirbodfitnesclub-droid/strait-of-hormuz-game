@@ -39,3 +39,26 @@ delete legacy.layout; delete legacy.merchants;
 const restored = game.hydrateGame(legacy);
 assert.ok(restored?.game.layout && Array.isArray(restored.game.merchants));
 console.log('PASS: previous saves remain compatible');
+
+// The simulation and the 3D asset placement must share the same foundation.
+const { pctTo3d } = load('src/three-map/coords.ts');
+const anchors = require('../src/three-map/slots-3d.json').slots;
+for (const slot of game.getSlots('portrait')) {
+  const [x,z] = pctTo3d(slot.x, slot.y);
+  assert.ok(Math.hypot(x-anchors[slot.id].x,z-anchors[slot.id].z)<1e-8);
+}
+const vip = game.piratePosition({ progress: .4, vipEscort: true });
+assert.deepEqual(vip, nav.sampleLane(nav.getLane('portrait','trade'), .4));
+const shore = { x: 16, y: 5 };
+assert.ok(!nav.isWater(shore,'portrait'), 'legacy waypoint fixture must be on actual land');
+const naval = game.initialGame();
+naval.hero.route = [{x: naval.hero.x, y: naval.hero.y}, shore];
+naval.hero.routeIndex = 1;
+const corrected = game.hydrateGame(naval).game.hero;
+assert.ok(corrected.route?.length, 'an invalid legacy route must be recovered');
+for (let i=1; i<(corrected.route?.length ?? 0); i++) assert.ok(nav.safeSegment(corrected.route[i-1],corrected.route[i],'portrait'));
+assert.ok(nav.isWater(corrected, 'portrait'));
+const voyage = nav.findWaterRoute(naval.hero, nav.getLane('portrait','trade').at(-1),'portrait');
+assert.ok(voyage.length>=2, 'offshore lanes must be connected for player travel');
+assert.deepEqual(voyage[0], {x: naval.hero.x, y: naval.hero.y}, 'issuing a route must not snap a ship already on water to the grid');
+console.log('PASS actual slot mapping, VIP escorts, continuous route starts and legacy navigation repair');

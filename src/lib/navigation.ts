@@ -23,7 +23,7 @@ export function isSurfaceWater(point: Point, layout: MapLayout = "landscape") {
 }
 export function nearestWater(point: Point, layout: MapLayout = "landscape"): Point {
   const map = getNavigation(layout), p = gridPoint(point, map.size);
-  if (map.blocked.charCodeAt(p.y * map.size + p.x) === 48) return worldPoint(p.x, p.y, map.size);
+  if (map.blocked.charCodeAt(p.y * map.size + p.x) === 48) return { x: clamp(point.x, 0, 100), y: clamp(point.y, 0, 100) };
   for (let radius = 1; radius < map.size; radius++) {
     let best: { x: number; y: number; d: number } | null = null;
     for (let dy = -radius; dy <= radius; dy++) for (let dx = -radius; dx <= radius; dx++) {
@@ -39,6 +39,7 @@ export function nearestWater(point: Point, layout: MapLayout = "landscape"): Poi
 }
 
 export function safeSegment(a: Point, b: Point, layout: MapLayout = "landscape") {
+  if ([a,b].some(p => !Number.isFinite(p.x) || !Number.isFinite(p.y) || p.x < 0 || p.x > 100 || p.y < 0 || p.y > 100)) return false;
   const steps = Math.max(1, Math.ceil(Math.hypot(b.x - a.x, b.y - a.y) * 42));
   for (let i = 0; i <= steps; i++) if (!isWater({ x: a.x + (b.x - a.x) * i / steps, y: a.y + (b.y - a.y) * i / steps }, layout)) return false;
   return true;
@@ -101,13 +102,16 @@ export function findWaterRoute(from: Point, destination: Point, layout: MapLayou
   if (safeSegment(startPoint, endPoint, layout)) return [startPoint, endPoint];
   const start = gridPoint(startPoint, size), end = gridPoint(endPoint, size);
   const startId = start.y * size + start.x, goal = end.y * size + end.x;
-  const costs = new Float32Array(size * size); costs.fill(Infinity); costs[startId] = 0;
+  const costs = new Float64Array(size * size); costs.fill(Infinity); costs[startId] = 0;
   const parent = new Int32Array(size * size); parent.fill(-1);
   const heap = new MinHeap(); heap.push({ id: startId, f: 0 });
   const directions = [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [-1, 1], [1, -1], [-1, -1]];
-  let iterations = 0;
-  while (heap.length && iterations++ < size * size * 4) {
-    const current = heap.pop().id; if (current === goal) break;
+  const visited = new Uint8Array(size * size);
+  while (heap.length) {
+    const current = heap.pop().id;
+    if (visited[current]) continue;
+    if (current === goal) break;
+    visited[current] = 1;
     const x = current % size, y = Math.floor(current / size);
     for (const [dx, dy] of directions) {
       const nx = x + dx, ny = y + dy;
@@ -117,13 +121,15 @@ export function findWaterRoute(from: Point, destination: Point, layout: MapLayou
       const nextCost = costs[current] + (dx && dy ? 1.414 : 1);
       if (nextCost >= costs[id]) continue;
       costs[id] = nextCost; parent[id] = current;
-      heap.push({ id, f: nextCost + Math.hypot(end.x - nx, end.y - ny) });
+      heap.push({ id, f: nextCost + Math.max(Math.abs(end.x - nx), Math.abs(end.y - ny)) + 0.414 * Math.min(Math.abs(end.x - nx), Math.abs(end.y - ny)) });
     }
   }
   if (goal !== startId && parent[goal] < 0) return [startPoint];
   const path: Point[] = [];
   for (let id = goal; id >= 0; id = parent[id]) path.push(worldPoint(id % size, Math.floor(id / size), size));
   path.reverse();
+  if (safeSegment(startPoint, path[0], layout)) path.unshift(startPoint);
+  if (safeSegment(path[path.length - 1], endPoint, layout)) path.push(endPoint);
   const simplified = [path[0]];
   let i = 0;
   while (i < path.length - 1) { let j = path.length - 1; while (j > i + 1 && !safeSegment(path[i], path[j], layout)) j--; simplified.push(path[j]); i = j; }

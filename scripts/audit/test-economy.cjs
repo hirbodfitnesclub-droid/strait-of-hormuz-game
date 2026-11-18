@@ -517,11 +517,11 @@ assert.equal(upgradeCost('oil', 9), Math.ceil(100 * Math.pow(1.15, 9)));
     console.log(`VIP UNDEFENDED TTK ${diedAt}s (band 28–33)`);
   }
 
-  // Defended: a type-0 hero stationed on the pirate lane kills escorts
+  // Defended: a type-0 hero stationed along the VIP convoy kills its escorts
   // with real fire and the VIP completes its crossing (+$1000, +3 sec).
   {
     let cur = startVip();
-    const anchor = G.piratePosition({ progress: 0.45 });
+    const anchor = G.piratePosition({ progress: 0.45, vipEscort: true });
     cur.hero = { x: anchor.x, y: anchor.y, active: 0 };
     const sec0 = cur.security, cash0 = cur.cash, destroyed0 = cur.piratesDestroyed;
     let t = 0, escortKillsBeforeResolve = 0, resolved = false;

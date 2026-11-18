@@ -48,6 +48,9 @@ class Particles {
   mesh: THREE.InstancedMesh;
   p: Float32Array; v: Float32Array; life: Float32Array; max: Float32Array; size: Float32Array;
   n: number; cur = 0; grav: number; drag: number; mode: 'smoke' | 'spark';
+  private live = 0;
+  private colorsDirty = false;
+  private color = new THREE.Color();
   dummy = new THREE.Object3D();
   constructor(n: number, geo: THREE.BufferGeometry, mat: THREE.Material, grav: number, drag: number, mode: 'smoke' | 'spark') {
     this.n = n;
@@ -57,22 +60,38 @@ class Particles {
     this.p = new Float32Array(n * 3); this.v = new Float32Array(n * 3);
     this.life = new Float32Array(n); this.max = new Float32Array(n).fill(1); this.size = new Float32Array(n);
     this.grav = grav; this.drag = drag; this.mode = mode;
-    const c = new THREE.Color(1, 1, 1);
-    for (let i = 0; i < n; i++) { this.dummy.scale.setScalar(0); this.dummy.updateMatrix(); this.mesh.setMatrixAt(i, this.dummy.matrix); this.mesh.setColorAt(i, c); }
+    this.mesh.setColorAt(0, this.color);
+    this.mesh.instanceColor!.setUsage(THREE.DynamicDrawUsage);
+    this.mesh.count = 0;
+    this.mesh.visible = false;
   }
   spawn(pos: THREE.Vector3, vx: number, vy: number, vz: number, life: number, size: number, color: THREE.Color) {
-    const i = this.cur; this.cur = (this.cur + 1) % this.n;
+    // Append into the dense live prefix, round-robin overwrite at capacity.
+    let i: number;
+    if (this.live < this.n) i = this.live++;
+    else { i = this.cur; this.cur = (this.cur + 1) % this.n; }
     this.p.set([pos.x, pos.y, pos.z], i * 3);
     this.v.set([vx, vy, vz], i * 3);
     this.life[i] = life; this.max[i] = life; this.size[i] = size;
     this.mesh.setColorAt(i, color);
-    if (this.mesh.instanceColor) this.mesh.instanceColor.needsUpdate = true;
+    this.colorsDirty = true;
   }
   update(d: number) {
     const dg = Math.pow(this.drag, d * 60);
-    for (let i = 0; i < this.n; i++) {
-      if (this.life[i] <= 0) continue;
+    for (let i = 0; i < this.live;) {
       this.life[i] -= d;
+      if (this.life[i] <= 0) {
+        const last = --this.live;
+        if (i !== last) {
+          this.p.copyWithin(i * 3, last * 3, last * 3 + 3);
+          this.v.copyWithin(i * 3, last * 3, last * 3 + 3);
+          this.life[i] = this.life[last]; this.max[i] = this.max[last]; this.size[i] = this.size[last];
+          this.mesh.getColorAt(last, this.color);
+          this.mesh.setColorAt(i, this.color);
+          this.colorsDirty = true;
+        }
+        continue; // integrate the moved particle exactly once
+      }
       const j = i * 3;
       this.v[j + 1] += this.grav * d;
       this.v[j] *= dg; this.v[j + 1] *= dg; this.v[j + 2] *= dg;
@@ -80,15 +99,28 @@ class Particles {
       const k = Math.max(0, this.life[i] / this.max[i]);
       const s = this.mode === 'smoke' ? this.size[i] * (0.35 + (1 - k) * 1.7) * Math.min(1, k * 2.5) : this.size[i] * k;
       this.dummy.position.set(this.p[j], Math.max(this.p[j + 1], this.mode === 'spark' ? -0.2 : 0.05), this.p[j + 2]);
-      this.dummy.scale.setScalar(this.life[i] <= 0 ? 0 : s);
+      this.dummy.scale.setScalar(s);
       if (this.mode === 'spark') {
         this.dummy.lookAt(this.p[j] + this.v[j], this.p[j + 1] + this.v[j + 1], this.p[j + 2] + this.v[j + 2]);
         this.dummy.scale.set(s, s, s * 4);
       }
       this.dummy.updateMatrix();
-      this.mesh.setMatrixAt(i, this.dummy.matrix);
+      this.mesh.setMatrixAt(i++, this.dummy.matrix);
     }
-    this.mesh.instanceMatrix.needsUpdate = true;
+    this.mesh.count = this.live;
+    this.mesh.visible = this.live > 0;
+    if (!this.live) return;
+    const matrix = this.mesh.instanceMatrix;
+    matrix.clearUpdateRanges();
+    matrix.addUpdateRange(0, this.live * 16);
+    matrix.needsUpdate = true;
+    if (this.colorsDirty) {
+      const colors = this.mesh.instanceColor!;
+      colors.clearUpdateRanges();
+      colors.addUpdateRange(0, this.live * 3);
+      colors.needsUpdate = true;
+      this.colorsDirty = false;
+    }
   }
 }
 
@@ -264,6 +296,12 @@ export class BattleFX {
     else pr.glow.scale.set(0.11 * s, 0.11 * s, 0.15 * s);
     pr.body.scale.setScalar(o.kind === 'rocket' ? 0.8 * s : 1.25 * s);
     (pr.body.children[0] as THREE.Mesh).material = o.kind === 'hyper' ? this.darkMat : this.bodyMat;
+    pr.g.position.copy(pr.from);
+    // The render pass may run before the next update. A recycled slot must
+    // already point along its new trajectory on its first visible frame.
+    this.tmp.copy(pr.to);
+    this.tmp.y += 4 * pr.arc;
+    pr.g.lookAt(this.tmp);
     pr.g.visible = true;
   }
   explode(p: THREE.Vector3, color: string, size: number, water = true) {
@@ -292,11 +330,14 @@ export class BattleFX {
     bm.m.lookAt(b2);
     bm.m.userData.len = a.distanceTo(b2);
     bm.mat.color.set(color).multiplyScalar(3.5 + width * 1.2);
+    bm.m.scale.set(0.2 * width, 0.2 * width, bm.m.userData.len);
+    bm.core.scale.set(0.35, 0.35, 1);
+    bm.mat.opacity = 1;
     bm.m.visible = true;
   }
 
-  update(d0: number) {
-    const d = Math.min(d0, 0.05);
+  update(d: number) {
+    if (d <= 0) return;
     this.clock += d;
     for (let i = this.queue.length - 1; i >= 0; i--) {
       if (this.clock >= this.queue[i].at) { const q = this.queue[i]; this.queue.splice(i, 1); q.fn(); }

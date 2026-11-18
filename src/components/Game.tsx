@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useReducer, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
+import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 import {
   Anchor, ArrowLeft, Award, Bell, Blocks, Check, ChevronLeft, CircleHelp,
   Coins, Crosshair, Eye, EyeOff, Factory, FastForward, Flame, FlaskConical, Fuel, Heart, Home, Layers3,
@@ -12,7 +12,7 @@ import { SLOTS, BUILDINGS, TOWERS, gameReducer, getStats, hydrateGame, initialGa
 import { BattleAudio, type BattleSound } from "@/lib/battle-audio";
 import { isWater, nearestWater } from "@/lib/navigation";
 import { compact, fa } from "./game-ui";
-import WorldView3D from "./WorldView3D";
+import WorldView3D, { HOME_VIEW, type WorldCamera } from "./WorldView3D";
 import TowerSheet from "./TowerSheet";
 import SlotRadial from "./SlotRadial";
 import BuildingSheet from "./BuildingSheet";
@@ -27,6 +27,7 @@ import { scenarioContextFor } from "@/lib/scenario-mechanics";
 import type { DailyStatus } from "@/lib/daily";
 import { App } from "@capacitor/app";
 import { Haptics, ImpactStyle } from "@capacitor/haptics";
+import { setNativeBackgrounded } from '@/lib/native-visibility';
 import { SimulationClock } from "@/lib/simulation-clock";
 import { localDailyStatus, readDailyReceipt } from "@/lib/local-daily";
 import { isNativeRuntime, serverApiEnabled } from "@/lib/runtime";
@@ -84,7 +85,9 @@ export default function Game() {
   const [paused, setPaused] = useState(false);
   const [worldReady, setWorldReady] = useState(false);
   const worldHasBeenReady = useRef(false);
+  const worldAvailable = useRef(false);
   const onWorldReady = useCallback((ready: boolean) => {
+    worldAvailable.current = ready;
     setWorldReady(ready);
     if (!ready && worldHasBeenReady.current) setPaused(true);
     if (ready) worldHasBeenReady.current = true;
@@ -98,9 +101,17 @@ export default function Game() {
   const [bulletin, setBulletin] = useState<{ kind: "briefing" | "victory" | "defeat" | "final"; scenario: Scenario; wave: number } | null>(null);
   const [diary, setDiary] = useState<DiaryEntry[]>([]);
   const [diaryOpen, setDiaryOpen] = useState(false);
-  const [zoom, setZoom] = useState(1);
-  const [pan, setPan] = useState({ x: 0, y: 0 });
-  const [dragging, setDragging] = useState(false);
+  const [camera, setCamera] = useState<WorldCamera | null>(null);
+  const zoomLabel = useRef<HTMLSpanElement>(null);
+  useEffect(() => {
+    if (!camera || !showMapTools) return;
+    const update = () => {
+      if (zoomLabel.current) zoomLabel.current.textContent = fa(Math.round(100 * HOME_VIEW.distance / camera.distance())) + "٪";
+    };
+    update();
+    camera.controls.addEventListener("change", update);
+    return () => camera.controls.removeEventListener("change", update);
+  }, [camera, showMapTools]);
   const [sound, setSoundState] = useState(true); // battle sound defaults ON (studio ruling); the user's saved OFF is respected below
   const [vibration, setVibration] = useState(true);
   const [cinematic, setCinematic] = useState(true);
@@ -112,11 +123,6 @@ export default function Game() {
   const audioRef = useRef<BattleAudio | null>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const announcementTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const mapRef = useRef<HTMLElement>(null), worldRef = useRef<HTMLDivElement>(null);
-  const pointers = useRef(new Map<number, { x: number; y: number }>());
-  const dragOrigin = useRef<{ x: number; y: number; panX: number; panY: number } | null>(null);
-  const pinch = useRef<{ distance: number; zoom: number } | null>(null);
-  const moved = useRef(false);
   const previousPhase = useRef(game.phase);
   const previousWave = useRef(game.wave);
   const activeBattle = game.phase === "battle";
@@ -178,7 +184,7 @@ export default function Game() {
     if (panel || progressPanel || moreOpen || helpOpen || diaryOpen) {
       setPanel(null); setProgressPanel(null); setMoreOpen(false); setHelpOpen(false); setDiaryOpen(false); return;
     }
-    setPaused(true); setExitOpen(true);
+    setExitOpen(true);
   }; }, [exitOpen, targeting, sheetSlot, selectedSlot, selectedBuilding, panel, progressPanel, moreOpen, helpOpen, diaryOpen, setSelectedSlot]);
   useEffect(() => {
     if (!isNativeRuntime()) return;
@@ -339,7 +345,7 @@ export default function Game() {
     if(!loaded)return;
     // Persist external storage; notify only on a storage failure.
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    try { writeSnapshot(localStorage,{...gameRef.current,shots:[],popups:[],lastSavedAt:Date.now()}); } catch { notify("ذخیره انجام نشد؛ فضای خالی دستگاه را بررسی کنید."); }
+    try { writeSnapshot(localStorage,{...gameRef.current,shots:[],popups:[],lastSavedAt:hiddenAt.current ?? Date.now()}); } catch { notify("ذخیره انجام نشد؛ فضای خالی دستگاه را بررسی کنید."); }
   },[loaded,game.idle.revision,notify]);
 
   useEffect(() => {
@@ -358,14 +364,14 @@ export default function Game() {
     clock.reset(performance.now());
     const timer = setInterval(() => {
       const steps = clock.advance(performance.now(), document.hidden || nativeHidden.current).length;
-      if (steps) dispatch({ type: "advance", steps, battlePaused: pauseRef.current });
+      if (steps) dispatch({ type: "advance", steps, battlePaused: !worldAvailable.current || pauseRef.current });
     }, 125);
     return () => clearInterval(timer);
   }, [loaded, dispatch]);
 
   useEffect(() => {
     if (!loaded) return;
-    const snapshot = () => ({ ...gameRef.current, shots: [], popups: [], lastSavedAt: Date.now() });
+    const snapshot = () => ({ ...gameRef.current, shots: [], popups: [], lastSavedAt: hiddenAt.current ?? Date.now() });
     const saveLocal = () => { try { writeSnapshot(localStorage, snapshot()); } catch { notify("ذخیره انجام نشد؛ فضای خالی دستگاه را بررسی کنید."); } };
     let saving = false, conflicted = false;
     function saveAll() {
@@ -397,16 +403,27 @@ export default function Game() {
         notify("دو پیشرفت متفاوت پیدا شد؛ بازی این دستگاه ذخیره است و نسخهٔ ابری بازنویسی نشد.");
       }).catch(() => {}).finally(() => { saving = false; });
     }
-    const timer = setInterval(() => { if (!document.hidden) saveAll(); }, 8000);
+    const timer = setInterval(() => { if (!document.hidden && !nativeHidden.current) saveAll(); }, 8000);
     const onVisibility = () => {
-      if (document.hidden || nativeHidden.current) { hiddenAt.current ??= Date.now();audioRef.current?.suspend();saveAll(); if(gameRef.current.phase === "battle") setPaused(true); }
-      else if(hiddenAt.current){audioRef.current?.unlock();const now=Date.now(),seconds=(now-hiddenAt.current)/1000;hiddenAt.current=null;if(seconds>30)dispatch({type:"offline-elapsed",seconds,now});void reloadDaily();}
+      if (document.hidden || nativeHidden.current) {
+        if (hiddenAt.current !== null) return;
+        hiddenAt.current = Date.now();
+        audioRef.current?.suspend();
+        saveAll();
+        if (gameRef.current.phase === "battle") setPaused(true);
+      } else if (hiddenAt.current !== null) {
+        const now = Date.now();
+        const seconds = (now - hiddenAt.current) / 1000;
+        hiddenAt.current = null;
+        audioRef.current?.resume();
+        if (seconds > 30) dispatch({type:"offline-elapsed", seconds, now});
+        void reloadDaily();
+      }
     };
-    let stopped = false;
-    const nativeListener = isNativeRuntime() ? App.addListener("appStateChange", ({ isActive }) => { nativeHidden.current = !isActive; onVisibility(); }) : null;
-    nativeListener?.then(handle => { if(stopped) void handle.remove(); }).catch(() => {});
+    const nativeListener = isNativeRuntime() ? App.addListener("appStateChange", ({ isActive }) => { nativeHidden.current = !isActive; setNativeBackgrounded(!isActive); onVisibility(); }) : null;
+    void nativeListener?.catch(() => {});
     window.addEventListener("pagehide", saveLocal); window.addEventListener("beforeunload", saveLocal); document.addEventListener("visibilitychange", onVisibility);
-    return () => { stopped = true; void nativeListener?.then(handle => handle.remove()).catch(() => {}); clearInterval(timer); window.removeEventListener("pagehide", saveLocal); window.removeEventListener("beforeunload", saveLocal); document.removeEventListener("visibilitychange", onVisibility); };
+    return () => { void nativeListener?.then(handle => handle.remove()).catch(() => {}); clearInterval(timer); window.removeEventListener("pagehide", saveLocal); window.removeEventListener("beforeunload", saveLocal); document.removeEventListener("visibilitychange", onVisibility); };
   }, [loaded,reloadDaily,dispatch,notify]);
 
   useEffect(() => {
@@ -526,43 +543,6 @@ export default function Game() {
     return () => window.removeEventListener("keydown", onKey);
   }, [paused]);
 
-  const clampPan = (x: number, y: number, currentZoom: number) => {
-    const width = mapRef.current?.clientWidth ?? 0, height = mapRef.current?.clientHeight ?? 0;
-    return { x: Math.max(-width * (currentZoom - 1) / 2, Math.min(width * (currentZoom - 1) / 2, x)), y: Math.max(-height * (currentZoom - 1) / 2, Math.min(height * (currentZoom - 1) / 2, y)) };
-  };
-  const updateZoom = (value: number) => { const next = Math.max(1, Math.min(8, value)); setZoom(next); setPan(p => clampPan(p.x, p.y, next)); };
-  const mapPoint = (clientX: number, clientY: number) => {
-    const rect = worldRef.current?.getBoundingClientRect();
-    return rect ? { x: Math.max(0, Math.min(100, (clientX - rect.left) / rect.width * 100)), y: Math.max(0, Math.min(100, (clientY - rect.top) / rect.height * 100)) } : null;
-  };
-  const onPointerDown = (event: ReactPointerEvent<HTMLElement>) => {
-    if (targeting || !worldRef.current?.contains(event.target as Node) || (event.target as HTMLElement).closest("button")) return;
-    pointers.current.set(event.pointerId, { x: event.clientX, y: event.clientY }); event.currentTarget.setPointerCapture(event.pointerId); moved.current = false;
-    if (pointers.current.size === 1) dragOrigin.current = { x: event.clientX, y: event.clientY, panX: pan.x, panY: pan.y };
-    if (pointers.current.size === 2) { const p = [...pointers.current.values()]; pinch.current = { distance: Math.hypot(p[0].x - p[1].x, p[0].y - p[1].y), zoom }; }
-    setDragging(true);
-  };
-  const onPointerMove = (event: ReactPointerEvent<HTMLElement>) => {
-    if (targeting && event.pointerType !== "touch") { const point = mapPoint(event.clientX, event.clientY); if (point) setTargetPreview(point); }
-    if (!pointers.current.has(event.pointerId)) return;
-    pointers.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
-    if (pointers.current.size >= 2 && pinch.current) { const p = [...pointers.current.values()]; updateZoom(pinch.current.zoom * Math.hypot(p[0].x - p[1].x, p[0].y - p[1].y) / Math.max(1, pinch.current.distance)); moved.current = true; }
-    else if (dragOrigin.current && zoom > 1) { const dx = event.clientX - dragOrigin.current.x, dy = event.clientY - dragOrigin.current.y; if (Math.abs(dx) + Math.abs(dy) > 5) moved.current = true; setPan(clampPan(dragOrigin.current.panX + dx, dragOrigin.current.panY + dy, zoom)); }
-  };
-  const onPointerUp = (event: ReactPointerEvent<HTMLElement>) => {
-    pointers.current.delete(event.pointerId);
-    if (pointers.current.size < 2 && pinch.current) { updateZoom([1, 2, 3.5, 5, 8].reduce((a, b) => Math.abs(b / zoom - 1) < Math.abs(a / zoom - 1) ? b : a)); pinch.current = null; }
-    if (!pointers.current.size) { dragOrigin.current = null; setDragging(false); }
-  };
-  const onMapClick = (event: React.MouseEvent<HTMLElement>) => {
-    if (!targeting || !worldRef.current?.contains(event.target as Node)) return;
-    const point = mapPoint(event.clientX, event.clientY); if (!point) return;
-    if (targeting === "strike") { dispatch({ type: "spell", spell: "strike", ...point }); announce("باران بالستیک", "۸ موشک در مسیر منطقهٔ هدف", "power"); }
-    else if (targeting === "hero2") { const water = nearestWater(point, game.layout); dispatch({ type: "hero2", ...water }); notify("ناو فرمانده دوم در مسیر است."); }
-    else { const water = nearestWater(point, game.layout); dispatch({ type: "hero", ...water }); notify(isWater(point, game.layout) ? "ناو از مسیر امن دریایی حرکت می‌کند." : "نزدیک‌ترین مقصد امن روی آب انتخاب شد."); }
-    setTargeting(null); feedback();
-  };
-
   const handleGroundAction = (point: { x: number; y: number }) => {
     if (!targeting) return;
     if (targeting === "strike") { dispatch({ type: "spell", spell: "strike", ...point }); announce("باران بالستیک", "۸ موشک در مسیر منطقهٔ هدف", "power"); }
@@ -613,7 +593,7 @@ export default function Game() {
   const goMap = () => { setPanel(null); setProgressPanel(null); setMoreOpen(false); setTargeting(null); setSelectedSlot(null); setSelectedBuilding(null); feedback(); };
 
   return <div className={`game-shell ${activeBattle ? "in-battle" : ""} ${focus ? "focus-on" : "focus-off"} ${cinematic ? "cinematic" : "effects-light"} ${reducedMotion ? "reduce-motion" : ""} ${coachTarget ? `coach-${coachTarget}` : ""} ${coachStep === 3 ? "coach-spell" : ""} ${game.hearts <= 5 && activeBattle ? "danger-low" : ""}`} dir="rtl">
-    {exitOpen && <div className="compact-dialog-backdrop"><section className="exit-dialog" role="alertdialog" aria-modal="true" aria-label="خروج از بازی"><h2>فرمانده، استراحت می‌کنی؟</h2><p>پیشرفتت ذخیره می‌شود. نبرد تا بازگشتت متوقف می‌ماند.</p><button className="primary-action" autoFocus onClick={() => {setExitOpen(false);setPaused(false);}}>ادامهٔ بازی</button><button onClick={() => {try {writeSnapshot(localStorage, {...gameRef.current,shots:[],popups:[],lastSavedAt:Date.now()});void App.exitApp();}catch{notify("ذخیره انجام نشد؛ بازی را باز نگه دارید.");}}}>ذخیره و خروج</button></section></div>}
+    {exitOpen && <div className="compact-dialog-backdrop"><section className="exit-dialog" role="alertdialog" aria-modal="true" aria-label="خروج از بازی"><h2>فرمانده، استراحت می‌کنی؟</h2><p>پیشرفتت ذخیره می‌شود. نبرد تا بازگشتت متوقف می‌ماند.</p><button className="primary-action" autoFocus onClick={() => setExitOpen(false)}>ادامهٔ بازی</button><button onClick={() => {try {writeSnapshot(localStorage, {...gameRef.current,shots:[],popups:[],lastSavedAt:Date.now()});void App.exitApp();}catch{notify("ذخیره انجام نشد؛ بازی را باز نگه دارید.");}}}>ذخیره و خروج</button></section></div>}
     <header className="app-header">
       <div className="app-brand"><span className="brand-symbol"><Anchor size={22} /></span><div><strong>هرمز</strong><span>فرماندهی آب‌های آزاد</span></div></div>
       <div className="essential-resources" aria-label="منابع اصلی">
@@ -626,8 +606,8 @@ export default function Game() {
       <div className="header-utilities"><button className={`utility-button ${sound ? "sound-on" : ""}`} onClick={() => setSound(!sound)} title={sound ? "بی‌صدا کردن" : "روشن کردن صدا"} aria-label={sound ? "خاموش کردن صدا" : "روشن کردن صدا"}>{sound ? <Volume2 size={19} /> : <VolumeX size={19} />}</button><button className="utility-button help-button" onClick={() => { setHelpOpen(true); feedback(); }} title="راهنمای سریع" aria-label="راهنمای سریع"><CircleHelp size={19} /></button><button className="utility-button notification-button" onClick={() => openPanel("events")} aria-label="رویدادها"><Bell size={18} />{game.event && <i />}</button><button className="commander-button" onClick={() => openPanel("hero")} title="فرماندهان" aria-label="فرماندهان"><Anchor size={18} /><i /></button></div>
     </header>
 
-    <main className={`game-map ${targeting ? "aiming" : ""} ${selectedSlot !== null || selectedBuilding !== null ? "choosing-tower" : ""}`} ref={mapRef} onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp} onPointerCancel={onPointerUp} onClick={onMapClick}>
-<WorldView3D onReadyChange={onWorldReady} paused={battlePaused} game={game} selectedSlot={selectedSlot} targeting={targeting} targetPreview={targetPreview} isNight={isNight} timeMode={timeMode} onSlot={chooseSlot} onBuilding={chooseBuilding} onPlatform={id => { const built = game.idle.platforms ?? []; if (built.includes(id)) return; if (game.cash < platformCost(built.length)) { notify("دلار کافی برای ساخت سکوی نفتی ندارید."); return; } dispatch({ type: "build-platform", id }); notify("سکوی نفتی ساخته شد؛ +۸ بشکه بر ثانیه"); feedback(); }} onHero={() => { setTargeting("hero"); setTargetPreview(game.hero); setSelectedSlot(null); feedback(); }} onHero2={() => { if (game.hero2) { setTargeting("hero2"); setTargetPreview(game.hero2); setSelectedSlot(null); feedback(); } }} onInspect={id => { dispatch({ type: "inspect", id }); notify("محموله کشف شد؛ ۵۰ فولاد دریافت کردید."); feedback(); }} onGroundAction={handleGroundAction} onGroundHover={handleGroundHover} playSound={playSound} />
+    <main className={`game-map ${targeting ? "aiming" : ""} ${selectedSlot !== null || selectedBuilding !== null ? "choosing-tower" : ""}`}>
+<WorldView3D onCameraReady={setCamera} onReadyChange={onWorldReady} paused={battlePaused} game={game} selectedSlot={selectedSlot} targeting={targeting} targetPreview={targetPreview} isNight={isNight} timeMode={timeMode} onSlot={chooseSlot} onBuilding={chooseBuilding} onPlatform={id => { const built = game.idle.platforms ?? []; if (built.includes(id)) return; if (game.cash < platformCost(built.length)) { notify("دلار کافی برای ساخت سکوی نفتی ندارید."); return; } dispatch({ type: "build-platform", id }); notify("سکوی نفتی ساخته شد؛ +۸ بشکه بر ثانیه"); feedback(); }} onHero={() => { setTargeting("hero"); setTargetPreview(game.hero); setSelectedSlot(null); feedback(); }} onHero2={() => { if (game.hero2) { setTargeting("hero2"); setTargetPreview(game.hero2); setSelectedSlot(null); feedback(); } }} onInspect={id => { dispatch({ type: "inspect", id }); notify("محموله کشف شد؛ ۵۰ فولاد دریافت کردید."); feedback(); }} onGroundAction={handleGroundAction} onGroundHover={handleGroundHover} playSound={playSound} />
 
       <IdleHud game={game} hidden={interfacePaused||targeting!==null} focus={focus} onCollect={collectIncome} onBoost={activateProduction} onBattle={mainAction} onJournal={()=>openProgress("missions")} />
       {/* D-026 extension: intermission intercept warning, riding the wave
@@ -665,7 +645,7 @@ export default function Game() {
       {boss && !interfacePaused && !targeting && <div className="boss-bar" role="status" aria-label={`غول‌آخر موج ${fa(game.wave)}`}><span className="boss-skull">☠</span><div className="boss-track"><div className="boss-fill" style={{ width: `${Math.max(0, (boss.hp / boss.maxHp) * 100)}%` }} /><span className="boss-label">غول‌آخر موج {fa(game.wave)} · {fa(Math.max(0, Math.ceil(boss.hp)))} / {fa(boss.maxHp)}</span></div></div>}
       {showCombo && !interfacePaused && !targeting && <div className="combo-badge" aria-hidden="true"><Flame size={16} fill="currentColor" /><strong>×{fa(game.combo)}</strong><span>کمبو!</span><i style={{ width: `${Math.min(100, (game.comboTimer / 3.5) * 100)}%` }} /></div>}
 
-      <div className="view-controls"><button className={`map-view-toggle ${showMapTools ? "active" : ""}`} onClick={() => setShowMapTools(!showMapTools)} aria-label="کنترل نمای نقشه" aria-expanded={showMapTools}><Layers3 size={18} /></button>{showMapTools && <div className="view-options"><button onClick={() => updateZoom(zoom * 1.5)} aria-label="بزرگ‌نمایی"><Plus size={18} /></button><span>{fa(zoom * 100)}٪</span><button onClick={() => updateZoom(zoom / 1.5)} aria-label="کوچک‌نمایی"><Minus size={18} /></button><button onClick={() => { setZoom(1); setPan({ x: 0, y: 0 }); }} aria-label="بازنشانی نما"><Navigation size={17} /></button></div>}</div>
+      <div className="view-controls"><button className={`map-view-toggle ${showMapTools ? "active" : ""}`} disabled={!worldReady || !camera} onClick={() => setShowMapTools(!showMapTools)} aria-label="کنترل نمای نقشه" aria-expanded={showMapTools}><Layers3 size={18} /></button>{showMapTools && <div className="view-options"><button onClick={() => camera?.zoomBy(1 / 1.5)} aria-label="بزرگ‌نمایی"><Plus size={18} /></button><span ref={zoomLabel} /><button onClick={() => camera?.zoomBy(1.5)} aria-label="کوچک‌نمایی"><Minus size={18} /></button><button onClick={() => { camera?.resetNorth(); camera?.flyTo(HOME_VIEW.x, HOME_VIEW.z, HOME_VIEW.distance); }} aria-label="بازنشانی نما"><Navigation size={17} /></button></div>}</div>
       {!showCoach && !interfacePaused && !targeting && <button className="quick-build-button" onClick={quickBuild} title="ساخت برجک · B"><Plus size={18}/><span>ساخت برجک</span><kbd>B</kbd></button>}
       {showCoach && !interfacePaused && !targeting && <div className="quick-coach" role="status"><span className="coach-symbol">{coachStep === 1 ? <Shield size={16} /> : coachStep === 2 ? <Play size={16} /> : <Sparkles size={16} />}</span><p><span className="coach-step-label">قدم {fa(coachStep)} از ۳ · </span><b>{coachStep === 1 ? "اولین برجک دفاعی‌ات را بساز" : coachStep === 2 ? "موج اول دشمن را فراخوانی کن" : "با یک مهارت به برجک‌ها کمک کن"}</b><span className="coach-detail"><br />{coachStep === 1 ? "روی یک جایگاه ساحلی برجک بساز تا راه نفت‌کش‌ها امن شود." : coachStep === 2 ? "دشمن در راه است؛ نبرد را شروع کن تا برجک‌ها دفاع کنند." : "از نوار مهارت‌های پایین صفحه یک اسپل بزن؛ مثلاً پالس یا اورکلاک."}</span></p>{coachStep === 1 && <button className="coach-build" onClick={quickBuild}>ساخت برجک</button>}{coachStep === 2 && <button className="coach-build" onClick={mainAction}>شروع موج</button>}<button className="coach-dismiss" onClick={() => setCoachDismissed(true)} aria-label="رد کردن راهنما"><X size={14} /></button></div>}
       {(game.event || game.warnings?.fuel || game.warnings?.power || game.ammo < 100 || stats.grid < 0.9 || game.oil >= stats.oilCapacity - 1) && <button className="context-alert" onClick={() => openPanel(game.event ? "events" : game.warnings?.power ? "city" : stats.grid < 0.9 ? "city" : "economy")}><span /><strong>{game.event ? `رویداد فعال در تنگه؛ پایان تا ${fa(Math.max(0, Math.ceil(60 - game.eventClock)))} ثانیه` : game.warnings?.fuel ? "سوخت رو به اتمام است؛ پیش از خفگی شبکه، پالایشگاه و نیروگاه را تقویت کنید" : game.warnings?.power ? "شبکهٔ برق زیر فشار پایدار است؛ نیروگاه را تقویت کنید" : game.ammo < 100 ? "مهمات رو به اتمام است" : stats.grid < 0.9 ? "برق شبکه را تقویت کنید" : "مخزن نفت پر شده است"}</strong><ChevronLeft size={15} /></button>}

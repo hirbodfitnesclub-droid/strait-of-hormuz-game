@@ -1,6 +1,8 @@
+import slotData from "../three-map/slots-3d.json";
+import { point3dToPct } from "../three-map/coords";
 import { BALANCE } from "./balance";
 import { initialIdle, MISSIONS, MANAGERS, CONTRACTS, currentMission, missionProgress, managerCost, operationInfo, previewChest, advanceLootSeed, DEFEAT_REASONS, type IdleState, type ManagerId, type ContractId, type UpgradeQuantity, type Reward, type DefeatReason } from "./progression";
-import { findWaterRoute, getLane, nearestWater, sampleLane, type MapLayout, type Point } from "./navigation";
+import { findWaterRoute, getLane, nearestWater, safeSegment, isWater, sampleLane, type MapLayout, type Point } from "./navigation";
 import { weaponSpec, modelKindFor, specInterval, flightTime, salvoCycleSeconds, type ModelKind } from "./weapons-spec";
 import { scenarioForWave, commitScenarioForWave, type Scenario } from "./news";
 import { buildSpawnQueue, objectiveTypeOf, conditionRangeFactor, scenarioContextFor, type ObjectiveType, type SpawnUnit } from "./scenario-mechanics";
@@ -209,7 +211,7 @@ export function enemyMissilePosition(m: EnemyMissile): { x: number; y: number } 
  *  x/y is the primary position (percent units); x2/y2 an optional second
  *  point (e.g. the target of a boss's stun missile). */
 export interface BattleEvent {
-  type: "boss-spawn" | "boss-stun" | "shield-up" | "shield-down" | "enemy-missile" | "intercept" | "tower-disabled" | "missile-impact";
+  type: "boss-spawn" | "boss-stun" | "shield-up" | "shield-down" | "enemy-missile" | "intercept" | "tower-disabled" | "missile-impact" | "ship-destroyed";
   x: number; y: number;
   x2?: number; y2?: number;
   slot?: number;               // affected tower slot, when relevant
@@ -293,37 +295,10 @@ export const TOWERS: Record<TowerKind, { name: string; short: string; descriptio
 };
 export const TOWER_KINDS = Object.keys(TOWERS) as TowerKind[];
 export const PRIORITY_LABELS: Record<Priority, string> = { first: "اولین دشمن", strongest: "قوی‌ترین", weakest: "ضعیف‌ترین", air: "اولویت هوایی" };
-export const SLOTS = [
-  { id: 0, x: 61.9, y: 36.2, island: "main", label: "بندرعباس" },
-  { id: 1, x: 59.8, y: 35.5, island: "main", label: "بندرعباس" },
-  { id: 2, x: 64.3, y: 35, island: "main", label: "بندرعباس" },
-  { id: 3, x: 57.6, y: 36.2, island: "main", label: "بندرعباس" },
-  { id: 4, x: 57.4, y: 44.2, island: "qeshm", label: "قشم" },
-  { id: 5, x: 60.7, y: 40, island: "qeshm", label: "قشم" },
-  { id: 6, x: 54.3, y: 43.1, island: "qeshm", label: "قشم" },
-  { id: 7, x: 58.5, y: 37.8, island: "qeshm", label: "قشم" },
-  { id: 8, x: 51.3, y: 46.2, island: "qeshm", label: "قشم" },
-  { id: 9, x: 63.7, y: 36.5, island: "hormuz", label: "هرمز" },
-  { id: 10, x: 64, y: 39.4, island: "hormuz", label: "هرمز" },
-  { id: 11, x: 63.2, y: 34.2, island: "hormuz", label: "هرمز" },
-  { id: 12, x: 62.3, y: 38.8, island: "larak", label: "لارک" },
-  { id: 13, x: 62.1, y: 40.9, island: "larak", label: "لارک" },
-  { id: 14, x: 59.3, y: 44.6, island: "hengam", label: "هنگام" },
-  { id: 15, x: 53.3, y: 47.8, island: "tombs", label: "تنب" },
-  { id: 16, x: 52, y: 48.5, island: "tombs", label: "تنب" },
-  { id: 17, x: 50.7, y: 47.2, island: "abumusa", label: "ابوموسی" },
-  { id: 18, x: 49.9, y: 46, island: "abumusa", label: "ابوموسی" },
-  { id: 19, x: 41.3, y: 44.1, island: "kish", label: "کیش" },
-  { id: 20, x: 40.4, y: 42.9, island: "kish", label: "کیش" },
-  { id: 21, x: 46.3, y: 51.8, island: "siri", label: "سیری" },
-  { id: 22, x: 45.7, y: 49.7, island: "farur", label: "فارور" },
-  { id: 23, x: 35.6, y: 40.2, island: "lavan", label: "لاوان" },
-  { id: 24, x: 8.3, y: 5.8, island: "kharg", label: "خارک" },
-  { id: 25, x: 8.8, y: 8.1, island: "kharg", label: "خارک" },
-  { id: 26, x: 75.5, y: 56.5, island: "jask", label: "جاسک" },
-  { id: 27, x: 73.4, y: 58.6, island: "jask", label: "جاسک" },
-  { id: 28, x: 6.9, y: 23.5, island: "farsi", label: "فارسی" },
-] as const;
+export const SLOTS = slotData.slots.map(({id, island, label, x, z}) => {
+  const [px, py] = point3dToPct(x, z);
+  return {id, island, label, x: px, y: py};
+});
 export function getSlots(layout: MapLayout = "landscape") { return SLOTS; }
 export const ISLANDS: { id: string; name: string; cost: number }[] = [
   { id: "main", name: "بندرعباس", cost: 0 }, { id: "qeshm", name: "جزیره قشم", cost: 0 },
@@ -437,7 +412,7 @@ export function powerBreakdown(s: GameState) {
   return { produced: Math.round(stats.powerProduced), used: Math.round(stats.powerUsed), consumers, grid: stats.grid };
 }
 
-export function piratePosition(pirate: Pirate, layout: MapLayout = "landscape") { return sampleLane(getLane(layout, "pirate"), pirate.progress); }
+export function piratePosition(pirate: Pirate, layout: MapLayout = "landscape") { return sampleLane(getLane(layout, pirate.vipEscort ? "trade" : "pirate"), pirate.progress); }
 export function contrabandPosition(ship: Contraband, layout: MapLayout = "landscape") { return sampleLane(getLane(layout, "trade"), ship.progress); }
 export function merchantPosition(ship: Merchant, layout: MapLayout = "landscape") { return sampleLane(getLane(layout, "trade"), ship.progress); }
 export function vipPosition(ship: VipShip, layout: MapLayout = "landscape") { return sampleLane(getLane(layout, "trade"), ship.progress); }
@@ -837,8 +812,17 @@ export function hydrateGame(raw: unknown): { game: GameState; offline: number } 
   game.towerStuns = stuns;
   const restoreHero = (value: GameState["hero"]): GameState["hero"] => {
     const position = nearestWater({ x: num(value?.x, base.hero.x), y: num(value?.y, base.hero.y) }, game.layout);
-    const route = Array.isArray(value?.route) ? value.route.filter(p => p && Number.isFinite(p.x) && Number.isFinite(p.y)).slice(0, 2048) : undefined;
-    return { ...position, active: intIn(value?.active, 0, 0, 2), attackClock: clampNum(value?.attackClock, 0, 0, 60), slow: clampNum(value?.slow, 0, 0, 60), route, routeIndex: route ? intIn(value.routeIndex, 1, 0, route.length) : undefined };
+    let route = Array.isArray(value?.route) ? value.route.filter(p => p && Number.isFinite(p.x) && Number.isFinite(p.y)).slice(0, 2048) : undefined;
+    let routeIndex = route ? intIn(value.routeIndex, 1, 0, route.length) : undefined;
+    // Older saves can contain waypoints generated against the former 2D coast.
+    if (route && routeIndex !== undefined && routeIndex < route.length) {
+      const remaining = [position, ...route.slice(routeIndex)];
+      if (remaining.some((p,i) => i > 0 && !safeSegment(remaining[i-1], p, game.layout))) {
+        route = findWaterRoute(position, remaining[remaining.length-1], game.layout);
+        routeIndex = 1;
+      }
+    }
+    return { ...position, active: intIn(value?.active, 0, 0, 2), attackClock: clampNum(value?.attackClock, 0, 0, 60), slow: clampNum(value?.slow, 0, 0, 60), route, routeIndex };
   };
   game.hero = restoreHero(saved.hero);
   game.hero2 = saved.hero2 && typeof saved.hero2 === "object" ? restoreHero(saved.hero2) : null;
@@ -1154,7 +1138,8 @@ export function boatPosition(boat: { progress: number; offset: number }, layout:
   const ahead = sampleLane(path, Math.min(1, boat.progress + 0.01));
   let nx = -(ahead.y - base.y), ny = ahead.x - base.x;
   const len = Math.hypot(nx, ny) || 1; nx /= len; ny /= len;
-  return { x: base.x + nx * boat.offset, y: base.y + ny * boat.offset };
+  const station = { x: base.x + nx * boat.offset, y: base.y + ny * boat.offset };
+  return isWater(station, layout) ? station : base;
 }
 export type BoatRole = BoatUnit["role"];
 export function boatRoleFor(tower: Tower): { role: BoatRole; count: number } {
@@ -1892,9 +1877,12 @@ function tick(s: GameState, delta: number, battlePaused = false) {
     for (const tower of s.towers) {
       const slot = getSlots(s.layout)[tower.slot];
       if (slot && TOWERS[tower.kind].targets.includes("sea") && distance(slot, pos) < getRange(s, tower)) {
-        pirate.hp -= towerDps(s, tower) * pdt * (s.ammo > 0 ? 1 : 1 / 3);
-        s.ammo = Math.max(0, s.ammo - TOWERS[tower.kind].rate * pdt);
-        const mk = modelKindFor(tower.kind, tower.tier, tower.branch);
+        const spec = weaponSpec(tower.kind, tower.tier, tower.branch);
+        const ammoCost = s.overdrive > 0 ? 0 : spec.ammoPerShot;
+        if (s.ammo < ammoCost || spec.airOnly) continue;
+        pirate.hp -= towerDps(s, tower) * pdt;
+        if (ammoCost > 0) s.ammo = Math.max(0, s.ammo - TOWERS[tower.kind].rate * pdt);
+        const mk = spec.modelKind;
         s.shots.push({ slot: tower.slot, kind: tower.kind, modelKind: mk, targetId: pirate.id, flightDur: flightTime(mk, distance(slot, pos)), damage: 0, crit: false, interval: 0, x1: slot.x, y1: slot.y, x2: pos.x, y2: pos.y });
       }
     }
@@ -1910,6 +1898,7 @@ function tick(s: GameState, delta: number, battlePaused = false) {
       if ((s.vipShip.age ?? 0) >= 5) s.vipShip.hp -= 6 * pdt;
     }
     if (pirate.hp <= 0) {
+      s.events.push({ type: "ship-destroyed", enemyId: pirate.id, ...pos });
       // The bounty routes to the harbor bank, but a full bank must not
       // silently swallow it (QA round 2): whatever does not fit goes to
       // cash, so the +50 popup is always the amount actually received.
@@ -2419,8 +2408,9 @@ function tick(s: GameState, delta: number, battlePaused = false) {
   }
   for (const enemy of s.enemies) {
     if (enemy.hp <= 0) {
-      if (enemy.noReward) continue; // MECH-A: a hacked drone's detonation pays no bounty
       const pos = enemyPosition(enemy, s.layout);
+      s.events.push({ type: "ship-destroyed", enemyId: enemy.id, ...pos });
+      if (enemy.noReward) continue; // a hacked drone's detonation pays no bounty
       if (enemy.isAdd) {
         // Boss reinforcements (MECH-B studio ruling; audit جدید-۱۶): 25% of
         // the class bounty and NO combo increment or combo bonus — a boss

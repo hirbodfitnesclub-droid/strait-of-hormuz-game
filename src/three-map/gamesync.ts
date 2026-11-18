@@ -7,7 +7,7 @@ import buildingsData from './buildings-3d.json';
 import { loadModel, TOWER_MODEL, BRANCH_MODEL, groundY, buildingScale } from './models3d';
 import { makeShip } from './ships3d';
 import { pctTo3d, point3dToPct } from './coords';
-import { INTERCEPT_LINE, positionAt, getRange, getStats, getSlots, enemyMissilePosition, enemyPosition, distance, type GameState, type Shot } from '@/lib/game';
+import { INTERCEPT_LINE, positionAt, boatPosition, getRange, getStats, getSlots, enemyMissilePosition, enemyPosition, distance, type GameState, type Shot } from '@/lib/game';
 import type { BattleSound } from '@/lib/battle-audio';
 import { BattleFX } from './battlefx';
 import { canonicalAnimName } from './anim-names';
@@ -35,6 +35,7 @@ interface MapLike {
   camera: THREE.Camera;
   renderer?: { domElement: HTMLCanvasElement };
   field?: { height(x: number, z: number): number; sample(x: number, z: number): number };
+  onBeforeFrame(callback: (now: number, dt: number) => void): () => void;
   setLayer(name: string, on: boolean): void;
   setTime?(h: number): void;
   dprCap?: number;
@@ -99,7 +100,7 @@ interface TowerAnim {
   spin: THREE.Object3D | null; erector: THREE.Object3D | null; missile: THREE.Object3D | null; crystal: THREE.Object3D | null;
   doorsL: THREE.Object3D[]; doorsR: THREE.Object3D[]; cells: THREE.Object3D[];
   generic: AnimNode[]; glowMats: GlowMat[];
-  targetPos: THREE.Vector3 | null; lastShotAt: number; period: number; shotIdx: number;
+  targetKey: string | null; targetPos: THREE.Vector3 | null; lastShotAt: number; period: number; shotIdx: number;
 }
 const MAT_CLONE_NAMES = new Set(['anim:ping', 'anim:door', 'anim:shell', 'anim:beacon']);
 
@@ -241,7 +242,7 @@ function enemyShip(kind: string, boss: number): Promise<THREE.Group> {
   return makeShip('frigate', { len: 13, arm: 'destroyer', tint: 0x525e6b, tintAmt: 0.25 }); // destroyer
 }
 
-interface Ent { obj: THREE.Group; bar?: ReturnType<typeof barSprites>; init?: boolean; phase: number; bobAmp: number; wake?: THREE.Mesh; mats?: THREE.Material[]; speed?: number; lastTx?: number; lastTz?: number; /** D-022: ambient-traffic cruise speed (world u/s at 1x) — stepMotion clamps the render chase to it so a hitched frame can no longer teleport a ship. */ cruise?: number; lastTx2?: number; lastTz2?: number; ind?: { stun: THREE.Sprite; slow: THREE.Sprite; eye: THREE.Sprite; shield: THREE.Mesh | null } }
+interface Ent { obj: THREE.Group; bar?: ReturnType<typeof barSprites>; init?: boolean; phase: number; bobAmp: number; wake?: THREE.Mesh; speed?: number; lastTx?: number; lastTz?: number; /** D-022: ambient-traffic cruise speed (world u/s at 1x) — stepMotion clamps the render chase to it so a hitched frame can no longer teleport a ship. */ cruise?: number; lastTx2?: number; lastTz2?: number; ind?: { stun: THREE.Sprite; slow: THREE.Sprite; eye: THREE.Sprite; shield: THREE.Mesh | null } }
 interface PopupSprite { sp: THREE.Sprite; mat: THREE.SpriteMaterial; tex: THREE.CanvasTexture; cv: HTMLCanvasElement; age: number; dur: number; wx: number; wz: number; baseY: number; w: number }
 interface BldRec { obj: THREE.Object3D; band: number; baseScale: number; groundBase: number; minY: number; local: THREE.Box3; ring: THREE.Mesh; ringBase: number; platform: boolean }
 
@@ -411,7 +412,6 @@ export class GameSync3D {
   private fx = new BattleFX();
   private lastSetStateAt = 0;
   private targetStep = 5;
-  private emaMs = 16;
   private dprSteps: number[] = DPR_STEPS;
   private dprIdx = 0;
   private dprEvalAt = 0;
@@ -431,7 +431,7 @@ export class GameSync3D {
   private dying: { ent: Ent; t: number }[] = [];
   private pulseFx: { mesh: THREE.Mesh; t: number; maxR: number }[] = []; // MECH-A: EMP pulse rings
   private prevFlash = new Map<string, number>();
-  private prevHp = new Map<string, number>();
+
   private kenneyRev = false;
   private lastShots: unknown = null;
   /* Camera shake (checklist ۱۳٫۲ — was completely absent, F-9): pack amounts
@@ -467,9 +467,10 @@ export class GameSync3D {
   private reconcileDirty = false;
   private selectedSlot: number | null = null;
   private combatPaused = false;
+  private lastFxFrame: number | null = null;
   private interceptMarker = new THREE.Mesh(new THREE.TorusGeometry(8, .65, 6, 40), new THREE.MeshBasicMaterial({ color: 0xffb347, depthTest: false }));
   private targeting: string | null = null;
-  private raf = 0; private alive = true; private last = performance.now();
+  private alive = true;
   private ray = new THREE.Raycaster();
   private downPos: { x: number; y: number; t: number } | null = null;
   private detachFns: (() => void)[] = [];
@@ -546,8 +547,7 @@ export class GameSync3D {
     };
     (window as unknown as { __telemetry?: unknown }).__telemetry = this.telemetry;
     this.bindPointer();
-    this.loop = this.loop.bind(this);
-    this.raf = requestAnimationFrame(this.loop);
+    this.detachFns.push(map.onBeforeFrame((now, dt) => this.loop(now, dt)));
   }
 
   /* PERF2 (D-020): release one pooled popup's GPU resources. Pool members
@@ -561,7 +561,11 @@ export class GameSync3D {
   }
 
   dispose() {
-    this.alive = false; cancelAnimationFrame(this.raf);
+    this.alive = false;
+    const debug = window as { __telemetry?: unknown; __gamesync3d?: unknown };
+    if (debug.__telemetry === this.telemetry) delete debug.__telemetry;
+    if (debug.__gamesync3d === this) delete debug.__gamesync3d;
+    this.entPending.clear();
     // PERF2 (D-020): drain the popup pool with real GPU disposal — v0.5.0
     // never disposed a single popup texture (audit2 team 1: the pool grew
     // to its 28-sprite cap in the first battles and every texture upload
@@ -632,7 +636,9 @@ export class GameSync3D {
   }
 
   setState(game: GameState, opts: { selectedSlot: number | null; targeting: string | null; targetPreview: { x: number; y: number }; paused?: boolean }) {
-    this.combatPaused = opts.paused === true;
+    const paused = opts.paused === true;
+    if (paused !== this.combatPaused) this.lastFxFrame = null;
+    this.combatPaused = paused;
     this.interceptMarker.visible = game.phase === 'battle' && game.battle?.objective === 'intercept';
     if (this.interceptMarker.visible) {
       const point = positionAt(INTERCEPT_LINE, game.layout), [x, z] = pctTo3d(point.x, point.y);
@@ -826,7 +832,22 @@ export class GameSync3D {
     return `/models/towers/${TOWER_MODEL[t.kind]}-L${[1, 25, 50, 75][Math.max(0, Math.min(3, t.tier - 1))]}.glb`;
   }
 
+  private placementRetryAt = new Map<string, number>();
+  private async loadPlacement(url: string) {
+    if (!this.alive || performance.now() < (this.placementRetryAt.get(url) ?? 0)) return null;
+    try {
+      const model = await loadModel(url);
+      this.placementRetryAt.delete(url);
+      return this.alive ? model : null;
+    } catch (error) {
+      this.placementRetryAt.set(url, performance.now() + 5000);
+      console.warn('[gamesync] retrying placement', url, error);
+      return null;
+    }
+  }
+
   private async reconcileStatics(game: GameState) {
+    if (!this.alive) return;
     if (this.reconciling) { this.reconcileDirty = true; return; }
     this.reconciling = true;
     try { await this.reconcileStaticsInner(game); }
@@ -847,15 +868,17 @@ export class GameSync3D {
       if (this.placing.has('tower-' + t.slot)) return;
       this.placing.add('tower-' + t.slot);
       try {
-        if (cur) { this.unregisterModel(cur.obj); this.statics.remove(cur.obj); this.towers.delete(t.slot); this.towerAnims.delete(t.slot); this.dropTowerMarks(t.slot); }
         const slot = SLOTS.find(s => s.id === t.slot); if (!slot) return;
-        const model = await loadModel(url);
+        const model = await this.loadPlacement(url);
+        if (!model) return;
+        if (cur) { this.unregisterModel(cur.obj); this.statics.remove(cur.obj); this.towers.delete(t.slot); this.towerAnims.delete(t.slot); this.dropTowerMarks(t.slot); }
         model.traverse(o => { o.userData.pick = { type: 'slot', id: t.slot }; });
         const fit = new THREE.Box3().setFromObject(model); const size = new THREE.Vector3(); fit.getSize(size);
-        const baseScale = 5.2 / Math.max(size.x, size.z, 0.001);
+        const shoreRadius = this.map.field?.sample(slot.x, slot.z) ?? 3;
+        const baseScale = Math.min(5.2, Math.max(1.2, 2 * shoreRadius - 0.4)) / Math.max(size.x, size.z, 0.001);
         model.scale.setScalar(baseScale);
         const fit2 = new THREE.Box3().setFromObject(model);
-        model.position.set(slot.x, groundY(this.map, slot.x, slot.z) - fit2.min.y, slot.z);
+        model.position.set(slot.x, groundY(this.map, slot.x, slot.z) - 0.42 * baseScale, slot.z);
         model.rotation.y = this.aim.get(t.slot) ?? Math.PI;
         this.attachNightLamps(model, fit, baseScale, 1);
         this.statics.add(model);
@@ -876,6 +899,7 @@ export class GameSync3D {
       } finally { this.placing.delete('tower-' + t.slot); }
     }));
     for (const [slotId, rec] of [...this.towers]) if (!seen.has(slotId)) { this.unregisterModel(rec.obj); this.statics.remove(rec.obj); this.towers.delete(slotId); this.towerAnims.delete(slotId); this.dropTowerMarks(slotId); }
+    if (!this.alive) return;
     // slot pads
     for (const slot of SLOTS) {
       if (this.towers.has(slot.id)) { this.removePad(slot.id); continue; }
@@ -908,7 +932,8 @@ export class GameSync3D {
         if (this.placing.has('bld-' + id)) return;
         this.placing.add('bld-' + id);
         try {
-          const model = await loadModel(`/models/buildings/${b.glb}-T${buildingBand(level) + 1}.glb`);
+          const model = await this.loadPlacement(`/models/buildings/${b.glb}-T${buildingBand(level) + 1}.glb`);
+          if (!model) return;
           model.traverse(o => { o.userData.pick = { type: 'building', id }; });
           const fit = new THREE.Box3().setFromObject(model); const size = new THREE.Vector3(); fit.getSize(size);
           const baseScale = buildingScale(size, b.glb === 'platform');
@@ -945,7 +970,8 @@ export class GameSync3D {
         if (this.placing.has('plat-' + p.id)) return;
         this.placing.add('plat-' + p.id);
         try {
-          const model = await loadModel('/models/buildings/platform-T1.glb');
+          const model = await this.loadPlacement('/models/buildings/platform-T1.glb');
+          if (!model) return;
           const fit = new THREE.Box3().setFromObject(model); const size = new THREE.Vector3(); fit.getSize(size);
           const pScale = buildingScale(size, true);
           model.scale.setScalar(pScale);
@@ -1156,14 +1182,8 @@ export class GameSync3D {
     for (let i = this.dying.length - 1; i >= 0; i--) {
       const d = this.dying[i]; d.t += dt; const k = d.t / 0.95; const o = d.ent.obj;
       o.position.y -= dt * 2.4; o.rotation.z += dt * 0.85;
-      d.ent.mats?.forEach(m => { m.opacity = Math.max(0, 1 - k); });
       if (k >= 1) {
         this.dyn.remove(o);
-        // PERF: the fade-out material clones made on the death path are unique
-        // to this entity — release their GPU programs/textures now instead of
-        // leaking one material set per kill for the whole session.
-        d.ent.mats?.forEach(m => m.dispose());
-        d.ent.mats = undefined;
         this.dying.splice(i, 1);
       }
     }
@@ -1175,46 +1195,61 @@ export class GameSync3D {
   }
 
   private heroModels = new Map<string, number>();
-  private entPending = new Map<string, Promise<Ent | null>>();
-  private ensureEnt(key: string, make: () => Promise<THREE.Group> | THREE.Group, opts: { bar?: number; bob?: number; wake?: { len: number; wid: number; fwd: 'X' | 'Z' }; cruise?: number } = {}): Promise<Ent | null> {
-    const cur = this.ents.get(key);
-    if (cur) return Promise.resolve(cur);
-    let p = this.entPending.get(key);
-    if (!p) {
-      p = (async () => {
-        const obj = await make();
-        if (!this.alive || this.entPending.get(key) !== p) return null; // dropped while loading
-        const ent: Ent = { obj, phase: Math.random() * Math.PI * 2, bobAmp: opts.bob ?? 0, cruise: opts.cruise };
-        if (opts.bar && opts.bar > 0) { ent.bar = barSprites(opts.bar); ent.bar.group.position.y = 3.4; obj.add(ent.bar.group); }
-        if (opts.wake) { const w = makeWake(opts.wake.len, opts.wake.wid, opts.wake.fwd); obj.add(w); ent.wake = w; }
-        this.dyn.add(obj); this.ents.set(key, ent);
-        this.entPending.delete(key);
-        return ent;
-      })();
-      this.entPending.set(key, p);
-    }
-    return p;
+  private entPending = new Map<string, { retryAt: number; attempts: number }>();
+  private ensureEnt(key: string, make: () => Promise<THREE.Group> | THREE.Group, opts: { bar?: number; bob?: number; wake?: { len: number; wid: number; fwd: 'X' | 'Z' }; cruise?: number } = {}) {
+    if (this.ents.has(key)) return;
+    const previous = this.entPending.get(key);
+    if (previous && performance.now() < previous.retryAt) return;
+    const request = { retryAt: Infinity, attempts: (previous?.attempts ?? 0) + 1 };
+    this.entPending.set(key, request);
+    void Promise.resolve().then(make).then(obj => {
+      if (!this.alive || this.entPending.get(key) !== request) return;
+      const ent: Ent = { obj, phase: Math.random() * Math.PI * 2, bobAmp: opts.bob ?? 0, cruise: opts.cruise };
+      if (opts.bar && opts.bar > 0) { ent.bar = barSprites(opts.bar); ent.bar.group.position.y = 3.4; obj.add(ent.bar.group); }
+      if (opts.wake) { const w = makeWake(opts.wake.len, opts.wake.wid, opts.wake.fwd); obj.add(w); ent.wake = w; }
+      this.dyn.add(obj);
+      this.ents.set(key, ent);
+      this.entPending.delete(key);
+    }).catch(error => {
+      if (!this.alive || this.entPending.get(key) !== request) return;
+      request.retryAt = performance.now() + Math.min(30000, 1000 * 2 ** (request.attempts - 1));
+      if (request.attempts === 1) console.warn('[gamesync] retrying model for', key, error);
+    });
   }
   private dropEnt(key: string) {
     this.entPending.delete(key);
     const ent = this.ents.get(key);
     if (ent) {
       this.dyn.remove(ent.obj);
-      // PERF: per-entity owned materials (HP-bar sprites, wake) are created
-      // fresh for every entity — dispose them on removal. Model geometries /
-      // GLB materials are shared via the model cache and are NOT touched.
-      if (ent.bar) {
-        (ent.bar.fg.material as THREE.Material).dispose();
-        (ent.bar.bg.material as THREE.Material).dispose();
-      }
-      if (ent.wake) {
-        // makeWake builds a fresh PlaneGeometry per entity — dispose it with
-        // its material (the wake texture is shared and stays).
-        const wmesh = (ent.wake as unknown as THREE.Group).children[0] as THREE.Mesh | undefined;
-        (wmesh?.material as THREE.Material | undefined)?.dispose();
-        wmesh?.geometry?.dispose();
-      }
+      this.releaseEntityOverlays(ent);
       this.ents.delete(key);
+    }
+  }
+
+  private releaseEntityOverlays(ent: Ent) {
+    if (ent.bar) {
+      ent.bar.group.removeFromParent();
+      ent.bar.fg.material.dispose();
+      ent.bar.bg.material.dispose();
+    }
+    if (ent.wake) {
+      ent.wake.removeFromParent();
+      const mesh = ent.wake.children[0] as THREE.Mesh<THREE.PlaneGeometry, THREE.MeshBasicMaterial>;
+      mesh.material.dispose();
+      mesh.geometry.dispose();
+    }
+    if (ent.ind) {
+      for (const sprite of [ent.ind.stun, ent.ind.slow, ent.ind.eye]) {
+        sprite.removeFromParent();
+        sprite.material.map?.dispose();
+        sprite.material.dispose();
+      }
+      const shield = ent.ind.shield;
+      if (shield) {
+        shield.removeFromParent();
+        (shield.material as THREE.MeshBasicMaterial).dispose();
+        shield.geometry.dispose();
+      }
     }
   }
 
@@ -1253,24 +1288,22 @@ export class GameSync3D {
     return false;
   }
 
-  private loop(now: number) {
+  private loop(now: number, dt: number) {
     if (!this.alive) return;
-    this.raf = requestAnimationFrame(this.loop);
-    const dt = Math.min(0.05, (now - this.last) / 1000); this.last = now;
     const game = this.state; if (!game || document.hidden) return;
     const alive = new Set<string>();
     // enemies
     for (const e of game.enemies) {
       const key = `enemy-${e.id}`; alive.add(key);
       // air flies at 8; subs run semi-submerged (hull mostly under, sail out)
-      const y = e.kind === 'air' ? 8 : e.kind === 'sub' ? -0.7 : 0.35;
+      const y = e.kind === 'air' ? 8 : e.kind === 'sub' ? -0.7 : 0;
       // Siege second front (SCEN): rev units travel the lane from the far
       // end — sample the mirrored parameter and flip the heading π so the
       // hull faces its true direction of travel.
       this.setTarget(key, 'enemy', e.rev ? 1 - e.progress : e.progress, y, 'X', !!e.rev);
       // no water wake for air targets (audit: air dragged a wake at altitude)
       const wakeLen = e.kind === 'air' ? 0 : e.kind === 'boss' ? (e.boss === 4 ? 25 : 21) : e.kind === 'destroyer' ? 13 : e.kind === 'sub' ? 0 : e.kind === 'corvette' ? 10.5 : 6.5;
-      void this.ensureEnt(key, () => e.kind === 'air' ? enemyModel(e.kind, e.boss) : enemyShip(e.kind, e.boss), { bar: e.kind === 'boss' ? 10 : 5, bob: e.kind === 'air' ? 0 : 0.09, wake: wakeLen ? { len: wakeLen, wid: wakeLen * 0.34, fwd: 'X' } : undefined });
+      this.ensureEnt(key, () => e.kind === 'air' ? enemyModel(e.kind, e.boss) : enemyShip(e.kind, e.boss), { bar: e.kind === 'boss' ? 10 : 5, bob: e.kind === 'air' ? 0 : 0.09, wake: wakeLen ? { len: wakeLen, wid: wakeLen * 0.34, fwd: 'X' } : undefined });
       const ent = this.ents.get(key);
       if (ent) {
         if (ent.bar) setBar(ent.bar, e.hp / e.maxHp);
@@ -1290,18 +1323,16 @@ export class GameSync3D {
         }
       }
       this.prevFlash.set(key, e.hitFlash ?? 0);
-      this.prevHp.set(key, e.hp);
     }
     // pirates — Kenney speedboats (D-022); VIP escorts get a dark-red tint
     // so the R6 escort group reads as one pack around the golden tanker.
     for (const p of game.pirates) {
       const key = `pirate-${p.id}`; alive.add(key);
       this.entKinds.set(key, 'pirate');
-      this.setTarget(key, 'pirate', p.progress, 0.35, 'X');
-      void this.ensureEnt(key, () => makeShip('speedboat', { len: 6, tint: p.vipEscort ? 0x7a2020 : 0x14181d, tintAmt: 0.55 }), { bar: 5, bob: 0.09, wake: { len: 6, wid: 2.2, fwd: 'X' }, cruise: 7.1 });
+      this.setTarget(key, p.vipEscort ? 'trade' : 'pirate', p.progress, 0, 'X');
+      this.ensureEnt(key, () => makeShip('speedboat', { len: 6, tint: p.vipEscort ? 0x7a2020 : 0x14181d, tintAmt: 0.55 }), { bar: 5, bob: 0.09, wake: { len: 6, wid: 2.2, fwd: 'X' }, cruise: 7.1 });
       const ent = this.ents.get(key);
       if (ent?.bar) setBar(ent.bar, Math.max(0, p.hp) / 120);
-      this.prevHp.set(key, p.hp);
     }
     // merchants — D-022: one distinct hull per kind (the single Kenney
     // cargo-a at four scales is gone): Aframax tanker / container ship /
@@ -1309,19 +1340,19 @@ export class GameSync3D {
     // the game.ts crossing time (761u / 80|70|65 s).
     for (const m of game.merchants) {
       const key = `merchant-${m.id}`; alive.add(key);
-      this.setTarget(key, 'trade', m.progress, 0.3, 'X');
+      this.setTarget(key, 'trade', m.progress, 0, 'X');
       const spec = m.kind === 'tanker' ? { ship: 'tanker' as const, len: 18, cruise: 9.5 }
         : m.kind === 'barge' ? { ship: 'tug' as const, len: 9, cruise: 11.7 }
         : m.kind === 'container' ? { ship: 'container' as const, len: 16, cruise: 10.9 }
         : { ship: 'bulk' as const, len: 16, cruise: 10.9 };
-      void this.ensureEnt(key, () => makeShip(spec.ship, { len: spec.len }), { bob: 0.1, wake: { len: spec.len, wid: spec.len * 0.3, fwd: 'X' }, cruise: spec.cruise });
+      this.ensureEnt(key, () => makeShip(spec.ship, { len: spec.len }), { bob: 0.1, wake: { len: spec.len, wid: spec.len * 0.3, fwd: 'X' }, cruise: spec.cruise });
     }
     // contraband (on trade lane, pickable) — the Kenney cargo-a hull now
     // serves ONLY this smuggler role, dark-tinted (D-022).
     for (const c of game.contraband) {
       const key = `contra-${c.id}`; alive.add(key);
-      this.setTarget(key, 'trade', c.progress, 0.35, 'X');
-      void this.ensureEnt(key, async () => { const g = await makeShip('cargoship', { len: 10, tint: 0x2a2118, tintAmt: 0.4 }); g.traverse(o => { o.userData.pick = { type: 'contraband', id: c.id }; }); return g; }, { bob: 0.09, wake: { len: 10, wid: 3.2, fwd: 'X' }, cruise: 12.3 });
+      this.setTarget(key, 'trade', c.progress, 0, 'X');
+      this.ensureEnt(key, async () => { const g = await makeShip('cargoship', { len: 10, tint: 0x2a2118, tintAmt: 0.4 }); g.traverse(o => { o.userData.pick = { type: 'contraband', id: c.id }; }); return g; }, { bob: 0.09, wake: { len: 10, wid: 3.2, fwd: 'X' }, cruise: 12.3 });
     }
     // ===== MECH-A: boat entities & minefield (rendered here, logic in game.ts) =====
     // Boats sit on the enemy lane at their station progress plus a
@@ -1332,18 +1363,18 @@ export class GameSync3D {
       if (b.state !== 'active') continue; // sunk: gone until the logic redeploys it
       const key = `boat-${b.id}`; alive.add(key);
       const u = Math.max(0, Math.min(1, b.progress));
-      const p3 = this.curves.enemy.getPointAt(u); const tan = this.curves.enemy.getTangentAt(u);
-      const nl = Math.hypot(tan.x, tan.z) || 1;
-      const x = p3.x + (-tan.z / nl) * b.offset * 6.58, z = p3.z + (tan.x / nl) * b.offset * 6.58;
+      const tan = this.curves.enemy.getTangentAt(u);
+      const station = boatPosition(b, game.layout);
+      const [x,z] = pctTo3d(station.x, station.y);
       const heading = Math.atan2(-tan.z, tan.x);
-      const y = b.role === 'ghadir' ? 0.12 : 0.35;
+      const y = 0;
       const t = this.targets.get(key);
       if (t) { t.pos.set(x, y, z); t.heading = heading; t.y = y; }
       else this.targets.set(key, { pos: new THREE.Vector3(x, y, z), heading, y });
       // D-022: ghadir boats are the diesel submarine running awash;
       // torpedo boats are pilot boats with tube kitbash; garrison boats
       // are plain pilot boats — the shared patrol hull() is gone.
-      void this.ensureEnt(key, () => b.role === 'ghadir'
+      this.ensureEnt(key, () => b.role === 'ghadir'
         ? makeShip('submarine', { len: 11, tint: 0x37424e, tintAmt: 0.3 })
         : makeShip('pilot', { len: b.role === 'torpedo' ? 7.5 : 7, arm: b.role === 'torpedo' ? 'torpedo' : undefined, tint: b.role === 'torpedo' ? 0x74553a : 0x546e4a, tintAmt: 0.3 }),
         { bar: 4, bob: 0.08, wake: b.role === 'ghadir' ? { len: 4, wid: 2.2, fwd: 'X' } : { len: 7, wid: 2.6, fwd: 'X' } });
@@ -1356,7 +1387,7 @@ export class GameSync3D {
       const t = this.targets.get(key);
       if (t) { t.pos.set(x, 0.3, z); t.y = 0.3; }
       else this.targets.set(key, { pos: new THREE.Vector3(x, 0.3, z), heading: 0, y: 0.3 });
-      void this.ensureEnt(key, () => {
+      this.ensureEnt(key, () => {
         const g = new THREE.Group();
         const body = new THREE.Mesh(new THREE.SphereGeometry(0.85, 10, 8), new THREE.MeshStandardMaterial({ color: 0x2b2f36, roughness: 0.6, metalness: 0.4 }));
         body.position.y = 0.2; g.add(body);
@@ -1374,25 +1405,25 @@ export class GameSync3D {
     const battleCtx = game.battle;
     if (battleCtx?.escort) {
       alive.add('obj-escort');
-      this.setTarget('obj-escort', 'trade', battleCtx.escort.progress, 0.3, 'X');
+      this.setTarget('obj-escort', 'trade', battleCtx.escort.progress, 0, 'X');
       // D-022: the escort target is a ro-ro ferry — a silhouette nothing
       // else on the map shares, so the caravan reads at a glance.
-      void this.ensureEnt('obj-escort', () => makeShip('ferry', { len: 15 }), { bar: 5, bob: 0.1, wake: { len: 15, wid: 4.6, fwd: 'X' } });
+      this.ensureEnt('obj-escort', () => makeShip('ferry', { len: 15 }), { bar: 5, bob: 0.1, wake: { len: 15, wid: 4.6, fwd: 'X' } });
       const ent = this.ents.get('obj-escort');
       if (ent?.bar) setBar(ent.bar, Math.max(0, battleCtx.escort.hp) / Math.max(1, battleCtx.escort.maxHp));
     }
     if (battleCtx?.stranded) {
       alive.add('obj-stranded');
-      this.setTarget('obj-stranded', 'trade', battleCtx.stranded.progress, 0.3, 'X');
+      this.setTarget('obj-stranded', 'trade', battleCtx.stranded.progress, 0, 'X');
       // D-022: the stranded ship is an offshore-supply hull, rust-tinted.
-      void this.ensureEnt('obj-stranded', () => makeShip('supply', { len: 13, tint: 0x8a4b3a, tintAmt: 0.3 }), { bar: 5, bob: 0.05, wake: { len: 0, wid: 0, fwd: 'X' } });
+      this.ensureEnt('obj-stranded', () => makeShip('supply', { len: 13, tint: 0x8a4b3a, tintAmt: 0.3 }), { bar: 5, bob: 0.05, wake: { len: 0, wid: 0, fwd: 'X' } });
       const ent = this.ents.get('obj-stranded');
       if (ent?.bar) setBar(ent.bar, Math.max(0, battleCtx.stranded.hp) / Math.max(1, battleCtx.stranded.maxHp));
     }
     for (const m of battleCtx?.mines ?? []) {
       const key = `emine-${m.id}`; alive.add(key);
       this.setTarget(key, 'trade', m.progress, 0.25, 'X');
-      void this.ensureEnt(key, () => {
+      this.ensureEnt(key, () => {
         const g = new THREE.Group();
         const body = new THREE.Mesh(new THREE.SphereGeometry(0.8, 10, 8), new THREE.MeshStandardMaterial({ color: 0x4a2020, roughness: 0.55, metalness: 0.4 }));
         body.position.y = 0.15; g.add(body);
@@ -1406,8 +1437,8 @@ export class GameSync3D {
     const tanker = game.idle.port?.tanker;
     if (tanker) {
       alive.add('tanker');
-      this.setTarget('tanker', 'port', tanker.progress, 0.3, 'X');
-      void this.ensureEnt('tanker', async () => {
+      this.setTarget('tanker', 'port', tanker.progress, 0, 'X', tanker.stage === 'depart');
+      this.ensureEnt('tanker', async () => {
         const g = await makeShip('tanker', { len: 18 });
         const bar = barSprites(5.5); bar.group.position.y = 4.2; g.add(bar.group); g.userData.bar = bar;
         return g;
@@ -1427,8 +1458,8 @@ export class GameSync3D {
     if (game.vipShip) {
       const vip = game.vipShip;
       alive.add('vip');
-      this.setTarget('vip', 'trade', vip.progress, 0.3, 'X');
-      void this.ensureEnt('vip', async () => {
+      this.setTarget('vip', 'trade', vip.progress, 0, 'X');
+      this.ensureEnt('vip', async () => {
         const g = await makeShip('tanker', { len: 20, gold: true });
         const bar = barSprites(6); bar.group.position.y = 4.4; g.add(bar.group); g.userData.bar = bar;
         const star = glyphSprite('✦', '#ffd27a', 3.4); star.position.y = 6.2; g.add(star);
@@ -1446,7 +1477,7 @@ export class GameSync3D {
     for (const [which, h] of heroes) {
       const key = which; alive.add(key);
       if(this.heroModels.get(key) !== h.active) { this.dropEnt(key); this.heroModels.set(key,h.active); }
-      void this.ensureEnt(key, async () => {
+      this.ensureEnt(key, async () => {
         // D-022: the hero sails the research-vessel hull with a bow
         // turret — and at 12u it no longer outsizes a destroyer (F-3).
         const g = await makeShip(h.active === 2 ? 'submarine' : h.active === 1 ? 'carrier' : 'frigate', { len: h.active === 1 ? 13 : 10, arm: h.active === 2 ? undefined : h.active === 1 ? 'carrier' : 'hero', tint: which === 'hero' ? 0x5b6b82 : 0x6b5b82, tintAmt: 0.22 });
@@ -1454,17 +1485,11 @@ export class GameSync3D {
         g.traverse(o => { o.userData.pick = { type: which }; });
         return g;
       }, { bob: 0.09, wake: { len: which === 'hero' ? 12 : 11, wid: 3.8, fwd: 'X' } });
-      let [x, z] = pctTo3d(h.x, h.y);
-      if (this.map.field && this.map.field.sample(x, z) > 0.2) {
-        outer: for (let r = 2; r < 30; r += 2) for (let a = 0; a < 12; a++) {
-          const nx = x + Math.cos((a / 12) * Math.PI * 2) * r, nz = z + Math.sin((a / 12) * Math.PI * 2) * r;
-          if (this.map.field.sample(nx, nz) <= 0.2) { x = nx; z = nz; break outer; }
-        }
-      }
+      const [x, z] = pctTo3d(h.x, h.y);
       const prev = this.targets.get(key);
       let heading = prev?.heading ?? -0.7;
       if (prev) { const dx = x - prev.pos.x, dz = z - prev.pos.z; if (dx * dx + dz * dz > 0.04) heading = Math.atan2(-dz, dx); }
-      this.targets.set(key, { pos: new THREE.Vector3(x, 0.35, z), heading, y: 0.35 });
+      this.targets.set(key, { pos: new THREE.Vector3(x, 0, z), heading, y: 0 });
     }
     // enemy missiles — MECH-B's own render section (state-driven, see below)
     this.syncEnemyMissiles(game, now);
@@ -1489,10 +1514,19 @@ export class GameSync3D {
         this.enemyRibbonMat.opacity = 0.28 + k * (0.5 + 0.22 * Math.sin(now / 85));
       } else if (this.enemyRibbonMat.opacity !== 0.28) this.enemyRibbonMat.opacity = 0.28;
     }
+    // A late download must not install a ship that left before its model arrived.
+    for (const key of this.entPending.keys()) if (!alive.has(key)) {
+      this.entPending.delete(key);
+      this.targets.delete(key);
+      this.prevFlash.delete(key);
+      this.entKinds.delete(key);
+    }
     // prune dead entities (killed enemies sink with an explosion; others just leave)
     for (const key of [...this.ents.keys()]) if (!alive.has(key)) {
       const ent = this.ents.get(key)!;
-      const killed = (key.startsWith('enemy-') || key.startsWith('pirate-')) && ent.init && (this.prevHp.get(key) ?? 1) <= 0;
+      const combatEntity = key.startsWith('enemy-') || key.startsWith('pirate-');
+      const killed = combatEntity && ent.init && game.events.some(event =>
+        event.type === 'ship-destroyed' && event.enemyId === Number(key.slice(key.indexOf('-') + 1)));
       if (killed) {
         this.fx.explode(ent.obj.position, '#ff7a30', 1.6);
         // death audio + the boss's own bigger shake (checklist ۱۳٫۲/۱۳٫۳ —
@@ -1501,17 +1535,20 @@ export class GameSync3D {
         if (ek === 'boss') { this.sound('explosion'); this.addShake(0.35, ent.obj.position); }
         else if (ek === 'speed' || ek === 'air' || ek === 'pirate') this.sound('impact');
         else this.sound('explosion');
-        const mats: THREE.Material[] = [];
-        ent.obj.traverse(o => { const mm = (o as THREE.Mesh).material as THREE.Material | undefined; if (mm) { const c = mm.clone(); c.transparent = true; (o as THREE.Mesh).material = c; mats.push(c); } });
-        ent.mats = mats;
+        this.releaseEntityOverlays(ent);
         this.dying.push({ ent, t: 0 });
         this.ents.delete(key);
       } else this.dropEnt(key);
-      this.targets.delete(key); this.prevFlash.delete(key); this.prevHp.delete(key); this.entKinds.delete(key);
+      this.targets.delete(key); this.prevFlash.delete(key); this.entKinds.delete(key);
     }
     this.stepMotion(dt, now);
     this.updateAnims(dt, now);
-    this.fx.update(this.combatPaused ? 0 : dt * Math.max(1, game.speed));
+    // The map caps ambient-motion dt for visual stability. Flights use
+    // battle seconds, including 2/3× speed and the fixed clock's stall budget.
+    const flightStep = this.lastFxFrame === null || dt === 0 ? 0 :
+      Math.min(0.5, Math.max(0, (now - this.lastFxFrame) / 1000));
+    this.lastFxFrame = now;
+    this.fx.update(this.combatPaused ? 0 : flightStep * game.speed);
     this.updatePopups(dt);
     this.applyShake(dt);
     this.stepPulseFx(dt);
@@ -1540,7 +1577,8 @@ export class GameSync3D {
         if (bestSlot !== null) {
           const ta = this.towerAnims.get(bestSlot);
           if (ta) {
-            ta.targetPos = new THREE.Vector3(x2, 1.2, z2);
+            ta.targetKey = this.shotTargetKey(s.targetId);
+            ta.targetPos = this.renderedTarget(ta.targetKey)?.clone() ?? new THREE.Vector3(x2, 1.2, z2);
             // charge-cycle period comes from the shot record's real firing
             // interval (converted to wall time) — no more tick-arrival EMA,
             // so game speed scales the visual cadence (audit مهم-۳)
@@ -1550,6 +1588,9 @@ export class GameSync3D {
             // record) — the tower model's muzzles must NOT override them,
             // and its recoil/shot rotation belongs to its own shots only.
             if (s.boatId == null) {
+              // A new lock can arrive on the same tick as the first shot.
+              // Align the articulated rig before asking for its muzzle.
+              this.aimTower(ta, ta.targetPos, 1);
               const idx = ta.mz.length ? ta.shotIdx % ta.mz.length : 0;
               if (ta.rc.length) { const r = ta.rc[idx % ta.rc.length]; r.obj.position.z = r.bz - ta.spec.recoil; }
               if (ta.mz.length) { const p = ta.mz[idx].getWorldPosition(new THREE.Vector3()); sx = p.x; sy = p.y; sz = p.z; }
@@ -1632,17 +1673,26 @@ export class GameSync3D {
    *  30 by design — a low rate there is the cap working, not GPU
    *  distress — so the ladder holds its step and resets the up-streak. */
   private tuneResolution(dt: number, now: number) {
-    this.emaMs = this.emaMs * 0.96 + Math.min(dt, 0.1) * 1000 * 0.04;
-    if (now < this.dprEvalAt) return;
-    this.dprEvalAt = now + 3000;
     const r = (this.map as unknown as { renderer?: THREE.WebGLRenderer }).renderer;
     if (!r) return;
-    const frame = r.info?.render?.frame ?? 0;
-    const elapsed = this.dprLastEvalAt ? (now - this.dprLastEvalAt) / 1000 : 0;
-    const frames = this.dprLastFrame >= 0 ? frame - this.dprLastFrame : 0;
-    this.dprLastEvalAt = now; this.dprLastFrame = frame;
-    if (elapsed < 2 || elapsed > 6 || frames <= 0) return; // first / stretched window: baseline only
-    this.renderFps = frames / elapsed;
+    const frame = r.info.render.frame;
+    // dt=0 is the first frame after startup, context loss or app suspension.
+    // Never feed the visual animation's clamped delta into the FPS meter.
+    if (dt === 0 || this.dprLastFrame < 0 || frame < this.dprLastFrame) {
+      this.dprLastEvalAt = now;
+      this.dprLastFrame = frame;
+      this.dprEvalAt = now + 3000;
+      this.renderFps = 0;
+      this.dprUpStreak = 0;
+      return;
+    }
+    const elapsedMs = now - this.dprLastEvalAt;
+    if (elapsedMs <= 0) return;
+    this.renderFps = (frame - this.dprLastFrame) * 1000 / elapsedMs;
+    if (now < this.dprEvalAt) return;
+    this.dprEvalAt = now + 3000;
+    this.dprLastEvalAt = now;
+    this.dprLastFrame = frame;
     const w = window as unknown as { __hormuzCalmUi?: boolean; __hormuzCalmPhase?: boolean };
     if (w.__hormuzCalmUi === true || w.__hormuzCalmPhase === true) { this.dprUpStreak = 0; return; }
     const steps = this.dprSteps;
@@ -1661,10 +1711,8 @@ export class GameSync3D {
   perfInfo() {
     const r = (this.map as unknown as { renderer?: THREE.WebGLRenderer }).renderer;
     const info = r?.info?.render;
-    // fps reports the ladder's measured RENDER rate once it exists (the
-    // pre-PERF2 EMA read the rAF cadence, which overstates renders on
-    // high-refresh panels); EMA remains only as the pre-first-window value.
-    return { calls: info?.calls ?? -1, tris: info?.triangles ?? -1, dpr: r?.getPixelRatio?.() ?? -1, fps: this.renderFps > 0 ? Math.round(this.renderFps) : Math.round(1000 / Math.max(1, this.emaMs)) };
+    return { calls: info?.calls ?? -1, tris: info?.triangles ?? -1,
+      dpr: r?.getPixelRatio?.() ?? -1, fps: Math.round(this.renderFps * 10) / 10 };
   }
 
   /* MECH-A: EMP pulse visual — an expanding violet shock ring at the
@@ -1695,6 +1743,20 @@ export class GameSync3D {
     }
   }
 
+  private shotTargetKey(id: number): string | null {
+    for (const prefix of ['enemy', 'pirate', 'emine']) {
+      const key = prefix + '-' + id;
+      if (this.targets.has(key)) return key;
+    }
+    return null;
+  }
+
+  private renderedTarget(key: string | null): THREE.Vector3 | null {
+    if (!key) return null;
+    const ent = this.ents.get(key);
+    return ent?.init ? ent.obj.position : this.targets.get(key)?.pos ?? null;
+  }
+
   /* Per-family FX dispatch — projectile kind/color/arc/duration transcribed from the
      pack's own fire() callbacks (towers.tsx), re-timed for game-world distances.
      Wave-1 FX rules:
@@ -1718,11 +1780,11 @@ export class GameSync3D {
     const isHero = s.modelKind === 'hero';
     const kind = ta?.kind || (isHero ? '' : s.modelKind);
     const color = isHero ? '#ffd27a' : (PACK_GLOW[kind] ?? ('#' + (KIND_COLOR[s.kind] ?? 0xffffff).toString(16).padStart(6, '0')));
-    const eKey = this.targets.has(`enemy-${s.targetId}`) ? `enemy-${s.targetId}` : this.targets.has(`pirate-${s.targetId}`) ? `pirate-${s.targetId}` : null;
-    const tPos = eKey ? this.targets.get(eKey)!.pos : null;
+    const eKey = this.shotTargetKey(s.targetId);
+    const tPos = this.renderedTarget(eKey);
     const to = tPos ? tPos.clone() : new THREE.Vector3(x2, 1.2, z2);
     const isAir = game.enemies.find(e => e.id === s.targetId)?.kind === 'air';
-    const track = eKey ? () => this.targets.get(eKey)?.pos ?? null : undefined;
+    const track = eKey ? () => this.renderedTarget(eKey) : undefined;
     const dist = from.distanceTo(to);
     const dir = to.clone().sub(from).normalize();
     // Flight timing comes from the same shot that schedules mechanical impact.
@@ -1783,7 +1845,7 @@ export class GameSync3D {
       doorsL: byName.get('anim:doorL') ?? [], doorsR: byName.get('anim:doorR') ?? [], cells: byName.get('anim:cell') ?? [],
       crystal: (byName.get('anim:crystal') ?? [])[0] ?? null,
       generic, glowMats: CHARGE_GLOW_KINDS.has(kind) ? collectGlowMats(model, kind) : [],
-      targetPos: null, lastShotAt: 0, period: 0, shotIdx: 0,
+      targetKey: null, targetPos: null, lastShotAt: 0, period: 0, shotIdx: 0,
     };
     this.towerAnims.set(slot, ta);
   }
@@ -1931,32 +1993,28 @@ export class GameSync3D {
       }
       // aiming: yaw/pitch track the tower's real shot target; idle = face the lane
       if (ta.yaw.length) {
-        const yaw = ta.yaw[0];
         let tp: THREE.Vector3;
-        if (hasTarget && ta.targetPos) tp = ta.targetPos;
+        if (hasTarget && ta.targetPos) tp = this.renderedTarget(ta.targetKey) ?? ta.targetPos;
         else {
           const aimA = this.aim.get(slot) ?? Math.PI;
-          tp = this.animTmp2.set(rec.obj.position.x + Math.sin(aimA) * 14, rec.obj.position.y + 1, rec.obj.position.z + Math.cos(aimA) * 14).clone();
+          tp = this.animTmp2.set(rec.obj.position.x + Math.sin(aimA) * 14, rec.obj.position.y + 1, rec.obj.position.z + Math.cos(aimA) * 14);
         }
-        if (yaw.parent) {
-          yaw.parent.updateWorldMatrix(true, false);
-          const local = yaw.parent.worldToLocal(this.animTmp.copy(tp));
-          const want = Math.atan2(local.x - yaw.position.x, local.z - yaw.position.z);
-          let diff = want - yaw.rotation.y;
-          diff = Math.atan2(Math.sin(diff), Math.cos(diff));
-          yaw.rotation.y += diff * Math.min(1, dt * ta.spec.turn * 2.2);
-          const pitch = ta.pitch[0];
-          if (pitch && pitch.parent) {
-            pitch.parent.updateWorldMatrix(true, false);
-            const lp = pitch.parent.worldToLocal(this.animTmp.copy(tp));
-            const dist = Math.hypot(lp.x - pitch.position.x, lp.z - pitch.position.z);
-            let w = -Math.atan2(lp.y - pitch.position.y, dist) - (ta.spec.loft ?? 0);
-            w = Math.max(-(ta.spec.maxUp ?? 1.3), Math.min(0.12, w));
-            pitch.rotation.x += (w - pitch.rotation.x) * Math.min(1, dt * ta.spec.turn * 2.2);
-          }
-        }
+        this.aimTower(ta, tp, Math.min(1, dt * ta.spec.turn * 2.2));
       }
     }
   }
-}
 
+  private aimTower(ta: TowerAnim, target: THREE.Vector3, weight: number) {
+    const yaw = ta.yaw[0];
+    if (!yaw?.parent) return;
+    const local = yaw.parent.worldToLocal(this.animTmp.copy(target)).sub(yaw.position);
+    const diff = Math.atan2(local.x, local.z) - yaw.rotation.y;
+    yaw.rotation.y += Math.atan2(Math.sin(diff), Math.cos(diff)) * weight;
+    const pitch = ta.pitch[0];
+    if (!pitch?.parent) return;
+    const elevation = pitch.parent.worldToLocal(this.animTmp.copy(target)).sub(pitch.position);
+    const angle = -Math.atan2(elevation.y, Math.hypot(elevation.x, elevation.z)) - (ta.spec.loft ?? 0);
+    const limited = Math.max(-(ta.spec.maxUp ?? 1.3), Math.min(0.12, angle));
+    pitch.rotation.x += (limited - pitch.rotation.x) * weight;
+  }
+}

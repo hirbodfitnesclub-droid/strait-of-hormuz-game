@@ -15,32 +15,53 @@ function mlog(msg: string) {
   console.info('[models3d]', msg);
 }
 
-export async function loadModel(url: string): Promise<THREE.Group> {
-  if (!cache.has(url)) {
-    cache.set(url, (async () => {
-      mlog('decoder-wait ' + url);
-      await Promise.race([
-        (MeshoptDecoder as unknown as { ready: Promise<void> }).ready,
-        new Promise((_, rej) => setTimeout(() => rej(new Error('meshopt decoder timeout')), 10000)),
-      ]);
-      mlog('load-start ' + url);
-      const g = await loader.loadAsync(url);
-      mlog('load-done ' + url);
-      // VIS2 (D-025): GLB models CAST shadows. three.js loads meshes
-      // with castShadow=false and nothing in the placement path ever
-      // set it, so player towers/buildings/ships floated shadowless
-      // even where the sun's shadow pass was on (audit2 team 6). Set
-      // once on the cached scene — every clone inherits the flags.
-      g.scene.traverse(o => {
-        if ((o as THREE.Mesh).isMesh) (o as THREE.Mesh).castShadow = true;
-      });
-      batchStatics(g.scene);
-      return g.scene;
-    })());
+let decoderReady: Promise<void> | undefined;
+
+function waitForDecoder(): Promise<void> {
+  if (!decoderReady) {
+    decoderReady = new Promise<void>((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error('meshopt decoder timeout')), 10000);
+      MeshoptDecoder.ready.then(resolve, reject).finally(() => clearTimeout(timer));
+    }).catch(error => {
+      decoderReady = undefined;
+      throw error;
+    });
   }
-  let scene: THREE.Group;
-  try { scene = await cache.get(url)!; } catch (error) { cache.delete(url); throw error; }
-  return scene.clone(true);
+  return decoderReady;
+}
+
+function cachedModel(url: string): Promise<THREE.Group> {
+  const existing = cache.get(url);
+  if (existing) return existing;
+  const pending = (async () => {
+    await waitForDecoder();
+    mlog('load-start ' + url);
+    const { scene } = await loader.loadAsync(url);
+    scene.traverse(node => { if ((node as THREE.Mesh).isMesh) node.castShadow = true; });
+    if (url.startsWith('/models/towers/')) {
+      // Legacy pack exports place the vertex-painted showroom Island before the Pad.
+      // Strip that single mesh before bounds/placement; the battle map supplies its own land.
+      const tower = scene.children[0]?.children[0];
+      const island = tower?.children[0] as THREE.Mesh | undefined;
+      if (island?.isMesh && island.geometry.hasAttribute('color')) {
+        island.geometry.computeBoundingBox();
+        const box = island.geometry.boundingBox!;
+        if (Math.abs(box.min.y + 1.4) < 0.02 && Math.abs(box.max.y - 0.42) < 0.03) island.removeFromParent();
+      }
+    }
+    batchStatics(scene);
+    mlog('load-done ' + url);
+    return scene;
+  })().catch(error => {
+    cache.delete(url);
+    throw error;
+  });
+  cache.set(url, pending);
+  return pending;
+}
+
+export async function loadModel(url: string): Promise<THREE.Group> {
+  return (await cachedModel(url)).clone(true);
 }
 
 /** Tall offshore derricks must not obscure adjacent lanes in the portrait view. */
@@ -75,7 +96,7 @@ export async function preloadModels(onProgress?: (done: number, total: number) =
   const worker = async () => {
     while (queue.length) {
       const u = queue.shift()!;
-      try { await loadModel(u); } catch { /* a failed preload just falls back to lazy load */ }
+      try { await cachedModel(u); } catch { /* a failed preload just falls back to lazy load */ }
       done++;
       onProgress?.(done, total);
     }

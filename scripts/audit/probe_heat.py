@@ -1,39 +1,11 @@
-"""Heat-budget probe — fix program 2, D-020 gate (team PERF2).
+"""Measure opening scene geometry, DPR and rendered frames over a live battle.
 
-The owner's phone heats after 2-3 minutes on v0.5.0. Audit-2 team 1
-proved the merges did NOT regress the wave-0 PERF mechanisms; the heat
-is (1) NO frame-rate cap in battle — the map loop renders on unbounded
-rAF (90-120 full 3D renders/s on a high-refresh phone), (2) scene weight
-~1.19M triangles in the opening peace view, (3) a resolution ladder that
-parks at max until throttling. D-020 turns those into budgets:
-
-  * opening peace view <= 800,000 triangles (renderer.info via perfInfo)
-  * battle render cap = 60 fps HARD — never above 60 in any state
-    (peace stays at the existing 30 fps calm cap)
-  * DPR never above 1.5
-
-This probe measures, on the merged static build:
-  A. peace opening view: triangles / draw calls / scene object count /
-     drawing-buffer pixels / DPR (several perfInfo samples, median tris);
-  B. battle: rendered frames counted through window.__hormuzFrameHook
-     (fired once per RENDERED frame by the map loop) over a game-clock
-     window, reported per wall second and per game second;
-  C. structure: whether a battle-path frame-rate gate exists in the map
-     loop / gamesync source at all. SwiftShader on this VM renders far
-     below 60 wall-fps, so a missing cap can NEVER be caught by the live
-     rate here — the structural check is the gate, the live count is
-     supporting evidence. On the current build C MUST fail: the only
-     frame gate in hormuz-map.js is inside `if (calm)`, and WorldView3D
-     sets the calm flag only when phase !== 'battle'.
-
-On the CURRENT build the tris budget and the battle-cap structure MUST
-FAIL (1,186,852 tris measured by team 1; no battle cap exists).
+Run the separate frame pacing test for the scheduler's behavior on high refresh
+displays. A wall-clock rate from this software renderer describes this host only.
 """
 from __future__ import annotations
 
 import asyncio
-import os
-import re
 import sys
 import time
 
@@ -48,6 +20,7 @@ import seedlib
 SECTION = "§heat budget (D-020)"
 TRIS_BUDGET = 800_000
 WALL_DEADLINE_S = 600.0
+MIN_BATTLE_SECONDS = 10.0
 
 PEACE_SAMPLE_JS = """() => {
   const s = window.__gamesync3d; const m = window.__map3d;
@@ -71,32 +44,20 @@ INSTALL_FRAME_HOOK_JS = """() => {
 FRAME_COUNT_JS = """() => {
   const s = window.__gamesync3d;
   return { frames: window.__frameCount || 0,
-           elapsed: s && s.state ? s.state.elapsed : null,
+           elapsed: s?.state?.battle?.elapsed ?? null,
            phase: s && s.state ? s.state.phase : null,
            wall: performance.now() };
 }"""
 
-CAP_PATTERNS = [r"1\s*/\s*60", r"1000\s*/\s*60", r"fpsCap", r"maxFps",
-                r"frameCap", r"BATTLE_FPS", r"battleCap", r"capBattleFps"]
-
-
-def battle_cap_structure() -> tuple[bool, dict]:
-    """Does any frame-rate gate exist on the battle render path?
-    Searches the map loop + gamesync sources for a 60fps cap mechanism.
-    The v0.5.0 loop's only gate is the 1/30 calm branch (phase != battle),
-    so today this returns False — the expected red."""
-    here = os.path.dirname(os.path.abspath(__file__))
-    repo = os.path.abspath(os.path.join(here, "..", ".."))
-    src = ""
-    for rel in ("src/three-map/hormuz-map.js", "src/three-map/gamesync.ts"):
-        try:
-            with open(os.path.join(repo, rel), encoding="utf-8") as f:
-                src += f.read() + "\n"
-        except OSError:
-            pass
-    hits = {p: bool(re.search(p, src)) for p in CAP_PATTERNS}
-    calm_gate = "1 / 30" in src or "1/30" in src
-    return any(hits.values()), {"patterns": hits, "calm_30_gate_present": calm_gate}
+def battle_window(start, end):
+    if not start or not end or start["elapsed"] is None or end["elapsed"] is None:
+        return None
+    return {
+        "frames": end["frames"] - start["frames"],
+        "wall_s": (end["wall"] - start["wall"]) / 1000.0,
+        "game_s": end["elapsed"] - start["elapsed"],
+        "battle": start["phase"] == end["phase"] == "battle",
+    }
 
 
 def battle_seed() -> dict:
@@ -141,7 +102,7 @@ async def main() -> int:
             samples = []
             for _ in range(6):
                 s = await ev(pg, PEACE_SAMPLE_JS)
-                if s and s["tris"] > 0:
+                if s and s["phase"] == "peace" and s["tris"] > 0:
                     samples.append(s)
                 await pg.wait_for_timeout(2000)
             if not samples:
@@ -164,8 +125,9 @@ async def main() -> int:
                        f"{len(samples)} perfInfo samples"))
             assertions.append(report.check(
                 SECTION, "heat.dpr_cap", "pixel ratio never above 1.5",
-                0 < last["dpr"] <= 1.5 + 1e-6,
-                expected="0 < dpr <= 1.5", actual=last["dpr"],
+                all(0 < sample["dpr"] <= 1.5 + 1e-6 for sample in samples),
+                expected="all observed DPR values in (0, 1.5]",
+                actual=[sample["dpr"] for sample in samples],
                 detail="wave-0 PERF cap, re-asserted as a heat input"))
             await harness.safe_close(pg)
 
@@ -177,50 +139,35 @@ async def main() -> int:
             await ev(pg, INSTALL_FRAME_HOOK_JS)
             start = await ev(pg, FRAME_COUNT_JS)
             deadline = time.monotonic() + WALL_DEADLINE_S
-            end = start
-            while time.monotonic() < deadline:
+            window = None
+            while start and time.monotonic() < deadline:
                 await pg.wait_for_timeout(2000)
-                e = await ev(pg, FRAME_COUNT_JS)
-                if e:
-                    end = e
-                if start and end and (end["elapsed"] or 0) - (start["elapsed"] or 0) >= 10.0:
+                end = await ev(pg, FRAME_COUNT_JS)
+                window = battle_window(start, end)
+                if end and end["phase"] != "battle":
                     break
-            rate_wall = rate_game = None
-            if start and end:
-                d_frames = end["frames"] - start["frames"]
-                d_wall = (end["wall"] - start["wall"]) / 1000.0
-                d_game = (end["elapsed"] or 0) - (start["elapsed"] or 0)
-                rate_wall = round(d_frames / d_wall, 2) if d_wall > 0 else None
-                rate_game = round(d_frames / d_game, 2) if d_game > 0 else None
-                meta["battle_window"] = {"frames": d_frames,
-                                          "wall_s": round(d_wall, 2),
-                                          "game_s": round(d_game, 2),
-                                          "phase": end["phase"]}
+                if window and window["game_s"] >= MIN_BATTLE_SECONDS:
+                    break
+            meta["battle_window"] = window
+            rate = window["frames"] / window["wall_s"] if window and window["wall_s"] > 0 else None
+            assertions.append(report.check(
+                SECTION, "heat.live_battle_window",
+                "renderer and combat both advance during the sample",
+                bool(window and window["battle"] and window["game_s"] >= MIN_BATTLE_SECONDS
+                     and window["frames"] > 1),
+                expected=">= 10 battle seconds and >= 2 rendered frames in battle",
+                actual=window))
             assertions.append(report.check(
                 SECTION, "heat.battle_render_rate",
-                "rendered frames per wall second in battle (live count)",
-                rate_wall is not None and rate_wall <= 60.5,
-                expected="<= 60.5 renders/wall-s",
-                actual={"renders_per_wall_s": rate_wall,
-                        "renders_per_game_s": rate_game},
-                detail="counted via window.__hormuzFrameHook; NOTE: "
-                       "SwiftShader renders far below 60 wall-fps, so this "
-                       "live rate passes vacuously here — the structural "
-                       "check below is the real cap gate"))
+                "observed battle render rate on this host",
+                rate is not None and 0 < rate <= 60.5,
+                expected="0 < renders per wall second <= 60.5",
+                actual=round(rate, 2) if rate is not None else None,
+                detail="SwiftShader rate does not measure mobile thermal or GPU performance"))
             await harness.safe_close(pg)
         finally:
             await harness.safe_close(ctx)
 
-    # ---- C. structural battle cap --------------------------------------
-    found, detail = battle_cap_structure()
-    assertions.append(report.check(
-        SECTION, "heat.battle_cap_structure",
-        "a 60 fps render cap exists on the battle path (D-020)",
-        found,
-        expected="frame-rate gate applying during battle (not calm-only)",
-        actual=detail,
-        detail="v0.5.0: the map loop's only gate is the 1/30 calm branch, "
-               "and calm is false during battle -> unbounded rAF"))
     return report.emit("probe_heat", SECTION, assertions,
                        meta=meta, out_path=args.out_json)
 

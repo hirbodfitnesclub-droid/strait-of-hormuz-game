@@ -19,7 +19,7 @@ export class BattleAudio {
         const data = this.noise.getChannelData(0);
         for (let i = 0; i < length; i++) data[i] = Math.random() * 2 - 1;
       }
-      if (this.context.state === "suspended") void this.context.resume();
+      this.resume();
     } catch { /* Visual feedback remains available when audio is unsupported. */ }
   }
 
@@ -72,12 +72,16 @@ export class BattleAudio {
     }
   }
 
+  resume() {
+    if (this.enabled && this.context?.state === "suspended") void this.context.resume().catch(() => {});
+  }
+
   suspend() {
-    if (this.context?.state === "running") void this.context.suspend();
+    if (this.context?.state === "running") void this.context.suspend().catch(() => {});
   }
 
   dispose() {
-    if (this.context) void this.context.close();
+    if (this.context) void this.context.close().catch(() => {});
     this.context = null; this.noise = null;
   }
 }

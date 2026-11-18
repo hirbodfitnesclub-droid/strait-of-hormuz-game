@@ -16,8 +16,23 @@ export default function ThreeMap({ demo = false, onMapReady, onReadyChange }: { 
     let detach: (() => void) | null = null;
     let cancelled = false;
     const host = hostRef.current;
-    const lost = (event: Event) => { event.preventDefault(); setError(true); readyRef.current?.(false); };
-    const restored = () => { setError(false); readyRef.current?.(true); };
+    let contextLost = false;
+    let initialized = false;
+    let failed = false;
+    const updateAvailability = () => {
+      if (cancelled) return;
+      readyRef.current?.(initialized && !contextLost && !failed);
+      setError(contextLost || failed);
+    };
+    const lost = (event: Event) => {
+      event.preventDefault();
+      contextLost = true;
+      updateAvailability();
+    };
+    const restored = () => {
+      contextLost = false;
+      updateAvailability();
+    };
     host?.addEventListener('webglcontextlost', lost, true);
     host?.addEventListener('webglcontextrestored', restored, true);
     const W = window as unknown as { __m3d?: string; __map3d?: unknown };
@@ -29,10 +44,11 @@ export default function ThreeMap({ demo = false, onMapReady, onReadyChange }: { 
       map = new mod.HormuzMap(hostRef.current, {
         onReady: async () => {
           if (cancelled) return;
-          try { await callbackRef.current?.(map); } catch { if (!cancelled) { setError(true); readyRef.current?.(false); } return; }
+          try { await callbackRef.current?.(map); } catch { failed = true; updateAvailability(); return; }
           if (cancelled) return;
           W.__m3d = 'ready';
-          readyRef.current?.(true);
+          initialized = true;
+          updateAvailability();
           if (!demo || cancelled) return;
           try {
             const ships = await import('../three-map/ships3d');
@@ -52,13 +68,14 @@ export default function ThreeMap({ demo = false, onMapReady, onReadyChange }: { 
       W.__map3d = map;
       await (map as unknown as { init(): Promise<void> }).init();
       if (!cancelled) W.__m3d = 'ready';
-    })().catch(() => { if (!cancelled) { setError(true); readyRef.current?.(false); } });
+    })().catch(() => { failed = true; updateAvailability(); });
     return () => {
       cancelled = true;
       host?.removeEventListener('webglcontextlost', lost, true);
       host?.removeEventListener('webglcontextrestored', restored, true);
       try { detach?.(); } catch { /* noop */ }
       try { map?.dispose(); } catch { /* noop */ }
+      if (W.__map3d === map) delete W.__map3d;
     };
   }, [demo]);
   return <><div ref={hostRef} style={{ position: 'absolute', inset: 0 }} aria-label="نقشه سه‌بعدی تنگه هرمز" />{error && <div className="world-error" role="alert"><strong>نمای تنگه آماده نشد</strong><p>برای بازیابی تصویر دوباره تلاش کنید. ذخیرهٔ دستگاه حفظ می‌شود.</p><button onClick={() => location.reload()}>بارگذاری دوباره</button></div>}</>;
