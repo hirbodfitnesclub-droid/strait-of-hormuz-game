@@ -1,0 +1,100 @@
+name: Build and publish Android test APK
+
+# Manually triggered only. Do not label an old checkout as a new game build.
+on:
+  workflow_dispatch:
+    inputs:
+      expected_source_sha:
+        description: 'Full commit SHA containing the test version (must be pushed to GitHub)'
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  publish-debug-apk:
+    name: Build APK and attach to v0.7.0-test
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+
+    steps:
+      - name: Check out selected ref
+        uses: actions/checkout@v4
+
+      - name: Require the intended source commit
+        env:
+          EXPECTED_SHA: ${{ inputs.expected_source_sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          actual="$(git rev-parse HEAD)"
+          if [[ "$actual" != "$EXPECTED_SHA" ]]; then
+            echo "::error::Checked out $actual, but expected $EXPECTED_SHA. Push the intended version and select its branch before running."
+            exit 1
+          fi
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android platform
+        shell: bash
+        run: sdkmanager 'platforms;android-35' 'build-tools;35.0.0'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Create static web bundle and sync Capacitor
+        run: npm run build:android
+
+      - name: Assemble debug APK
+        shell: bash
+        run: |
+          chmod +x android/gradlew
+          cd android
+          ./gradlew --no-daemon assembleDebug
+
+      - name: Prepare installable APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p release
+          cp android/app/build/outputs/apk/debug/app-debug.apk release/hormuz-0.7.0-debug.apk
+          sha256sum release/hormuz-0.7.0-debug.apk
+
+      - name: Keep a backup artifact even if release upload fails
+        uses: actions/upload-artifact@v4
+        with:
+          name: hormuz-0.7.0-debug-apk
+          path: release/hormuz-0.7.0-debug.apk
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload APK to the existing draft release and publish prerelease
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag='v0.7.0-test'
+          is_draft="$(gh release view "$tag" --json isDraft --jq '.isDraft')"
+          if [[ "$is_draft" != 'true' ]]; then
+            echo "::error::The $tag release must still be a draft; not overwriting a published release."
+            exit 1
+          fi
+          gh release upload "$tag" release/hormuz-0.7.0-debug.apk --clobber
+          gh release edit "$tag" --draft=false --prerelease
+          echo "Published: https://github.com/$GH_REPO/releases/tag/$tag"
