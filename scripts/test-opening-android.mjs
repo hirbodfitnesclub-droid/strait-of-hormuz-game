@@ -9,7 +9,7 @@ import { setTimeout as delay } from 'node:timers/promises';
 
 const [baseline, candidate, directory, suite = 'all'] = process.argv.slice(2);
 assert.ok(directory && candidate && baseline, 'Supply baseline APK, candidate APK and evidence directory');
-assert.ok(['all','opening','operations'].includes(suite));
+assert.ok(['all','opening','operations','damage'].includes(suite));
 const app = 'ir.hormuz.sovereign';
 mkdirSync(directory, { recursive: true });
 const adb = (...args) => execFileSync('adb', args, { encoding: 'utf8', timeout: 90000, maxBuffer: 16000000 }).trim();
@@ -123,11 +123,8 @@ async function playOperations(cdp, trace) {
   const state = field => cdp.evaluate('window.__gamesync3d?.state?.' + field);
   trace.operations = [];
   async function finish(wave, clean) {
-    for (let i = 0; i < 2 && (await state('speed')) < 3; i++) {
-      const lastSpeed = await state('speed');
-      await tapControl(cdp,trace,'.battle-speed');
-      await until(async () => (await state('speed')) !== lastSpeed);
-    }
+    // The receipt is the assertion. Battle speed is a player preference that can
+    // reset as a short wave finishes, so keep the original speed of the save.
     const report = await until(() => cdp.evaluate(`document.querySelector('.battle-result-dialog') && window.__gamesync3d.state.idle.lastBattle?.wave === ${wave} && window.__gamesync3d.state.idle.lastBattle`),240000);
     assert.equal(report.victory,clean);
     assert.equal(report.openingReceipt.damage,clean ? 0 : 2);
@@ -135,25 +132,28 @@ async function playOperations(cdp, trace) {
     trace.operations.push(report);
     screenshot((clean ? 'clear-' : 'damage-') + wave);
   }
-  for (let wave = 1; wave <= 3; wave++) {
-    if (wave > 1) await tapControl(cdp,trace,'.idle-battle-start');
-    await until(async () => (await state('phase')) === 'battle');
-    await finish(wave,true);
-    if (wave < 3) {
-      const reportId=trace.operations.at(-1).id;
-      const pending=() => cdp.evaluate(`!!document.querySelector('.battle-result-dialog') &&
-        window.__gamesync3d.state.idle.lastBattle?.id === ${JSON.stringify(reportId)} &&
-        !window.__gamesync3d.state.idle.lastBattle?.claimed`);
-      // Only retry while this same receipt is outstanding. Scrolling a long sheet
-      // or its opening animation can consume a native tap at the edge of the viewport.
-      for (let attempt=0; attempt<3 && await pending(); attempt++) {
-        await tapControl(cdp,trace,'.battle-result-dialog .primary-action',30000,attempt === 2);
-        await delay(1200);
+  if (suite !== 'damage') {
+    for (let wave = 1; wave <= 3; wave++) {
+      if (wave > 1) await tapControl(cdp,trace,'.idle-battle-start');
+      await until(async () => (await state('phase')) === 'battle');
+      await finish(wave,true);
+      if (wave < 3) {
+        const reportId=trace.operations.at(-1).id;
+        const pending=() => cdp.evaluate(`!!document.querySelector('.battle-result-dialog') &&
+          window.__gamesync3d.state.idle.lastBattle?.id === ${JSON.stringify(reportId)} &&
+          !window.__gamesync3d.state.idle.lastBattle?.claimed`);
+        // Only retry while this same receipt is outstanding. Scrolling a long sheet
+        // or its opening animation can consume a native tap at the edge of the viewport.
+        for (let attempt=0; attempt<3 && await pending(); attempt++) {
+          await tapControl(cdp,trace,'.battle-result-dialog .primary-action',30000,attempt === 2);
+          await delay(1200);
+        }
+        await until(() => cdp.evaluate("!document.querySelector('.battle-result-dialog')"),30000);
+        assert.equal(await cdp.evaluate("document.querySelectorAll('[role=dialog]').length"),0);
       }
-      await until(() => cdp.evaluate("!document.querySelector('.battle-result-dialog')"),30000);
-      assert.equal(await cdp.evaluate("document.querySelectorAll('[role=dialog]').length"),0);
     }
   }
+  if (suite === 'operations') return;
   // The alternate checkpoint was reached through actual reducer actions, including moving the hero.
   const {campaignSaves} = createRequire(import.meta.url)('./test-opening-operations.cjs');
   const {damagedThree} = campaignSaves();
@@ -163,8 +163,11 @@ async function playOperations(cdp, trace) {
   await finish(3,false);
   const balances = () => cdp.evaluate('({cash:window.__gamesync3d.state.cash,steel:window.__gamesync3d.state.steel,damage:window.__gamesync3d.state.openingOperations.dockDamage})');
   const before = await balances();
-  await tapControl(cdp,trace,'.battle-result-dialog .opening-dock-order button');
-  await until(async () => (await balances()).damage === 1);
+  for (let attempt=0; attempt<3 && (await balances()).damage===before.damage; attempt++) {
+    await tapControl(cdp,trace,'.battle-result-dialog .opening-dock-order button',30000,attempt===2);
+    await delay(1800);
+  }
+  await until(async () => (await balances()).damage === 1,30000);
   const after = await balances();
   assert.deepEqual(after,{cash:before.cash-24,steel:before.steel-4,damage:1});
   trace.repair={before,after};
@@ -205,6 +208,10 @@ async function run(apk, label, opening) {
     }
     recorder = spawn('adb', ['shell','screenrecord','--size','320x568','--bit-rate','750000','--time-limit','180',movie], {stdio:'ignore'});
     finished = new Promise(resolve => recorder.once('close', resolve));
+    if (suite === 'damage') {
+      await playOperations(cdp,trace);
+      return;
+    }
     if (suite === 'operations') {
       const {campaignSaves} = createRequire(import.meta.url)('./test-opening-operations.cjs');
       const {port}=campaignSaves();
@@ -289,11 +296,11 @@ save('device.json',{kind:'Android Virtual Device',sdk:adb('shell','getprop','ro.
   model:adb('shell','getprop','ro.product.model'), webview:adb('shell','dumpsys','webviewupdate'),
   size:adb('shell','wm','size'), density:adb('shell','wm','density')});
 try {
-  if (suite !== 'operations') {
+  if (suite === 'opening' || suite === 'all') {
     await run(baseline,'baseline-074',false);
     adb('uninstall',app);
   }
-  await run(candidate,suite === 'operations' ? 'operations' : 'opening',true);
+  await run(candidate,suite === 'all' ? 'opening' : suite,true);
   console.log('PASS installed Android suite:',suite);
 } finally {
   writeFileSync(join(directory,'android.log'),adb('logcat','-d','-t','1000'));

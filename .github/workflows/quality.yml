@@ -53,7 +53,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        suite: [opening, operations]
+        suite: [opening, operations, damage]
     steps:
       - uses: actions/checkout@v4
         with:
