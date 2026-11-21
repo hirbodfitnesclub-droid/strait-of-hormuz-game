@@ -84,26 +84,32 @@ async function tapControl(cdp, trace, selector) {
     if (!el || el.disabled || !el.getClientRects().length) return null;
     el.scrollIntoView({block:'nearest'});
     const b = el.getBoundingClientRect();
-    return {x:b.left+b.width/2,y:b.top+b.height/2};
+    const x=b.left+b.width/2, y=b.top+b.height/2;
+    const scale=window.devicePixelRatio*(window.visualViewport?.scale ?? 1);
+    return {x,y,deviceX:Math.round(x*scale),deviceY:Math.round(y*scale),active:window.__gamesync3d.state.opening.activeSeconds};
   })()`), 30000);
-  trace.touches.push({selector,...point,active:await cdp.evaluate('window.__gamesync3d.state.opening.activeSeconds')});
-  await cdp.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[point]});
-  await cdp.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});
+  trace.touches.push({selector,...point});
+  adb('shell','input','tap',String(point.deviceX),String(point.deviceY));
 }
 
 async function reopenCheckpoint(cdp, snapshot) {
-  const {identifier} = await cdp.send('Page.addScriptToEvaluateOnNewDocument',{source:`{
+  // Finish the live page's unload writes before seeding storage. A local stylesheet
+  // shares the game's origin and has no application, lifecycle listener or autosave.
+  const urls=await cdp.evaluate("({game:location.href,asset:document.querySelector('link[rel=stylesheet]').href})");
+  assert.equal(new URL(urls.game).origin,new URL(urls.asset).origin);
+  await cdp.send('Page.navigate',{url:urls.asset});
+  await until(() => cdp.evaluate(`location.href === ${JSON.stringify(urls.asset)} && !window.__gamesync3d`));
+  const restoredSecond = await cdp.evaluate(`(() => {
     const s=${JSON.stringify(snapshot)};
     s.lastSavedAt=Date.now();
     localStorage.setItem('hormuz-game-v2',JSON.stringify({version:2,state:s}));
-  }`});
-  // Wait for destruction of the old document as well as readiness of the restored world.
-  const originalNavigation = await cdp.evaluate('performance.timeOrigin');
-  await cdp.send('Page.reload',{});
-  await until(() => cdp.evaluate(`performance.timeOrigin !== ${originalNavigation} &&
-    window.__gamesync3d?.perfInfo().calls && !!document.querySelector('.map-view-toggle:not(:disabled)') &&
+    return JSON.parse(localStorage.getItem('hormuz-game-v2')).state.opening.activeSeconds;
+  })()`);
+  assert.equal(restoredSecond,snapshot.opening.activeSeconds);
+  await cdp.send('Page.navigate',{url:urls.game});
+  await until(() => cdp.evaluate(`window.__gamesync3d?.perfInfo().calls &&
+    !!document.querySelector('.map-view-toggle:not(:disabled)') && !document.querySelector('.battle-result-dialog') &&
     window.__gamesync3d.state.phase === 'peace' && window.__gamesync3d.state.wave === ${snapshot.wave}`));
-  await cdp.send('Page.removeScriptToEvaluateOnNewDocument',{identifier});
 }
 
 async function playOperations(cdp, trace) {
@@ -177,7 +183,7 @@ async function run(apk, label, opening) {
       if (!s || s.active === previous) return false;
       previous = s.active;
       trace.samples.push(s);
-      if (s.action && !beforeManualStart) {
+      if (s.firstToll === 12 && !beforeManualStart) {
         beforeManualStart = await cdp.evaluate('window.__gamesync3d.state');
         save('manual-branch-source',beforeManualStart);
       }
@@ -203,10 +209,11 @@ async function run(apk, label, opening) {
     await reopenCheckpoint(cdp,beforeManualStart);
     await tapControl(cdp,trace,'.idle-battle-start');
     const battle = await until(async () => { const s=await read(); return s?.phase === 'battle' && s; });
-    assert.ok(battle.started >= 120 && battle.started <= 180,'voluntary start must occur within the observed interval');
     trace.manualStart=battle;
+    assert.ok(battle.started >= 120,'native start must follow eligibility');
     screenshot(label + '-battle');
     await playOperations(cdp,trace);
+    assert.ok(battle.started <= 180,'voluntary start must occur within the observed interval');
   } finally {
     save(label + '.json',trace);
     cdp.close();
