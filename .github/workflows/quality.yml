@@ -50,6 +50,10 @@ jobs:
     needs: verify
     runs-on: ubuntu-latest
     timeout-minutes: 35
+    strategy:
+      fail-fast: false
+      matrix:
+        suite: [opening, operations]
     steps:
       - uses: actions/checkout@v4
         with:
@@ -91,12 +95,12 @@ jobs:
           disk-size: 4096M
           ram-size: 3072M
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -no-snapshot
-          script: node scripts/test-opening-android.mjs "$RUNNER_TEMP/hormuz-baseline/hormuz-0.7.4-debug.apk" candidate/app-debug.apk "$RUNNER_TEMP/hormuz-android"
+          script: node scripts/test-opening-android.mjs "$RUNNER_TEMP/hormuz-baseline/hormuz-0.7.4-debug.apk" candidate/app-debug.apk "$RUNNER_TEMP/hormuz-android" ${{ matrix.suite }}
       - name: Retain Android run traces, screenshots and device logs
         if: ${{ !cancelled() && github.event_name == 'workflow_dispatch' }}
         uses: actions/upload-artifact@v5
         with:
-          name: android-opening-evidence-${{ github.sha }}
+          name: android-${{ matrix.suite }}-evidence-${{ github.sha }}
           path: ${{ runner.temp }}/hormuz-android/
           if-no-files-found: warn
           retention-days: 14

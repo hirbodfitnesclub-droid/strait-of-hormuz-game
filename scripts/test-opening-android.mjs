@@ -7,8 +7,9 @@ import { join } from 'node:path';
 import { createRequire } from 'node:module';
 import { setTimeout as delay } from 'node:timers/promises';
 
-const [baseline, candidate, directory] = process.argv.slice(2);
+const [baseline, candidate, directory, suite = 'all'] = process.argv.slice(2);
 assert.ok(directory && candidate && baseline, 'Supply baseline APK, candidate APK and evidence directory');
+assert.ok(['all','opening','operations'].includes(suite));
 const app = 'ir.hormuz.sovereign';
 mkdirSync(directory, { recursive: true });
 const adb = (...args) => execFileSync('adb', args, { encoding: 'utf8', timeout: 90000, maxBuffer: 16000000 }).trim();
@@ -78,18 +79,24 @@ function sample() {
     action:box?.width && !button.disabled ? {x:box.left+box.width/2,y:box.top+box.height/2} : null};
 }
 
-async function tapControl(cdp, trace, selector, timeout = 30000) {
+async function tapControl(cdp, trace, selector, timeout = 30000, webviewTouch = false) {
   const point = await until(() => cdp.evaluate(`(() => {
     const el = document.querySelector(${JSON.stringify(selector)});
     if (!el || el.disabled || !el.getClientRects().length) return null;
-    el.scrollIntoView({block:'nearest'});
+    el.scrollIntoView({block:'center',behavior:'instant'});
     const b = el.getBoundingClientRect();
-    const x=b.left+b.width/2, y=b.top+b.height/2;
+    const x=b.left+b.width/2, y=b.top+b.height*0.4;
+    if (!el.contains(document.elementFromPoint(x,y))) return null;
     const scale=window.devicePixelRatio*(window.visualViewport?.scale ?? 1);
     return {x,y,deviceX:Math.round(x*scale),deviceY:Math.round(y*scale),active:window.__gamesync3d.state.opening.activeSeconds};
   })()`), timeout);
-  trace.touches.push({selector,...point});
-  adb('shell','input','tap',String(point.deviceX),String(point.deviceY));
+  trace.touches.push({selector,...point,source:webviewTouch ? 'WebView touch' : 'ADB touch'});
+  if (webviewTouch) {
+    await cdp.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[{x:point.x,y:point.y}]});
+    await cdp.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});
+  } else {
+    adb('shell','input','tap',String(point.deviceX),String(point.deviceY));
+  }
 }
 
 async function reopenCheckpoint(cdp, snapshot) {
@@ -133,8 +140,17 @@ async function playOperations(cdp, trace) {
     await until(async () => (await state('phase')) === 'battle');
     await finish(wave,true);
     if (wave < 3) {
-      await tapControl(cdp,trace,'.battle-result-dialog .primary-action');
-      await until(() => cdp.evaluate("!document.querySelector('.battle-result-dialog')"));
+      const reportId=trace.operations.at(-1).id;
+      const pending=() => cdp.evaluate(`!!document.querySelector('.battle-result-dialog') &&
+        window.__gamesync3d.state.idle.lastBattle?.id === ${JSON.stringify(reportId)} &&
+        !window.__gamesync3d.state.idle.lastBattle?.claimed`);
+      // Only retry while this same receipt is outstanding. Scrolling a long sheet
+      // or its opening animation can consume a native tap at the edge of the viewport.
+      for (let attempt=0; attempt<3 && await pending(); attempt++) {
+        await tapControl(cdp,trace,'.battle-result-dialog .primary-action',30000,attempt === 2);
+        await delay(1200);
+      }
+      await until(() => cdp.evaluate("!document.querySelector('.battle-result-dialog')"),30000);
       assert.equal(await cdp.evaluate("document.querySelectorAll('[role=dialog]').length"),0);
     }
   }
@@ -189,6 +205,15 @@ async function run(apk, label, opening) {
     }
     recorder = spawn('adb', ['shell','screenrecord','--size','320x568','--bit-rate','750000','--time-limit','180',movie], {stdio:'ignore'});
     finished = new Promise(resolve => recorder.once('close', resolve));
+    if (suite === 'operations') {
+      const {campaignSaves} = createRequire(import.meta.url)('./test-opening-operations.cjs');
+      const {port}=campaignSaves();
+      await reopenCheckpoint(cdp,port);
+      await tapControl(cdp,trace,'.idle-battle-start');
+      trace.manualStart=await until(async () => { const s=await read(); return s?.phase === 'battle' && s; });
+      await playOperations(cdp,trace);
+      return;
+    }
     let previous = initial.active;
     let beforeManualStart;
     const observations = new Set();
@@ -227,8 +252,8 @@ async function run(apk, label, opening) {
     trace.manualStart=battle;
     assert.ok(battle.started >= 120,'native start must follow eligibility');
     screenshot(label + '-battle');
-    await playOperations(cdp,trace);
     assert.ok(battle.started <= 180,'voluntary start must occur within the observed interval');
+    if (suite === 'all') await playOperations(cdp,trace);
   } finally {
     save(label + '.json',trace);
     screenshot(label + '-last');
@@ -264,10 +289,12 @@ save('device.json',{kind:'Android Virtual Device',sdk:adb('shell','getprop','ro.
   model:adb('shell','getprop','ro.product.model'), webview:adb('shell','dumpsys','webviewupdate'),
   size:adb('shell','wm','size'), density:adb('shell','wm','density')});
 try {
-  await run(baseline,'baseline-074',false);
-  adb('uninstall',app);
-  await run(candidate,'opening',true);
-  console.log('PASS paired APK installation, WebView rendering, stall, natural restart and manual start on AVD');
+  if (suite !== 'operations') {
+    await run(baseline,'baseline-074',false);
+    adb('uninstall',app);
+  }
+  await run(candidate,suite === 'operations' ? 'operations' : 'opening',true);
+  console.log('PASS installed Android suite:',suite);
 } finally {
   writeFileSync(join(directory,'android.log'),adb('logcat','-d','-t','1000'));
 }
