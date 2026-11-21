@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 import {
   ArrowLeft, Award, Bell, Check, ChevronLeft, CircleHelp,
@@ -689,7 +690,16 @@ export default function Game() {
       {!modalOpen && !targeting && !paused && activeBattle && <div className="command-bar" onPointerDown={e => e.stopPropagation()} onClick={e => e.stopPropagation()}>
         <div className="support-actions" aria-label="مهارت‌های پشتیبانی">{spells.map(spell => {
           const cooldown = game.cooldowns[spell.id], ready = activeBattle && cooldown <= 0;
-          return <button key={spell.id} className={`support-button spell-${spell.id} ${ready ? "ready" : ""} ${cooldown > 0 ? "cooling" : ""}`} onClick={() => activateSpell(spell.id)} aria-label={`${spell.name}${cooldown > 0 ? `، شارژ ${fa(Math.ceil(cooldown))} ثانیه` : ""}`} aria-disabled={cooldown > 0} title={`${spell.name} · ${spell.key}`}><span className="support-icon">{cooldown > 0 && <svg viewBox="0 0 44 44" className="cooldown-ring"><circle cx="22" cy="22" r="20" style={{ strokeDashoffset: `${126 * (1 - cooldown / spell.cooldown)}` }} /></svg>}{cooldown > 0 && <b className="cooldown-count">{fa(Math.ceil(cooldown))}</b>}</span><span>{spell.short}</span></button>;
+          return <button key={spell.id} className={`support-button spell-${spell.id} ${ready ? "ready" : ""} ${cooldown > 0 ? "cooling" : ""}`} onClick={() => activateSpell(spell.id)} aria-label={`${spell.name}${cooldown > 0 ? `، شارژ ${fa(Math.ceil(cooldown))} ثانیه` : ""}`} aria-disabled={cooldown > 0} title={`${spell.name} · ${spell.key}`}>
+            <span className="support-icon">
+              <Image className="spell-art" src={`/assets/workshop/hud/${spell.id}.webp`} width={96} height={96} loading="eager" alt="" draggable={false} unoptimized />
+              {cooldown > 0 && <>
+                <svg viewBox="0 0 44 44" className="cooldown-ring" aria-hidden="true"><circle cx="22" cy="22" r="20" style={{ strokeDashoffset: 126 * (1 - cooldown / spell.cooldown) }} /></svg>
+                <b className="cooldown-count">{fa(Math.ceil(cooldown))}</b>
+              </>}
+            </span>
+            <span>{spell.short}</span>
+          </button>;
         })}{!focus && <button className={`support-button boost-button ${game.idle.boostRemaining > 0 ? "ready" : ""}`} onClick={activateProduction} disabled={game.idle.boostCharges <= 0 && game.idle.boostRemaining <= 0} aria-label="تقویت تولید؛ ۶۰ ثانیه تولید دوبرابر" title="تقویت تولید · ۶۰ ثانیه ×۲"><span className="support-icon"><Zap size={21} /></span><span>{game.idle.boostRemaining > 0 ? `تولید ×۲ · ${fa(Math.ceil(game.idle.boostRemaining))}ث` : `تقویت تولید · ${fa(game.idle.boostCharges)} شارژ`}</span></button>}</div>
       </div>}
       {targeting && <div className="targeting-prompt" role="status"><span className={targeting}><Crosshair size={22} /></span><div><strong>{targeting === "strike" ? "کجا را هدف بگیریم؟" : "ناو به کجا برود؟"}</strong><p>{targeting === "strike" ? "روی محدودهٔ دلخواه در آبراه بزنید." : "یک نقطه روی آب انتخاب کنید."}</p></div><button onClick={() => setTargeting(null)} aria-label="لغو هدف‌گیری"><X size={19} /></button></div>}

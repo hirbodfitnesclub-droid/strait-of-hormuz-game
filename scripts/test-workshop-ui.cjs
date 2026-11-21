@@ -173,7 +173,34 @@ async function main() {
       assert.ok(source.endsWith('/' + file), 'battle control must show ' + file + ', found ' + source);
     }
     await checkBattleGlyph('pause.webp');
+    for (const spell of ['strike', 'emp', 'overdrive']) {
+      const art = page.locator('.spell-' + spell + ' .support-icon img.spell-art');
+      await art.waitFor();
+      const image = await art.evaluate(async el => {
+        await el.decode();
+        const rect = el.getBoundingClientRect();
+        return {path:new URL(el.currentSrc).pathname, width:rect.width, height:rect.height};
+      });
+      assert.equal(image.path, '/assets/workshop/hud/' + spell + '.webp');
+      assert.ok(image.width > 0 && image.height > 0, spell + ' artwork must be visible');
+    }
     await inspect('battle');
+    for (const spell of ['emp', 'overdrive', 'strike']) {
+      const button = page.locator('.spell-' + spell);
+      await button.click();
+      if (spell === 'strike') {
+        await page.locator('.targeting-prompt').waitFor();
+        const sea = await page.locator('.game-map canvas').boundingBox();
+        assert.ok(sea, 'targeting must keep the map available');
+        await page.touchscreen.tap(sea.x + sea.width * 0.55, sea.y + sea.height * 0.66);
+        await page.locator('.targeting-prompt').waitFor({state:'hidden'});
+      }
+      await button.locator('.cooldown-count').waitFor();
+      assert.equal(await button.getAttribute('aria-disabled'), 'true');
+      assert.ok(await button.locator('.cooldown-ring').isVisible());
+      assert.ok(await button.locator('img.spell-art').isVisible());
+    }
+    await inspect('cooldowns');
     await pause.click();
     await page.locator('.main-battle-action.is-paused:visible').waitFor();
     const oldSpeed = await speed.getAttribute('aria-label');

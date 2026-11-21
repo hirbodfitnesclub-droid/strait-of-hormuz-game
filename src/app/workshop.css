@@ -180,12 +180,9 @@
 .workshop .support-actions { display:flex; direction:ltr; align-items:flex-end; justify-content:center; gap:clamp(5px,3vw,15px); }
 .workshop .support-button { --token-size:clamp(69px,21.4vw,98px); flex:none; display:grid; justify-items:center; align-content:end; width:var(--token-size); min-width:0; min-height:0; gap:0; text-align:center; font-weight:900; }
 .workshop.focus-off .support-button { --token-size:clamp(48px,18vw,77px); }
-.workshop .support-button .support-icon { position:relative; width:var(--token-size); height:var(--token-size); background:var(--token-image) center / contain no-repeat; border:0; border-radius:50%; box-shadow:none; filter:drop-shadow(0 3px 1px #51361eb8); animation:none; }
-.workshop .spell-strike { --token-image:url('/assets/workshop/hud/strike.webp'); }
-.workshop .spell-emp { --token-image:url('/assets/workshop/hud/emp.webp'); }
-.workshop .spell-overdrive { --token-image:url('/assets/workshop/hud/overdrive.webp'); }
-.workshop .boost-button { --token-image:var(--skin-green); }
-.workshop .boost-button .support-icon { color:#fff0ab; }
+.workshop .support-button .support-icon { position:relative; width:var(--token-size); height:var(--token-size); background:none; border:0; border-radius:50%; box-shadow:none; filter:drop-shadow(0 3px 1px #51361eb8); animation:none; }
+.workshop .support-icon .spell-art { display:block; width:100%; height:100%; object-fit:contain; pointer-events:none; }
+.workshop .boost-button .support-icon { color:#fff0ab; background:var(--skin-green) center / contain no-repeat; }
 .workshop .support-button > span:last-child { z-index:1; position:relative; margin-top:-8px; padding:2px 8px 3px; border:1px solid #e2b86c; border-radius:8px; background:#133a48; color:#fff1d2; line-height:1.2; font-size:12px; direction:rtl; text-shadow:0 1px #222; }
 .workshop .support-button.cooling .support-icon { filter:saturate(.48) brightness(.82) drop-shadow(0 3px 1px #51361eb8); }
 .workshop .support-button .support-icon .cooldown-ring { opacity:1; inset:6%; width:88%; height:88%; }
