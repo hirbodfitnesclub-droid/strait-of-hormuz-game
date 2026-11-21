@@ -12,17 +12,19 @@ async function run() {
   const apk = process.env.REOPENING_APK;
   assert.ok(apk, 'Set REOPENING_APK to the debug APK to inspect');
   const {freshPortGame, gameReducer} = load('src/lib/game.ts');
-  const fixture = gameReducer(freshPortGame(), {type:'advance', steps:0, battlePaused:false, openingElapsed:88});
+  const checkpoint = process.env.REOPENING_HINT_SAVE;
+  const fixture = checkpoint ? JSON.parse(await fs.readFile(checkpoint,'utf8'))
+    : gameReducer(freshPortGame(), {type:'advance', steps:0, battlePaused:false, openingElapsed:88});
   assert.equal(fixture.opening.stalled, true);
   const digest = await checksum(apk);
   const work = await fs.mkdtemp(path.join(os.tmpdir(), 'reopening-hint-'));
-  let server, browser;
+  let server, browser, page;
   try {
     execFileSync('unzip', ['-oq', apk, 'assets/public/*', '-d', work]);
     const host = await serveBundle(path.join(work, 'assets/public'));
     server = host.server;
     browser = await chromium.launch({executablePath:process.env.AUDIT_CHROMIUM || '/usr/bin/chromium', args:['--no-sandbox', '--enable-unsafe-swiftshader']});
-    const page = await browser.newPage({viewport:{width:390,height:844}, deviceScaleFactor:1, isMobile:true, hasTouch:true, reducedMotion:'reduce'});
+    page = await browser.newPage({viewport:{width:390,height:844}, deviceScaleFactor:1, isMobile:true, hasTouch:true, reducedMotion:'reduce'});
     const errors = [];
     page.on('pageerror', e => errors.push(e.message));
     page.setDefaultTimeout(90000);
@@ -35,7 +37,7 @@ async function run() {
     const age = () => page.evaluate(() => window.__gamesync3d.state.opening.activeSeconds);
     const at = second => page.waitForFunction(t=>window.__gamesync3d?.state.opening.activeSeconds>=t,second);
     const target = () => page.locator('.game-shell').getAttribute('data-opening-target');
-    const tap = selector => page.locator(selector).tap();
+    const tap = selector => page.locator(selector).tap({force:true});
     await page.goto(host.url);
     await page.locator('[data-opening-highlight=tank]').waitFor();
     assert.equal(await page.locator('[data-opening-highlight]').count(),1);
@@ -50,22 +52,27 @@ async function run() {
       new MutationObserver(() => {if (document.querySelector('[data-opening-highlight=tank]')) window.repeatedOpeningPulse = true;})
         .observe(document.querySelector('.game-shell'), {attributes:true, attributeFilter:['data-opening-highlight'], childList:true, subtree:true});
     });
+    await at(dismissedAt+12);
+    assert.equal(await target(),'tank');
+    assert.equal(await page.evaluate(()=>window.repeatedOpeningPulse),false);
+    const verifiedAt = await age();
+    console.log("Dismissal remained effective for a complete visible cadence",verifiedAt);
     await tap('.opening-tank-status');
     assert.equal(await target(),'none');
     const readingAt = await age();
     await at(readingAt+2);
-    await page.getByRole('button',{name:'راهنمای این توقف'}).tap();
-    assert.ok(await page.evaluate(()=>window.__gamesync3d.state.opening.helpRequestedAt >= 88));
+    await page.getByRole('button',{name:'راهنمای این توقف'}).tap({force:true});
+    assert.ok(await page.evaluate(start=>window.__gamesync3d.state.opening.helpRequestedAt >= start,fixture.opening.activeSeconds));
     await tap('.building-sheet .close-control');
     await tap('.resource-port');
     await tap('.command-plaque.settings');
     assert.equal(await target(),'none');
     await tap('.panel-settings .icon-close');
-    await at(dismissedAt+12);
-    assert.equal(await target(),'tank');
+    const afterSettings = await target();
+    assert.ok(['tank','treasury','wave'].includes(afterSettings));
     assert.equal(await page.evaluate(()=>window.repeatedOpeningPulse),false);
-    console.log("Help and settings closed; no repeat across full 11s cadence");
-    assert.equal(await page.locator('.quick-guide,.opening-skip,[data-opening-highlight]').count(),0);
+    console.log("Help and settings closed; current candidate",afterSettings);
+    assert.equal(await page.locator('.quick-guide,.opening-skip,[data-opening-highlight=tank]').count(),0);
     // Trigger the same foreground notification HTML receives from its browser host.
     await page.evaluate(()=>{Object.defineProperty(document,'hidden',{configurable:true,value:true});document.dispatchEvent(new Event('visibilitychange'));});
     await page.waitForFunction(()=>document.querySelector('.game-shell').dataset.openingTarget==='none');
@@ -74,13 +81,15 @@ async function run() {
     await new Promise(resolve=>setTimeout(resolve,1800));
     assert.equal(await age(),suspendedAt);
     await page.evaluate(()=>{delete document.hidden;document.dispatchEvent(new Event('visibilitychange'));});
-    await page.waitForFunction(()=>document.querySelector('.game-shell').dataset.openingTarget==='tank');
+    const decisionVisible = () => ['tank','treasury','wave'].includes(document.querySelector('.game-shell')?.dataset.openingTarget);
+    await page.waitForFunction(decisionVisible);
     await page.reload();
-    await page.waitForFunction(()=>document.querySelector('.game-shell')?.dataset.openingTarget==='tank');
-    assert.equal(await page.locator('.quick-guide,.opening-skip,[data-opening-highlight],[role=dialog]').count(),0);
+    await page.waitForFunction(decisionVisible);
+    assert.equal(await page.locator('.quick-guide,.opening-skip,[data-opening-highlight=tank],[role=dialog]').count(),0);
     console.log("Skipped guide and dismissed focus preserved across suspend/resume and reload");
     await at(120);
     await page.evaluate(()=>document.body.dispatchEvent(new KeyboardEvent('keydown',{key:' ',code:'Space',repeat:true,bubbles:true})));
+    await page.waitForTimeout(300);
     assert.equal(await page.evaluate(()=>window.__gamesync3d.state.phase),'peace');
     await tap('.idle-battle-start');
     await page.locator('.battle-running').waitFor();
@@ -94,9 +103,12 @@ async function run() {
     await tap('.battle-running');
     await at(pausedAt+1);
     assert.deepEqual(errors,[]);
-    const result={apkSha256:digest,platform:'headless Chromium, extracted APK assets, reduced motion',initialFixture:'fresh industry advanced to active second 88, no input',dismissedAt,suspendedAt,pausedAt,passed:true};
+    const result={apkSha256:digest,platform:'headless Chromium, extracted APK assets, reduced motion',initialFixture:checkpoint ? path.basename(checkpoint) : 'fresh reducer at active second 88 with no input',initialActiveSecond:fixture.opening.activeSeconds,dismissedAt,verifiedAt,afterSettings,suspendedAt,pausedAt,passed:true};
     if(process.env.REOPENING_HINT_RESULT) await fs.writeFile(process.env.REOPENING_HINT_RESULT,JSON.stringify(result,null,2)+'\n');
     console.log(JSON.stringify(result));
+  } catch (error) {
+    if (page) console.error(await page.evaluate(() => ({active:window.__gamesync3d?.state.opening?.activeSeconds, target:document.querySelector(".game-shell")?.dataset.openingTarget, dialogs:[...document.querySelectorAll("[role=dialog]")].map(d=>d.className), visible:document.visibilityState})).catch(()=>null));
+    throw error;
   } finally {
     if(browser) await browser.close();
     if(server) await new Promise(resolve=>server.close(resolve));

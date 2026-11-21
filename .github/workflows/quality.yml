@@ -48,6 +48,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 24
+          cache: npm
+      - run: npm ci
       - uses: actions/download-artifact@v5
         with:
           name: hormuz-debug-${{ github.sha }}
@@ -84,7 +86,11 @@ jobs:
     if: github.event_name == 'workflow_dispatch'
     needs: verify
     runs-on: ubuntu-latest
-    timeout-minutes: 40
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        suite: [harbor, workshop, lifecycle]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -100,10 +106,15 @@ jobs:
         env:
           AUDIT_CHROMIUM: /usr/bin/google-chrome
           TEST_URL: http://127.0.0.1:3310
+          SUITE: ${{ matrix.suite }}
         run: |
           unzip -q candidate/app-debug.apk 'assets/public/*'
           mv assets/public out
           python3 -m http.server 3310 --bind 127.0.0.1 --directory out > "$RUNNER_TEMP/game-http.log" 2>&1 &
           server_pid=$!
           trap 'kill "$server_pid"' EXIT
-          npm run test:mobile
+          case "$SUITE" in
+            harbor) node scripts/test-auto-resume.cjs && node scripts/test-mobile-ui.cjs ;;
+            workshop) node scripts/test-workshop-ui.cjs && node scripts/test-workshop-ui.cjs --battle-only ;;
+            lifecycle) node scripts/test-offline.cjs && node scripts/test-lifecycle.cjs && node scripts/test-input-recovery.cjs && node scripts/test-world-init.cjs ;;
+          esac

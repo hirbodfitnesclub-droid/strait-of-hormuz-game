@@ -125,10 +125,10 @@ async function main() {
         return {
           labels: [...el.querySelectorAll('dt')].map(term => term.textContent.trim()),
           values: [...el.querySelectorAll('dd')].map(amount => amount.textContent.trim()),
-          expected: ['$' + number.format(Math.floor(state.cash)), number.format(Math.floor(state.ammo))],
+          expected: [number.format(Math.floor(state.cash)) + ' اعتبار بندر', number.format(Math.floor(state.ammo))],
         };
       });
-      assert.deepEqual(balances.labels, ['خزانه', 'مهمات']);
+      assert.deepEqual(balances.labels, ['اعتبار قابل خرج', 'مهمات']);
       assert.deepEqual(balances.values, balances.expected, 'cash and ammunition must show the current game totals');
       await page.getByRole('button', {name:/^مشاهده و ارتقای /}).first().click();
       await allArtLoaded('.building-sheet .building-main-sprite');

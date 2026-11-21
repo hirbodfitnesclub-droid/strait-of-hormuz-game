@@ -1132,7 +1132,10 @@ export class GameSync3D {
       const ready = glyphSprite('▶', '#e6c87a', 4.4);
       ready.position.y = 5.9;
       scanner.add(ready);
-      const stalled = glyphSprite('Ⅱ', '#ffc555', 5);
+      const stalled = glyphSprite(ctx => {
+        ctx.fillRect(43, 39, 15, 50);
+        ctx.fillRect(70, 39, 15, 50);
+      }, '#ffc555', 5);
       stalled.name = 'well-stalled';
       stalled.position.set(BUILDINGS.oil.x, 10, BUILDINGS.oil.z);
       stalled.userData.pick = {type: 'building', id: 'tank'};

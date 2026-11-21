@@ -36,10 +36,12 @@ function readScene() {
       screen:scene.openingAnchor(landmark,false)};
   }
   const radar = scene.openingSignals;
+  const texture = radar.stalled.material.map.image.getContext('2d');
+  const pausePixels = [50,64,77].map(x=>Array.from(texture.getImageData(x,64,1,1).data));
   return {
     active:state.opening.activeSeconds, phase:state.phase, oceanDrawCalls:scene.perfInfo().calls,
     oil:state.oil, generated:state.opening.generated, blocked:state.opening.stalled,
-    pumpArm:pump.obj.rotation.z, stalledIndicator:radar.stalled.visible, radarAngle:radar.antenna.rotation.y,
+    pumpArm:pump.obj.rotation.z, stalledIndicator:radar.stalled.visible, pausePixels, radarAngle:radar.antenna.rotation.y,
     radarReady:radar.ready.visible, radarScreen:scene.openingAnchor({kind:'radar'},false),
     oilExport:state.opening.lastExportIncome, ownCargo:port.tanker?.load, tankerStage:port.tanker?.stage,
     tanker:ship('tanker',{kind:'tanker',id:port.cycles}),
@@ -166,28 +168,46 @@ async function runCase(browser, second) {
       return b && !b.disabled;
     },null,{timeout:50000});
     console.log('interactive at checkpoint',second);
+    if (second) {
+      const previous=run.frames[0].radarAngle;
+      await page.waitForFunction(angle=>window.__gamesync3d.openingSignals.antenna.rotation.y>angle+.02,previous,{timeout:20000});
+      run.frames[0]=await page.evaluate(readScene);
+    }
     if (!second) {
+      await page.waitForFunction(()=>window.__gamesync3d.state.opening.activeSeconds>=1,null,{timeout:30000});
+      run.frames.push(await page.evaluate(readScene));
       await page.waitForFunction(()=>window.initialHarborTouch.readout || window.__gamesync3d.state.opening.activeSeconds>=6,null,{timeout:65000});
       run.normalCameraTouch=await page.evaluate(()=>window.initialHarborTouch);
       if (run.normalCameraTouch.readout) {
         run.inspections.push({target:{kind:'merchant',id:1},cameraFocused:false,text:run.normalCameraTouch.readout.text});
         await page.screenshot({path:path.join(out,'world-merchant.png')});
       } else {
-        const merchant=await inspect(page,{kind:'merchant',id:1},/عوارض عبور/,run);
-        await merchant.getByRole('button',{name:'بستن اطلاعات نقشه'}).tap();
+        await inspect(page,{kind:'merchant',id:1},/عوارض عبور/,run);
+        await page.evaluate(()=>window.stopWorldProbeTracking?.());
+        const controls=page.getByRole('button',{name:'کنترل نمای نقشه'});
+        await controls.tap();
+        await page.getByRole('button',{name:'بازنشانی نما'}).tap();
+        await controls.tap();
+        await page.waitForFunction(()=>!window.__map3d.fly,null,{timeout:35000});
+        run.playerResetCamera=true;
       }
       const own=await inspect(page,{kind:'tanker',id:0},/فروش نفت/,run);
       assert.match(await own.innerText(),/محموله/);
-      await own.getByRole('button',{name:'بستن اطلاعات نقشه'}).tap();
       await page.waitForFunction(()=>window.seenFirstReceiptOnHull,null,{timeout:40000,polling:70});
     }
-    await page.waitForTimeout(850);
-    run.frames.push(await page.evaluate(readScene));
+    if (second) {
+      await page.waitForFunction(angle=> Math.abs(window.__gamesync3d.openingSignals.antenna.rotation.y-angle)>.16,
+        run.frames[0].radarAngle,{timeout:30000});
+      run.frames.push(await page.evaluate(readScene));
+    }
     const [a,b]=run.frames;
     assert.notEqual(a.radarAngle,b.radarAngle,'the actual antenna must turn in both pump states');
     assert.equal(b.stalledIndicator,second===75,'amber marker must follow a real stall');
     if (second===75) {
       assert.equal(b.generated,0); assert.equal(a.pumpArm,b.pumpArm);
+      const [left,gap,right]=b.pausePixels;
+      assert.deepEqual(left,right,'both pause bars must have the same color');
+      assert.ok(left[0]>200 && left[1]>120 && gap[0]<32 && gap[1]<64,'two separated amber bars must exist in the real sprite texture');
       await page.evaluate(()=>{
         const oil=window.__gamesync3d.buildings.get('oil').obj.position;
         window.__map3d.flyTo(oil.x,oil.z,70,.16);
@@ -224,8 +244,21 @@ async function runCase(browser, second) {
   const browser=await chromium.launch({executablePath:process.env.AUDIT_CHROMIUM || '/usr/bin/chromium',
     args:['--no-sandbox','--enable-unsafe-swiftshader']});
   try {
-    for (const second of [0,75,140]) await runCase(browser,second);
-    report.ok=true;
+    const cases=(process.env.OPENING_WORLD_CASES || '0,75,140').split(',').map(Number);
+    const reportPath=path.join(out,'world-inspection.json');
+    if (process.env.OPENING_WORLD_CASES && report.apkSha256) {
+      let prior;
+      try { prior=JSON.parse(await fs.readFile(reportPath,'utf8')); } catch { /* first run */ }
+      if (prior?.apkSha256===report.apkSha256) report.runs=prior.runs.filter(run=>!cases.includes(run.restoreSecond??0));
+    }
+    for (const second of cases) {
+      assert.ok([0,75,140].includes(second));
+      try { await runCase(browser,second); }
+      catch (error) { report.runs.at(-1).failure=String(error); console.error('checkpoint',second,error); }
+      report.ok=report.runs.length===3 && report.runs.every(r=>!r.failure);
+      await fs.writeFile(reportPath,JSON.stringify(report,null,2)+'\n');
+    }
+    if (report.runs.some(r=>r.failure)) throw new Error('A world checkpoint failed; see world-inspection.json');
   } catch (error) { report.ok=false; report.error=error.message; throw error; }
   finally {
     await fs.writeFile(path.join(out,'world-inspection.json'),JSON.stringify(report,null,2)+'\n');
