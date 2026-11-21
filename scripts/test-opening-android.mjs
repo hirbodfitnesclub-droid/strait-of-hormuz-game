@@ -73,7 +73,7 @@ function sample() {
   const s = world.state, o = s.opening;
   const button = document.querySelector('.idle-battle-start');
   const box = button?.getBoundingClientRect();
-  return {seed:o?.seed, active:o?.activeSeconds, firstToll:o?.firstTollAt, phase:s.phase,
+  return {seed:o?.seed, active:o?.activeSeconds, firstToll:o?.firstTollAt, phase:s.phase, wave:s.wave,
     started:o?.manualWaveAt, cash:s.cash, bank:s.idle.bank, oil:s.oil, cargo:s.idle.port.tanker?.load,
     stalled:o?.stalled, production:o?.generated, mastery:o?.mastery, ledger:o?.ledger, events:o?.events,
     action:box?.width && !button.disabled ? {x:box.left+box.width/2,y:box.top+box.height/2} : null};
@@ -119,8 +119,25 @@ async function reopenCheckpoint(cdp, snapshot) {
     window.__gamesync3d.state.phase === ${JSON.stringify(snapshot.phase)} && window.__gamesync3d.state.wave === ${snapshot.wave}`));
 }
 
+async function startOperation(cdp, trace, wave, eligibilityTimeout = 30000) {
+  const read = () => cdp.evaluate('(' + sample.toString() + ')()');
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const current = await read();
+    assert.equal(current.wave, wave, 'Touch must target the requested wave');
+    if (current.phase === 'battle') return current;
+    await tapControl(cdp, trace, '.idle-battle-start', eligibilityTimeout, attempt > 0);
+    // Touch delivery can lag behind a slow Android frame. Recheck the wave before
+    // retrying, and use a WebView touch if the original hardware-coordinate tap missed.
+    for (let poll = 0; poll < 8; poll++) {
+      await delay(600);
+      const next = await read();
+      if (next?.wave === wave && next.phase === 'battle') return next;
+    }
+  }
+  throw Error('Android did not accept the start touch for wave ' + wave);
+}
+
 async function playOperations(cdp, trace) {
-  const state = field => cdp.evaluate('window.__gamesync3d?.state?.' + field);
   trace.operations = [];
   async function finish(wave, clean) {
     // The receipt is the assertion. Battle speed is a player preference that can
@@ -134,8 +151,7 @@ async function playOperations(cdp, trace) {
   }
   if (suite !== 'damage') {
     for (let wave = 1; wave <= 3; wave++) {
-      if (wave > 1) await tapControl(cdp,trace,'.idle-battle-start');
-      await until(async () => (await state('phase')) === 'battle');
+      if (wave > 1) await startOperation(cdp,trace,wave);
       await finish(wave,true);
       if (wave < 3) {
         const reportId=trace.operations.at(-1).id;
@@ -158,8 +174,7 @@ async function playOperations(cdp, trace) {
   const {campaignSaves} = createRequire(import.meta.url)('./test-opening-operations.cjs');
   const {damagedThree} = campaignSaves();
   await reopenCheckpoint(cdp,damagedThree);
-  await tapControl(cdp,trace,'.idle-battle-start');
-  await until(async () => (await state('phase')) === 'battle');
+  await startOperation(cdp,trace,3);
   await finish(3,false);
   const balances = () => cdp.evaluate('({cash:window.__gamesync3d.state.cash,steel:window.__gamesync3d.state.steel,damage:window.__gamesync3d.state.openingOperations.dockDamage})');
   const before = await balances();
@@ -216,8 +231,7 @@ async function run(apk, label, opening) {
       const {campaignSaves} = createRequire(import.meta.url)('./test-opening-operations.cjs');
       const {port}=campaignSaves();
       await reopenCheckpoint(cdp,port);
-      await tapControl(cdp,trace,'.idle-battle-start');
-      trace.manualStart=await until(async () => { const s=await read(); return s?.phase === 'battle' && s; });
+      trace.manualStart=await startOperation(cdp,trace,1);
       await playOperations(cdp,trace);
       return;
     }
@@ -254,8 +268,7 @@ async function run(apk, label, opening) {
     trace.branchFrom=beforeManualStart.opening.activeSeconds;
     await reopenCheckpoint(cdp,beforeManualStart);
     // A checkpoint at the first stall precedes the 120-second button by about 50 active seconds.
-    await tapControl(cdp,trace,'.idle-battle-start',180000);
-    const battle = await until(async () => { const s=await read(); return s?.phase === 'battle' && s; });
+    const battle = await startOperation(cdp,trace,1,180000);
     trace.manualStart=battle;
     assert.ok(battle.started >= 120,'native start must follow eligibility');
     screenshot(label + '-battle');
