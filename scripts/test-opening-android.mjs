@@ -158,6 +158,20 @@ async function playOperations(cdp, trace) {
 async function run(apk, label, opening) {
   adb('install', apk);
   adb('shell','am','start','-W','-n',app + '/.MainActivity');
+  // A new AVD can present an Android SystemUI lesson over the entire game. CDP sees
+  // the WebView underneath it, but device taps must go to the unobstructed window.
+  await delay(2500);
+  const file='/data/local/tmp/hormuz-window-' + label + '.xml';
+  const dumped=adb('shell','uiautomator','dump','--compressed',file);
+  const tree=dumped.includes(file) ? adb('shell','cat',file) : '';
+  if (/Viewing full screen/i.test(tree)) {
+    const ok=tree.match(/<node\b(?=[^>]*text="Got it")[^>]*>/i)?.[0];
+    const bounds=ok?.match(/bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/);
+    assert.ok(bounds,'Android full-screen confirmation is covering the game');
+    const [left,top,right,bottom]=bounds.slice(1).map(Number);
+    adb('shell','input','tap',String(Math.round((left+right)/2)),String(Math.round((top+bottom)/2)));
+    save(label + '-system-ui.json',{acknowledged:'Android full-screen confirmation',bounds:bounds.slice(1)});
+  }
   const trace = {apkSha256:createHash('sha256').update(readFileSync(apk)).digest('hex'), samples:[], touches:[]};
   const cdp = await attach();
   const read = () => cdp.evaluate('(' + sample.toString() + ')()');
@@ -217,6 +231,7 @@ async function run(apk, label, opening) {
     assert.ok(battle.started <= 180,'voluntary start must occur within the observed interval');
   } finally {
     save(label + '.json',trace);
+    screenshot(label + '-last');
     cdp.close();
     if (recorder) {
       try {
@@ -237,6 +252,14 @@ assert.ok(!adb('shell','pm','list','packages',app).includes('package:' + app),'R
 // Keep a phone-sized CSS viewport on both APKs and limit the virtual software compositor's pixel workload.
 adb('shell','wm','size','540x960');
 adb('shell','wm','density','220');
+adb('shell','settings','put','secure','immersive_mode_confirmations','confirmed');
+// WindowManager reads this secure setting on startup. Restart the unused virtual device
+// before the paired measurements so both versions get the same system configuration.
+adb('reboot');
+await delay(2500);
+adb('wait-for-device');
+await until(() => adb('shell','getprop','sys.boot_completed') === '1',180000);
+adb('shell','input','keyevent','82');
 save('device.json',{kind:'Android Virtual Device',sdk:adb('shell','getprop','ro.build.version.sdk'),
   model:adb('shell','getprop','ro.product.model'), webview:adb('shell','dumpsys','webviewupdate'),
   size:adb('shell','wm','size'), density:adb('shell','wm','density')});
