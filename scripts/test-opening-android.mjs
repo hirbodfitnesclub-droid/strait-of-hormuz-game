@@ -46,7 +46,7 @@ async function attach() {
   };
   const send = (method, params) => new Promise((resolve, reject) => {
     const id = ++next;
-    const timer = setTimeout(() => { pending.delete(id); reject(Error(method + ' timed out')); }, 20000);
+    const timer = setTimeout(() => { pending.delete(id); reject(Error(method + ' timed out')); }, 60000);
     pending.set(id, msg => {
       clearTimeout(timer);
       pending.delete(id);
@@ -91,6 +91,21 @@ async function tapControl(cdp, trace, selector) {
   await cdp.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});
 }
 
+async function reopenCheckpoint(cdp, snapshot) {
+  const {identifier} = await cdp.send('Page.addScriptToEvaluateOnNewDocument',{source:`{
+    const s=${JSON.stringify(snapshot)};
+    s.lastSavedAt=Date.now();
+    localStorage.setItem('hormuz-game-v2',JSON.stringify({version:2,state:s}));
+  }`});
+  // Wait for destruction of the old document as well as readiness of the restored world.
+  const originalNavigation = await cdp.evaluate('performance.timeOrigin');
+  await cdp.send('Page.reload',{});
+  await until(() => cdp.evaluate(`performance.timeOrigin !== ${originalNavigation} &&
+    window.__gamesync3d?.perfInfo().calls && !!document.querySelector('.map-view-toggle:not(:disabled)') &&
+    window.__gamesync3d.state.phase === 'peace' && window.__gamesync3d.state.wave === ${snapshot.wave}`));
+  await cdp.send('Page.removeScriptToEvaluateOnNewDocument',{identifier});
+}
+
 async function playOperations(cdp, trace) {
   const state = field => cdp.evaluate('window.__gamesync3d?.state?.' + field);
   trace.operations = [];
@@ -120,14 +135,7 @@ async function playOperations(cdp, trace) {
   // The alternate checkpoint was reached through actual reducer actions, including moving the hero.
   const {campaignSaves} = createRequire(import.meta.url)('./test-opening-operations.cjs');
   const {damagedThree} = campaignSaves();
-  const {identifier} = await cdp.send('Page.addScriptToEvaluateOnNewDocument',{source:`{
-    const s=${JSON.stringify(damagedThree)};
-    s.lastSavedAt=Date.now();
-    localStorage.setItem('hormuz-game-v2',JSON.stringify({version:2,state:s}));
-  }`});
-  await cdp.send('Page.reload',{});
-  await until(() => cdp.evaluate("window.__gamesync3d?.perfInfo().calls && document.querySelector('.map-view-toggle:not(:disabled)') && window.__gamesync3d.state.phase === 'peace' && window.__gamesync3d.state.wave === 3 && !document.querySelector('.battle-result-dialog')"));
-  await cdp.send('Page.removeScriptToEvaluateOnNewDocument',{identifier});
+  await reopenCheckpoint(cdp,damagedThree);
   await tapControl(cdp,trace,'.idle-battle-start');
   await until(async () => (await state('phase')) === 'battle');
   await finish(3,false);
@@ -148,8 +156,7 @@ async function run(apk, label, opening) {
   const cdp = await attach();
   const read = () => cdp.evaluate('(' + sample.toString() + ')()');
   const movie = '/sdcard/Download/' + label + '.mp4';
-  const recorder = spawn('adb', ['shell','screenrecord','--size','540x960','--bit-rate','2000000','--time-limit','180',movie], {stdio:'ignore'});
-  const finished = new Promise(resolve => recorder.once('close', resolve));
+  let recorder, finished;
   try {
     const initial = await until(read, 180000);
     screenshot(label + '-first');
@@ -157,16 +164,23 @@ async function run(apk, label, opening) {
     if (!opening) {
       assert.equal(initial.active, undefined);
       await delay(12000);
-      trace.samples.push(await read());
+      trace.samples.push(await until(read));
       return;
     }
+    recorder = spawn('adb', ['shell','screenrecord','--size','320x568','--bit-rate','750000','--time-limit','180',movie], {stdio:'ignore'});
+    finished = new Promise(resolve => recorder.once('close', resolve));
     let previous = initial.active;
+    let beforeManualStart;
     const observations = new Set();
     await until(async () => {
       const s = await read();
       if (!s || s.active === previous) return false;
       previous = s.active;
       trace.samples.push(s);
+      if (s.action && !beforeManualStart) {
+        beforeManualStart = await cdp.evaluate('window.__gamesync3d.state');
+        save('manual-branch-source',beforeManualStart);
+      }
       const marks = [[s.stalled,'stall'], [s.action && s.stalled,'eligible'], [s.active >= 138 && !s.stalled,'resume']];
       for (const [test,name] of marks) if (test && !observations.has(name)) {
         observations.add(name);
@@ -183,34 +197,41 @@ async function run(apk, label, opening) {
     assert.ok(trace.samples.some(s => s.stalled && s.oil === 500 && s.production === 0));
     assert.ok(last.events.some(e => e.kind === 'stall' && e.at === 70));
     assert.ok(last.events.some(e => e.kind === 'natural_recovery' && e.at === 138));
-    assert.ok(last.action);
-    trace.touches.push({active:last.active, ...last.action, target:'start-wave-1'});
-    await cdp.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[last.action]});
-    await cdp.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});
-    const battle = await until(async () => { const s=await read(); return s?.phase === 'battle' && s; }, 15000);
-    assert.ok(battle.started >= 180);
-    trace.samples.push(battle);
+    assert.ok(last.action && beforeManualStart);
+    trace.unattendedThrough=last.active;
+    trace.branchFrom=beforeManualStart.opening.activeSeconds;
+    await reopenCheckpoint(cdp,beforeManualStart);
+    await tapControl(cdp,trace,'.idle-battle-start');
+    const battle = await until(async () => { const s=await read(); return s?.phase === 'battle' && s; });
+    assert.ok(battle.started >= 120 && battle.started <= 180,'voluntary start must occur within the observed interval');
+    trace.manualStart=battle;
     screenshot(label + '-battle');
     await playOperations(cdp,trace);
   } finally {
     save(label + '.json',trace);
     cdp.close();
-    try {
-      // Android finalizes the MP4 on SIGINT. This AVD started empty and runs one player.
-      if (recorder.exitCode === null) {
-        const pid = adb('shell','pidof','-s','screenrecord');
-        if (/^\d+$/.test(pid)) adb('shell','kill','-2',pid);
-      }
-      await finished;
-      adb('pull',movie,join(directory,label + '.mp4'));
-    } catch (error) { console.warn('Screen recording unavailable:',error.message); }
+    if (recorder) {
+      try {
+        // Android finalizes the MP4 on SIGINT. This AVD started empty and runs one player.
+        if (recorder.exitCode === null) {
+          const pid = adb('shell','pidof','-s','screenrecord');
+          if (/^\d+$/.test(pid)) adb('shell','kill','-2',pid);
+        }
+        await finished;
+        adb('pull',movie,join(directory,label + '.mp4'));
+      } catch (error) { console.warn('Screen recording unavailable:',error.message); }
+    }
   }
 }
 
 assert.equal(adb('shell','getprop','ro.kernel.qemu'),'1','Requires a disposable emulator');
 assert.ok(!adb('shell','pm','list','packages',app).includes('package:' + app),'Requires an unused AVD without an existing game');
+// Keep a phone-sized CSS viewport on both APKs and limit the virtual software compositor's pixel workload.
+adb('shell','wm','size','540x960');
+adb('shell','wm','density','220');
 save('device.json',{kind:'Android Virtual Device',sdk:adb('shell','getprop','ro.build.version.sdk'),
-  model:adb('shell','getprop','ro.product.model'), webview:adb('shell','dumpsys','webviewupdate'), size:adb('shell','wm','size')});
+  model:adb('shell','getprop','ro.product.model'), webview:adb('shell','dumpsys','webviewupdate'),
+  size:adb('shell','wm','size'), density:adb('shell','wm','density')});
 try {
   await run(baseline,'baseline-074',false);
   adb('uninstall',app);

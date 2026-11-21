@@ -56,15 +56,6 @@ async function inspect(page, target, expected, run) {
     const hull = target.kind === 'radar' ? scene.openingSignals.scanner
       : scene.ents.get(target.kind === 'merchant' ? 'merchant-'+target.id : 'tanker')?.obj;
     if (!hull) return {absent:true};
-    window.stopWorldProbeTracking?.();
-    if (target.kind === 'merchant') {
-      // Keep the moving target centered between out-of-process touch delivery and
-      // the next rendered frame on software WebGL. Hull, input, clock and UI stay live.
-      window.stopWorldProbeTracking = map.onBeforeFrame(()=>{
-        if (hull.parent) map.flyTo(hull.position.x,hull.position.z,90,.0001);
-      });
-      return {focused:true, cameraTracksHull:true};
-    }
     const canvas = map.renderer.domElement, r = canvas.getBoundingClientRect();
     const a = scene.openingAnchor(target,false);
     const top = a && document.elementFromPoint(r.x+r.width*a.x/100,r.y+r.height*a.y/100);
@@ -79,8 +70,18 @@ async function inspect(page, target, expected, run) {
     const s=window.__gamesync3d, canvas=window.__map3d.renderer.domElement;
     const a=s.openingAnchor(target,false), r=canvas.getBoundingClientRect();
     if (!a) return null;
-    const x=r.left+r.width*a.x/100, y=r.top+r.height*a.y/100;
-    return {x,y,exposed:document.elementFromPoint(x,y)===canvas,cover:document.elementFromPoint(x,y)?.outerHTML.slice(0,240),active:s.state.opening.activeSeconds};
+    const centerX=r.left+r.width*a.x/100, centerY=r.top+r.height*a.y/100;
+    for (const [dx,dy] of [[0,0],[-9,0],[9,0],[0,-9],[0,9],[-14,-7],[14,-7]]) {
+      const x=centerX+dx, y=centerY+dy;
+      if (document.elementFromPoint(x,y)!==canvas) continue;
+      const point={clientX:x,clientY:y};
+      const hit=s.pick(point,canvas);
+      const nearest=hit?null:s.nearbyOpeningLandmark(point,canvas);
+      if (hit?.type!==target.kind && nearest?.kind!==target.kind) continue;
+      if (target.kind==='merchant' && (hit?.id??nearest?.id)!==target.id) continue;
+      return {x,y,exposed:true,picked:hit?'mesh':'touch-radius',active:s.state.opening.activeSeconds};
+    }
+    return {x:centerX,y:centerY,exposed:false,active:s.state.opening.activeSeconds};
   },target);
   run.lastAim={target,plan,point};
   assert.ok(point?.exposed, target.kind+' must have an exposed touch target after camera focus');
@@ -99,44 +100,20 @@ async function inspect(page, target, expected, run) {
     throw error;
   }
   const text=(await card.innerText()).trim();
-  run.inspections.push({target, cameraFocused:plan.focused, cameraTracksHull:!!plan.cameraTracksHull, point, text});
+  run.inspections.push({target, cameraFocused:plan.focused, point, text});
   await page.screenshot({path:path.join(out,'world-'+target.kind+'.png')});
   return card;
 }
 
-// Trigger trusted touch directly from the first unobscured merchant frame. This
-// avoids a multi-second CDP read/compute/click round trip on software WebGL.
-async function firstHarborTouch(page, context) {
-  const cdp=await context.newCDPSession(page);
-  await page.exposeBinding('qaTapMovingHull',async(_,point)=>{
-    await cdp.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[{x:point.x,y:point.y}]});
-    await cdp.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});
-  });
-  await page.addInitScript(()=>{
-    const probe=window.initialHarborTouch={attempts:[],events:[],readout:null};
-    for (const type of ['pointerdown','pointerup']) addEventListener(type,e=>{
-      if (probe.sent) probe.events.push({type,trusted:e.isTrusted,active:window.__gamesync3d?.state?.opening?.activeSeconds});
-    },{capture:true});
-    const tick=()=>{
-      const s=window.__gamesync3d, m=window.__map3d;
-      if (!s || !s.state?.opening || s.state.opening.activeSeconds>16 || probe.readout) return;
-      const card=document.querySelector('aside[aria-label^="عوارض عبور"]');
-      if (card && card.style.visibility==='visible') {
-        probe.readout={text:card.innerText,label:card.getAttribute('aria-label'),active:s.state.opening.activeSeconds};
-        return;
-      }
-      const enabled=document.querySelector('.map-view-toggle:not([disabled])');
-      if (!enabled || !s.ents.get('merchant-1')?.init || probe.sent && performance.now()-probe.sent<1100) return;
-      const a=s.openingAnchor({kind:'merchant',id:1},false), c=m.renderer.domElement, r=c.getBoundingClientRect();
-      if (!a) return;
-      const x=r.left+r.width*a.x/100,y=r.top+r.height*a.y/100;
-      if (document.elementFromPoint(x,y)!==c) return;
-      probe.sent=performance.now();
-      probe.attempts.push({x,y,active:s.state.opening.activeSeconds});
-      window.qaTapMovingHull({x,y}).catch(()=>{});
-    };
-    setInterval(tick,50);
-  });
+// Cold software rendering can take longer to deliver a trusted pointer than the
+// first ship's entire crossing. Hold only the foreground simulation clock while
+// aiming. The unmodified game reducer settles the 12 actual one-second quanta.
+// Render timing, camera, hit tests and pointer delivery remain native. The
+// separate unpaced 180s playthrough measures the opening's real time contract.
+function holdForegroundClock() {
+  let now=performance.now();
+  Object.defineProperty(performance,'now',{configurable:true,value:()=>now});
+  window.advanceWorldProbe=seconds=>{now+=seconds*1000;};
 }
 
 async function runCase(browser, second) {
@@ -145,7 +122,10 @@ async function runCase(browser, second) {
   report.runs.push(run);
   try {
     const page=await context.newPage();
-    if (!second) await firstHarborTouch(page,context);
+    if (!second) {
+      run.clock='Foreground checkpoint held for pointer delivery; native renderer and trusted touch; unpaced 180s timing in natural-trace.json';
+      await page.addInitScript(holdForegroundClock);
+    }
     if (second) await page.addInitScript(s => {
       s.lastSavedAt=Date.now();
       localStorage.setItem('hormuz-game-v2',JSON.stringify({version:2,state:s}));
@@ -174,26 +154,24 @@ async function runCase(browser, second) {
       run.frames[0]=await page.evaluate(readScene);
     }
     if (!second) {
-      await page.waitForFunction(()=>window.__gamesync3d.state.opening.activeSeconds>=1,null,{timeout:30000});
-      run.frames.push(await page.evaluate(readScene));
-      await page.waitForFunction(()=>window.initialHarborTouch.readout || window.__gamesync3d.state.opening.activeSeconds>=6,null,{timeout:65000});
-      run.normalCameraTouch=await page.evaluate(()=>window.initialHarborTouch);
-      if (run.normalCameraTouch.readout) {
-        run.inspections.push({target:{kind:'merchant',id:1},cameraFocused:false,text:run.normalCameraTouch.readout.text});
-        await page.screenshot({path:path.join(out,'world-merchant.png')});
-      } else {
-        await inspect(page,{kind:'merchant',id:1},/عوارض عبور/,run);
-        await page.evaluate(()=>window.stopWorldProbeTracking?.());
+      await page.waitForFunction(()=>!window.__map3d.fly,null,{timeout:60000});
+      run.playerCamera=await page.evaluate(readScene);
+      if (!run.playerCamera.merchants.some(m=>m.key==='merchant-1' && m.screen)) {
         const controls=page.getByRole('button',{name:'کنترل نمای نقشه'});
         await controls.tap();
-        await page.getByRole('button',{name:'بازنشانی نما'}).tap();
+        const zoomOut=page.getByRole('button',{name:'کوچک‌نمایی'});
+        await zoomOut.tap();
+        await page.waitForFunction(()=>!window.__map3d.fly,null,{timeout:30000});
         await controls.tap();
-        await page.waitForFunction(()=>!window.__map3d.fly,null,{timeout:35000});
-        run.playerResetCamera=true;
+        run.playerZoomedOut=true;
       }
-      const own=await inspect(page,{kind:'tanker',id:0},/فروش نفت/,run);
-      assert.match(await own.innerText(),/محموله/);
-      await page.waitForFunction(()=>window.seenFirstReceiptOnHull,null,{timeout:40000,polling:70});
+      await inspect(page,{kind:'merchant',id:1},/عوارض عبور/,run);
+      await page.evaluate(()=>window.advanceWorldProbe(12));
+      await page.waitForFunction(()=>window.seenFirstReceiptOnHull && window.__gamesync3d.state.opening.activeSeconds===12,null,{timeout:45000,polling:70});
+      run.frames.push(await page.evaluate(readScene));
+      await inspect(page,{kind:'tanker',id:0},/فروش نفت/,run);
+      const own=run.inspections.find(i=>i.target.kind==='tanker');
+      assert.match(own.text,/محموله/);
     }
     if (second) {
       await page.waitForFunction(angle=> Math.abs(window.__gamesync3d.openingSignals.antenna.rotation.y-angle)>.16,
