@@ -78,7 +78,7 @@ function sample() {
     action:box?.width && !button.disabled ? {x:box.left+box.width/2,y:box.top+box.height/2} : null};
 }
 
-async function tapControl(cdp, trace, selector) {
+async function tapControl(cdp, trace, selector, timeout = 30000) {
   const point = await until(() => cdp.evaluate(`(() => {
     const el = document.querySelector(${JSON.stringify(selector)});
     if (!el || el.disabled || !el.getClientRects().length) return null;
@@ -87,7 +87,7 @@ async function tapControl(cdp, trace, selector) {
     const x=b.left+b.width/2, y=b.top+b.height/2;
     const scale=window.devicePixelRatio*(window.visualViewport?.scale ?? 1);
     return {x,y,deviceX:Math.round(x*scale),deviceY:Math.round(y*scale),active:window.__gamesync3d.state.opening.activeSeconds};
-  })()`), 30000);
+  })()`), timeout);
   trace.touches.push({selector,...point});
   adb('shell','input','tap',String(point.deviceX),String(point.deviceY));
 }
@@ -183,7 +183,7 @@ async function run(apk, label, opening) {
       if (!s || s.active === previous) return false;
       previous = s.active;
       trace.samples.push(s);
-      if (s.firstToll === 12 && !beforeManualStart) {
+      if (s.stalled && !beforeManualStart) {
         beforeManualStart = await cdp.evaluate('window.__gamesync3d.state');
         save('manual-branch-source',beforeManualStart);
       }
@@ -207,7 +207,8 @@ async function run(apk, label, opening) {
     trace.unattendedThrough=last.active;
     trace.branchFrom=beforeManualStart.opening.activeSeconds;
     await reopenCheckpoint(cdp,beforeManualStart);
-    await tapControl(cdp,trace,'.idle-battle-start');
+    // A checkpoint at the first stall precedes the 120-second button by about 50 active seconds.
+    await tapControl(cdp,trace,'.idle-battle-start',180000);
     const battle = await until(async () => { const s=await read(); return s?.phase === 'battle' && s; });
     trace.manualStart=battle;
     assert.ok(battle.started >= 120,'native start must follow eligibility');

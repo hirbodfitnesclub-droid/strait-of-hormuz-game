@@ -4,10 +4,17 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      native_apk_run:
+        description: Optional existing Game quality run to retest the same APK on Android
+        type: string
+        required: false
 permissions:
   contents: read
+  actions: read
 jobs:
   verify:
+    if: ${{ !inputs.native_apk_run }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -39,21 +46,33 @@ jobs:
           retention-days: 14
 
   android-opening:
-    if: github.event_name == 'workflow_dispatch'
+    if: ${{ !cancelled() && github.event_name == 'workflow_dispatch' && (needs.verify.result == 'success' || (inputs.native_apk_run && needs.verify.result == 'skipped')) }}
     needs: verify
     runs-on: ubuntu-latest
     timeout-minutes: 35
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: 24
           cache: npm
       - run: npm ci
-      - uses: actions/download-artifact@v5
-        with:
-          name: hormuz-debug-${{ github.sha }}
-          path: candidate
+      - name: Select the signed candidate and verify its source
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SELECTED_RUN: ${{ inputs.native_apk_run || github.run_id }}
+        run: |
+          set -euo pipefail
+          [[ "$SELECTED_RUN" =~ ^[0-9]+$ ]]
+          metadata=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$SELECTED_RUN")
+          jq -e '.path == ".github/workflows/quality.yml" and .event == "workflow_dispatch"' <<< "$metadata" > /dev/null
+          source_sha=$(jq -er '.head_sha' <<< "$metadata")
+          git merge-base --is-ancestor "$source_sha" "$GITHUB_SHA"
+          git diff --exit-code "$source_sha" "$GITHUB_SHA" -- . ':!.github/workflows/quality.yml' ':!scripts/test-opening-android.mjs' ':!strait-of-hormuz-game-docs/'
+          gh run download "$SELECTED_RUN" --name "hormuz-debug-$source_sha" --dir candidate
+          sha256sum candidate/app-debug.apk
       - name: Fetch the verified 0.7.4 baseline for paired Android runs
         env:
           GH_TOKEN: ${{ github.token }}
@@ -83,7 +102,7 @@ jobs:
           retention-days: 14
 
   mobile-regressions:
-    if: github.event_name == 'workflow_dispatch'
+    if: github.event_name == 'workflow_dispatch' && !inputs.native_apk_run
     needs: verify
     runs-on: ubuntu-latest
     timeout-minutes: 30
