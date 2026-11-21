@@ -14,6 +14,7 @@ async function main() {
       viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true,
     });
     page.setDefaultTimeout(45000);
+    const battleOnly = process.argv.includes('--battle-only');
     const errors = [];
     const problems = [];
     page.on('pageerror', error => errors.push(error.message));
@@ -23,6 +24,17 @@ async function main() {
         sound: false, vibration: false, coachDismissed: true,
       }));
     });
+
+    if (battleOnly) {
+      // Reserve the wave's next reinforcements while three live HUD interactions and captures finish.
+      const {load} = require('./load-game.cjs');
+      const game = load('src/lib/game.ts');
+      const battle = game.gameReducer(game.initialGame(), {type:'start'});
+      battle.spawnClock = 500;
+      await page.addInitScript(state => {
+        localStorage.setItem('hormuz-game-v1', JSON.stringify({...state, lastSavedAt:Date.now()}));
+      }, battle);
+    }
 
     const captureDir = process.env.UI_CAPTURE_DIR;
     if (captureDir) await fs.mkdir(captureDir, { recursive: true });
@@ -100,7 +112,7 @@ async function main() {
       !document.body.innerText.includes('در حال آماده‌سازی تنگه'), null, {timeout: 180000});
     await page.evaluate(() => document.fonts.ready);
     const portraitSizes = [{width:390, height:844}, {width:320, height:640}];
-    for (const viewport of process.argv.includes('--battle-only') ? [] : portraitSizes) {
+    for (const viewport of battleOnly ? [] : portraitSizes) {
       await page.setViewportSize(viewport);
       await inspect('harbor');
       await page.getByRole('button', {name:/^فولاد /}).click();
@@ -161,8 +173,12 @@ async function main() {
       await page.locator('.progression-drawer').waitFor({state:'hidden'});
     }
     await page.setViewportSize({width:390, height:844});
-    await page.locator('.idle-battle-start').click();
-    await page.locator('.news-actions button').filter({hasText:'آغاز نبرد'}).click();
+    if (battleOnly) {
+      await page.locator('.main-battle-action.is-paused:visible').click();
+    } else {
+      await page.locator('.idle-battle-start').click();
+      await page.locator('.news-actions button').filter({hasText:'آغاز نبرد'}).click();
+    }
     const pause = page.locator('.main-battle-action:visible');
     const speed = page.locator('.battle-speed:visible');
     async function checkBattleGlyph(file) {
@@ -185,22 +201,38 @@ async function main() {
       assert.ok(image.width > 0 && image.height > 0, spell + ' artwork must be visible');
     }
     await inspect('battle');
-    for (const spell of ['emp', 'overdrive', 'strike']) {
-      const button = page.locator('.spell-' + spell);
-      await button.click();
-      if (spell === 'strike') {
-        await page.locator('.targeting-prompt').waitFor();
-        const sea = await page.locator('.game-map canvas').boundingBox();
-        assert.ok(sea, 'targeting must keep the map available');
-        await page.touchscreen.tap(sea.x + sea.width * 0.55, sea.y + sea.height * 0.66);
-        await page.locator('.targeting-prompt').waitFor({state:'hidden'});
+    if (battleOnly) {
+      const combatState = () => page.evaluate(() => {
+        const state = window.__gamesync3d.state;
+        return {phase:state.phase, wave:state.wave, remaining:state.spawnRemaining, cooldowns:state.cooldowns,
+          targeting:!!document.querySelector('.targeting-prompt'),
+          selected:document.querySelector('.slot-radial, .tower-sheet, [aria-modal="true"]')?.getAttribute('aria-label')};
+      });
+      try {
+        for (const spell of ['strike', 'emp', 'overdrive']) {
+          const button = page.locator('.spell-' + spell);
+          await button.click();
+          if (spell === 'strike') {
+            await page.locator('.targeting-prompt').waitFor();
+            const sea = await page.locator('.game-map canvas').boundingBox();
+            assert.ok(sea, 'targeting must keep the map available');
+            await page.touchscreen.tap(sea.x + sea.width * 0.55, sea.y + sea.height * 0.66);
+            await page.locator('.targeting-prompt').waitFor({state:'hidden'});
+          }
+          await button.locator('.cooldown-count').waitFor();
+          assert.equal(await button.getAttribute('aria-disabled'), 'true');
+          assert.ok(await button.locator('.cooldown-ring').isVisible());
+          assert.ok(await button.locator('img.spell-art').isVisible());
+          const state = await combatState();
+          assert.ok(state.cooldowns[spell] > 0, spell + ' must be on cooldown in the game state');
+          console.log(spell + ' cooldown', state.cooldowns[spell]);
+        }
+      } catch (error) {
+        console.error('Combat interaction failed', await combatState());
+        throw error;
       }
-      await button.locator('.cooldown-count').waitFor();
-      assert.equal(await button.getAttribute('aria-disabled'), 'true');
-      assert.ok(await button.locator('.cooldown-ring').isVisible());
-      assert.ok(await button.locator('img.spell-art').isVisible());
+      await inspect('cooldowns');
     }
-    await inspect('cooldowns');
     await pause.click();
     await page.locator('.main-battle-action.is-paused:visible').waitFor();
     const oldSpeed = await speed.getAttribute('aria-label');
