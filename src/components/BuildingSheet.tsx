@@ -8,8 +8,11 @@ import { useState, type Dispatch } from "react";
 import { compact, fa } from "./game-ui";
 import BuildingModel, { buildingTier } from "./BuildingModel";
 import { useDialog } from "./useDialog";
+import OpeningDockRepair from "./OpeningDockRepair";
+import { openingAttentionRules } from "@/lib/opening-attention";
+import economy from "@/data/reopening/economy.json";
 
-type Props = { id:BuildingId; game:GameState; dispatch:Dispatch<Action>; close:()=>void; notify:(message:string)=>void; feedback:()=>void; onEconomy:()=>void; onManagers:()=>void };
+type Props = { guided?:boolean; id:BuildingId; game:GameState; dispatch:Dispatch<Action>; close:()=>void; notify:(message:string)=>void; feedback:()=>void; onEconomy:()=>void; onManagers:()=>void; onPower:()=>void };
 const tiers=["پایه","صنعتی","مدرن","پیشرفته","فناوری آینده"];
 /* «روی چیا اثر داره» (D-023): one short effect summary per building,
    derived from the economy code by audit round 2 (team 3, §6) — shown
@@ -46,10 +49,16 @@ function outputFor(game: GameState, id: BuildingId) {
     default: return stats.output(id);
   }
 }
-export default function BuildingSheet({id,game,dispatch,close,notify,feedback,onEconomy,onManagers}:Props){
+export default function BuildingSheet({id,game,guided=false,dispatch,close,notify,feedback,onEconomy,onManagers,onPower}:Props){
   const ref=useDialog<HTMLElement>(close),[quantity,setQuantity]=useState<UpgradeQuantity>(1);
   const definition=BUILDINGS[id],level=game.buildings[id],stats=getStats(game),tier=buildingTier(level),quote=buildingUpgradeQuote(game,id,quantity);
-  const output=outputFor(game,id),next=outputFor({...game,buildings:{...game.buildings,[id]:quote.nextLevel}},id),gain=output?Math.round((next/output-1)*100):0;
+  const preview = {...game,buildings:{...game.buildings,[id]:quote.nextLevel}};
+  const projected = getStats(preview);
+  const output=outputFor(game,id),next=outputFor(preview,id),gain=output?Math.round((next/output-1)*100):0;
+  const openingTank = !!game.opening && id === "tank";
+  const [helpVisible, setHelpVisible] = useState(false);
+  const lowPowerQuote = !!game.opening && game.mode === "campaign" && game.wave <= openingAttentionRules.gate_power.through_operation
+    && projected.grid < stats.grid && projected.grid < openingAttentionRules.gate_power.min_projected_fraction;
   const nextMilestone=level<10?10:level<25?25:level<50?50:100;
   const manager:ManagerId|null=id==="oil"||id==="refinery"?"energy":id==="dock"?"harbor":id==="arms"?"supply":null;
   const managerLevel=manager?game.idle.managerLevels[manager]:0;
@@ -61,7 +70,7 @@ export default function BuildingSheet({id,game,dispatch,close,notify,feedback,on
   return <div className="tower-sheet-backdrop workshop-sheet-backdrop" onClick={close}>
     <section className="building-sheet idle-building-sheet workshop-sheet" ref={ref} role="dialog" aria-modal="true" aria-labelledby="building-sheet-title" tabIndex={-1} onClick={e=>e.stopPropagation()}>
       <header className="tower-sheet-header workshop-sheet-header">
-        <div className="workshop-heading"><Image src="/assets/workshop/instruments/gear.webp" width={38} height={38} alt="" unoptimized/><h2 id="building-sheet-title">ارتقای زیرساخت</h2></div>
+        <div className="workshop-heading"><Image src="/assets/workshop/instruments/gear.webp" width={38} height={38} alt="" unoptimized/><h2 id="building-sheet-title">{openingTank ? "افزایش ظرفیت مخزن" : "ارتقای زیرساخت"}</h2></div>
         <button className="close-control" onClick={close} aria-label="بستن پنجره ساختمان"><X size={19}/></button>
       </header>
       <div className="workshop-building-body">
@@ -76,6 +85,15 @@ export default function BuildingSheet({id,game,dispatch,close,notify,feedback,on
             <div><span>{meterLabel}</span><p><strong>{compact(output)}</strong>{quote.levels > 0 && <><ArrowLeft size={19}/><strong className="green-text">{compact(next)}</strong></>} <small>{unit}</small></p></div>
             {gain>0 && <b className="gain-ticket">+{fa(gain)}٪</b>}
           </div>
+          {openingTank && <div className="opening-capacity-note">
+            <span><Zap size={15}/>مصرف برق با ارتقا بیشتر می‌شود. {fa(economy.facilities.tank.mw_per_level * quote.levels)} مگاوات</span>
+            {game.opening?.stalled && <button type="button" aria-expanded={helpVisible} onClick={() => {
+              if (!helpVisible) dispatch({type:"opening-help"});
+              setHelpVisible(!helpVisible);
+            }}>راهنمای این توقف</button>}
+            {helpVisible && <p>با افزایش ظرفیت، پمپ جا برای نفت تازه دارد. می‌توانی تا بازگشت نفت‌کش هم صبر کنی.</p>}
+          </div>}
+          {id === "dock" && <OpeningDockRepair game={game} dispatch={dispatch}/>}
           <details className="building-blueprint">
             <summary>اثر ساختمان و تکامل <ChevronDown size={17} /></summary>
             <p>{definition.description}</p><p>{BUILDING_EFFECTS[id]}</p>
@@ -90,12 +108,16 @@ export default function BuildingSheet({id,game,dispatch,close,notify,feedback,on
       </div>
       <footer className="building-sheet-footer">
         {level < 100 && <>
-          <div className="building-order-quantity"><span>تعداد ارتقا</span><div className="bulk-upgrade-selector" aria-label="تعداد ارتقا">{([1,10,"max"] as UpgradeQuantity[]).map(value=><button key={value} className={quantity===value?"selected":""} onClick={()=>setQuantity(value)} aria-pressed={quantity===value}>{value==="max"?"حداکثر":`×${fa(value)}`}</button>)}</div></div>
-          <div className="build-cost"><b>{minimumOnly ? "هزینهٔ یک سطح" : "هزینهٔ ارتقا"}</b><span className={!quote.affordable ? "missing-cost" : ""}><i className="workshop-icon wk-cash" aria-hidden="true"/> {compact(price)} دلار</span></div>
+          {!openingTank && <div className="building-order-quantity"><span>تعداد ارتقا</span><div className="bulk-upgrade-selector" aria-label="تعداد ارتقا">{([1,10,"max"] as UpgradeQuantity[]).map(value=><button key={value} className={quantity===value?"selected":""} onClick={()=>setQuantity(value)} aria-pressed={quantity===value}>{value==="max"?"حداکثر":`×${fa(value)}`}</button>)}</div></div>}
+          <div className="build-cost"><b>{minimumOnly ? "هزینهٔ یک سطح" : "هزینهٔ ارتقا"}</b><span className={!quote.affordable ? "missing-cost" : ""}><i className="workshop-icon wk-cash" aria-hidden="true"/> {compact(price)} {game.opening ? "اعتبار بندر" : "دلار"}</span></div>
         </>}
-        <button className="primary-action" disabled={level>=100||!quote.affordable} onClick={()=>{dispatch({type:"upgrade-building",id,quantity});feedback();notify(`${definition.short} به سطح ${fa(quote.nextLevel)} رسید.`);}}>
-          <Image src="/assets/workshop/instruments/upgrade.webp" width={31} height={31} alt="" unoptimized/><span>{level>=100?"بالاترین سطح":quote.levels?`ارتقا به سطح ${fa(quote.nextLevel)}`:"منابع کافی نیست"}</span>
+        {lowPowerQuote && quote.affordable && <div className="opening-grid-warning"><span>تأمین برق پس از ساخت {fa(projected.grid * 100)}٪ می‌شود.</span><button onClick={onPower}>دیدن نیروگاه</button></div>}
+        <button className="primary-action" disabled={level>=100||!quote.affordable} onClick={()=>{
+          dispatch({type:"upgrade-building",id,quantity,guided,expectedLevel:level});feedback();notify(`${definition.short} به سطح ${fa(quote.nextLevel)} رسید.`);}}>
+          <Image src="/assets/workshop/instruments/upgrade.webp" width={31} height={31} alt="" unoptimized/><span>{level>=100?"بالاترین سطح":lowPowerQuote && quote.affordable ? "با همین تراز بساز" : openingTank && quote.affordable ? `افزایش · ${fa(price)} اعتبار` : quote.levels?`ارتقا به سطح ${fa(quote.nextLevel)}`:"منابع کافی نیست"}</span>
         </button>
+        {openingTank && !quote.affordable && game.cash + Math.floor(game.idle.bank) >= price && level < 100 &&
+          <button className="opening-withdraw" onClick={() => { dispatch({type:"collect-income"}); feedback(); }}>برداشت از خزانه</button>}
         {!quote.affordable && level<100 && <small>درآمد بندر را جمع کنید یا تعداد ارتقا را کاهش دهید.</small>}
       </footer>
     </section>

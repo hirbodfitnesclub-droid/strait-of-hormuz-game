@@ -5,6 +5,8 @@ import type { Dispatch, ReactNode } from "react";
 import { TOWERS, type Action, type GameState, type TowerKind } from "@/lib/game";
 import { defeatReasonText, type BattleReport, type Reward } from "@/lib/progression";
 import { compact, fa } from "./game-ui";
+import { operationForOpening, openingRepairCost } from "@/lib/opening-operations";
+import OpeningDockRepair from "./OpeningDockRepair";
 import TowerModel from "./TowerModel";
 import { useDialog } from "./useDialog";
 
@@ -43,11 +45,14 @@ export function RewardView({ reward, dispatch, feedback }: { reward: Reward; dis
   </section></div>;
 }
 
-export function BattleResultView({ report, dispatch, autoBattle, feedback, onDevelop }: { report: BattleReport; dispatch: Dispatch<Action>; autoBattle: boolean; feedback: () => void; onDevelop: () => void }) {
+export function BattleResultView({ game, report, dispatch, autoBattle, feedback, onDevelop }: { game: GameState; report: BattleReport; dispatch: Dispatch<Action>; autoBattle: boolean; feedback: () => void; onDevelop: () => void }) {
   const accept = () => { dispatch({ type: "claim-battle" }); feedback(); };
   const ref = useDialog<HTMLElement>(accept);
-  const next = () => { accept(); dispatch({ type: "start", early: report.victory }); };
+  const next = () => { accept(); dispatch({ type: "start", early: report.victory, source: "player" }); };
 
+  const opening = report.openingReceipt;
+  const operation = opening && operationForOpening(game, report.wave, "campaign");
+  const repair = openingRepairCost(game.buildings.dock);
   return <div className="reward-backdrop"><section className={`battle-result-dialog workshop-receipt ${report.victory ? "won" : "lost"}`} ref={ref} tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby="battle-result-title">
     <header className="receipt-header battle-crest">
       {report.victory ? <h2 id="battle-result-title" className="victory-medallion"><img src="/assets/workshop/progression/victory.webp" alt=""/><span>پیروزی</span></h2>
@@ -60,7 +65,7 @@ export function BattleResultView({ report, dispatch, autoBattle, feedback, onDev
     {report.victory ? <>
       <h3 className="receipt-subplaque">جوایز عملیات</h3>
       <div className="result-prizes">
-        <Prize icon={<span className="workshop-icon wk-cash"/>} value={`+$${compact(report.cash)}`} label="دلار نفتی"/>
+        <Prize icon={<span className="workshop-icon wk-cash"/>} value={`+${opening ? "" : "$"}${compact(report.cash)}`} label={opening ? "اعتبار واریزشدهٔ بندر" : "دلار نفتی"}/>
         <Prize icon={<img src="/assets/workshop/progression/helm.webp" alt=""/>} value={`+${fa(report.xp)}`} label="تجربه"/>
         {report.chests > 0 && <Prize icon={<img src="/assets/workshop/progression/strongbox.webp" alt=""/>} value={`×${fa(report.chests)}`} label="صندوقچه"/>}
       </div>
@@ -68,6 +73,14 @@ export function BattleResultView({ report, dispatch, autoBattle, feedback, onDev
       <strong>{report.reason ? defeatReasonText(report.reason) : "برجک‌ها و مهمات را تقویت کنید."}</strong>
       <p>پیشرفت اقتصادی شما محفوظ است.</p>
     </div></div>}
+    {opening && operation && <div className="opening-result-notes">
+      <p>{opening.firstClear ? operation.first_clear_news_fa : !report.victory ? operation.failure_news_fa : "اعتبار عبور مجدد ثبت شد."}</p>
+      {report.wave === 2 && game.opening && <p>عوارض ثبت‌شده · {fa(game.opening.ledger.tolls)} اعتبار<br/>درآمد فروش واقعی نفت · {fa(game.opening.ledger.exportIncome)} اعتبار</p>}
+      {report.wave === 3 && <><p>{opening.damage > 0 ? `خسارت ثبت‌شده به اسکله · ${fa(opening.damage)} واحد` : "عملیات بدون خسارت تازه پایان یافت."}</p>
+        <OpeningDockRepair game={game} dispatch={dispatch}/>
+        {opening.damage === 0 && !game.openingOperations?.dockDamage && <details><summary>پیش‌نمایش تعمیر اسکله</summary><p>هزینهٔ نمونه برای یک واحد · {fa(repair.cash)} اعتبار و {fa(repair.steel)} فولاد. برای این پیش‌نمایش چیزی از موجودی کسر نمی‌شود.</p></details>}
+        {opening.damage > 0 && !game.openingOperations?.dockDamage && <strong>تعمیر اسکله کامل شد.</strong>}</>}
+    </div>}
     <div className="result-stats">
       <span><Target size={16}/>هدف‌های منهدم‌شده<b>{fa(report.destroyed)}</b></span>
       <span><Timer size={16}/>زمان عملیات<b>{fa(Math.round(report.seconds))} ثانیه</b></span>

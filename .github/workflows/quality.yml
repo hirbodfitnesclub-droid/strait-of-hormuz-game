@@ -9,7 +9,7 @@ permissions:
 jobs:
   verify:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -28,3 +28,82 @@ jobs:
         with:
           packages: platforms;android-36 build-tools;35.0.0
       - run: bash android/gradlew -p android assembleDebug lintDebug --no-daemon
+
+      - name: Retain the APK built from the selected working branch
+        if: github.event_name == 'workflow_dispatch'
+        uses: actions/upload-artifact@v5
+        with:
+          name: hormuz-debug-${{ github.sha }}
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          retention-days: 14
+
+  android-opening:
+    if: github.event_name == 'workflow_dispatch'
+    needs: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - uses: actions/download-artifact@v5
+        with:
+          name: hormuz-debug-${{ github.sha }}
+          path: candidate
+      - name: Fetch the verified 0.7.4 baseline for paired Android runs
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/hormuz-baseline"
+          gh release download v0.7.4-test -p hormuz-0.7.4-debug.apk -D "$RUNNER_TEMP/hormuz-baseline"
+          echo "f1cb35ffae1d093e2926dd7f23118b5ce5e55883f089343ed0c41d9e7fdf67fd  $RUNNER_TEMP/hormuz-baseline/hormuz-0.7.4-debug.apk" | sha256sum -c -
+          sudo chmod a+rw /dev/kvm
+      - name: Install both APKs and exercise the opening in Android WebView
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: pixel_2
+          disk-size: 4096M
+          ram-size: 3072M
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -no-snapshot
+          script: node scripts/test-opening-android.mjs "$RUNNER_TEMP/hormuz-baseline/hormuz-0.7.4-debug.apk" candidate/app-debug.apk "$RUNNER_TEMP/hormuz-android"
+      - name: Retain Android run traces, screenshots and device logs
+        if: ${{ !cancelled() && github.event_name == 'workflow_dispatch' }}
+        uses: actions/upload-artifact@v5
+        with:
+          name: android-opening-evidence-${{ github.sha }}
+          path: ${{ runner.temp }}/hormuz-android/
+          if-no-files-found: warn
+          retention-days: 14
+
+  mobile-regressions:
+    if: github.event_name == 'workflow_dispatch'
+    needs: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - uses: actions/download-artifact@v5
+        with:
+          name: hormuz-debug-${{ github.sha }}
+          path: candidate
+      - name: Exercise existing mobile flows against the assembled APK contents
+        env:
+          AUDIT_CHROMIUM: /usr/bin/google-chrome
+          TEST_URL: http://127.0.0.1:3310
+        run: |
+          unzip -q candidate/app-debug.apk 'assets/public/*'
+          mv assets/public out
+          python3 -m http.server 3310 --bind 127.0.0.1 --directory out > "$RUNNER_TEMP/game-http.log" 2>&1 &
+          server_pid=$!
+          trap 'kill "$server_pid"' EXIT
+          npm run test:mobile

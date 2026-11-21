@@ -10,7 +10,7 @@ import {
   ShieldCheck, Sparkles, Swords, Target, Trophy, Waves, X, Zap,
 } from "lucide-react";
 import {
-  BUILDINGS, CHALLENGE_RULES, ISLANDS, RESEARCH, SLOTS, TOWERS, TOWER_KINDS, getStats, tankerCapacityFor, towerDps, upgradeCost,
+  BUILDINGS, CHALLENGE_RULES, ISLANDS, RESEARCH, SLOTS, TOWERS, TOWER_KINDS, getStats, tankerCapacityFor, towerDps, buildingUpgradeQuote,
   type Action, type BuildingId, type GameState, type Mode,
   powerBreakdown,
 } from "@/lib/game";
@@ -22,6 +22,8 @@ import SaveBackup from "./SaveBackup";
 import { exportDiagnostics } from "@/lib/analytics";
 import { operationReadiness } from "@/lib/readiness";
 import { version } from "../../package.json";
+import { canOfferOpeningWave } from "@/lib/opening-attention";
+import { operationForOpening, openingWinCredit } from "@/lib/opening-operations";
 import { operationInfo } from "@/lib/progression";
 
 export type PanelName = "economy" | "defense" | "city" | "research" | "war" | "hero" | "events" | "settings";
@@ -51,8 +53,12 @@ const panelArt: Record<PanelName, string> = {
   war: "command/chart", hero: "command/helm", events: "command/lantern", settings: "command/gear",
 };
 
+function portCredit(game:GameState, formatted:string) {
+  return game.opening ? `${formatted} اعتبار بندر` : `$${formatted}`;
+}
+
 function BuildingCard({ id, game, dispatch, notify, inspect }: { id: BuildingId; game: GameState; dispatch: Dispatch<Action>; notify: (m: string) => void; inspect: (id: BuildingId) => void }) {
-  const def = BUILDINGS[id], level = game.buildings[id], cost = upgradeCost(id, level);
+  const def = BUILDINGS[id], level = game.buildings[id], cost = buildingUpgradeQuote(game,id,1).cost;
   const stats = getStats(game);
   const output = id === "tank" ? stats.oilCapacity : id === "power" ? stats.powerProduced : id === "water" ? stats.waterProduced : id === "city" ? level * 50 : stats.output(id);
   const tier = level >= 100 ? 5 : level >= 50 ? 4 : level >= 25 ? 3 : level >= 10 ? 2 : 1;
@@ -66,10 +72,10 @@ function BuildingCard({ id, game, dispatch, notify, inspect }: { id: BuildingId;
       <div className="small-progress"><i style={{ width: `${level >= 100 ? 100 : level % 10 * 10}%` }} /></div>
       </div>
     </button>
-    <button className="upgrade-button" disabled={level >= 100} onClick={() => {
+    <button className="upgrade-button" disabled={level >= 100 || (game.opening !== undefined && game.cash < cost)} onClick={() => {
       if (game.cash < cost) { notify("دلار کافی برای ارتقا ندارید."); return; }
-      dispatch({ type: "upgrade-building", id }); notify(`${def.short} به سطح ${fa(level + 1)} ارتقا یافت.`);
-    }}>{level >= 100 ? "حداکثر" : <><span>ارتقا</span><small>${compact(cost)}</small></>}</button>
+      dispatch({ type: "upgrade-building", id, expectedLevel:level }); notify(`${def.short} به سطح ${fa(level + 1)} ارتقا یافت.`);
+    }}>{level >= 100 ? "حداکثر" : <><span>ارتقا</span><small>{portCredit(game,compact(cost))}</small></>}</button>
   </div>;
 }
 
@@ -88,7 +94,7 @@ function PortCard({ game }: { game: GameState }) {
       {tanker ? <span>بار نفت‌کش <b>{compact(tanker.load)} / {compact(capacity)} بشکه</b></span> : <span>نفت‌کش بعدی <b>تا {fa(Math.max(0, Math.ceil(port.nextIn)))} ثانیهٔ دیگر</b></span>}
       {stageEta !== null && <span>پایان این مرحله <b>~{fa(stageEta)} ثانیه</b></span>}
       <span>سهم صادرات از تولید (α) <b>{fa(game.oilSplit)}٪</b></span>
-      <span>نرخ صادرات واقعی <b className="panel-positive">+${fa(stats.realExportRate, 1)}/ث</b></span>
+      <span>نرخ صادرات واقعی <b className="panel-positive">+{portCredit(game,fa(stats.realExportRate, 1))}/ث</b></span>
     </div>
   </section>;
 }
@@ -144,19 +150,19 @@ function Economy({ game, dispatch, notify, onSelectBuilding, onCollect }: Props)
     </section>
     <button className="primary-action export-collect" onClick={onCollect} disabled={game.idle.bank < 1}>
       <Image src="/assets/workshop/cash.webp" width={36} height={36} alt="" unoptimized />
-      دریافت درآمد بندر <b>${compact(game.idle.bank)}</b>
+      دریافت درآمد بندر <b>{portCredit(game,compact(Math.floor(game.idle.bank)))}</b>
     </button>
     <dl className="reserve-balances" aria-label="موجودی خزانه و مهمات">
-      <div><dt><Image src="/assets/workshop/cash.webp" width={25} height={25} alt="" unoptimized />خزانه</dt><dd>${compact(game.cash)}</dd></div>
+      <div><dt><Image src="/assets/workshop/cash.webp" width={25} height={25} alt="" unoptimized />{game.opening ? "اعتبار قابل خرج" : "خزانه"}</dt><dd>{portCredit(game,compact(game.cash))}</dd></div>
       <div><dt><Image src="/assets/workshop/ammo.webp" width={25} height={25} alt="" unoptimized />مهمات</dt><dd>{compact(game.ammo)}</dd></div>
     </dl>
     <div className="summary-grid three">
-      <div><span>تولید نفت</span><strong>{fa(stats.oilRate, 1)} <small>بشکه/ث</small></strong></div>
-      <div><span>درآمد لحظه‌ای صادرات</span><strong className="panel-positive">+${fa(stats.realExportRate, 1)} <small>/ ثانیه</small></strong></div>
+      <div><span>تولید نفت</span><strong>{fa(game.opening?.generated ?? stats.oilRate, 1)} <small>بشکه/ث</small></strong></div>
+      <div><span>درآمد لحظه‌ای صادرات</span><strong className="panel-positive">+{portCredit(game,fa(stats.realExportRate, 1))} <small>/ ثانیه</small></strong></div>
       <div><span>ظرفیت مخزن</span><strong>{compact(stats.oilCapacity)} <small>بشکه</small></strong></div>
     </div>
     <PortCard game={game} />
-    <div className="drawer-section-heading"><div><strong>زنجیره تأمین</strong><p>هر ۱۰ سطح، تولید سازه دو برابر می‌شود.</p></div><span className="tiny-badge">۶ سازه</span></div>
+    <div className="drawer-section-heading"><div><strong>زنجیره تأمین</strong><p>{game.opening ? "توان تولید در سطح‌های ۱۰، ۲۵، ۵۰ و ۱۰۰ افزایش می‌یابد." : "هر ۱۰ سطح، تولید سازه دو برابر می‌شود."}</p></div><span className="tiny-badge">۶ سازه</span></div>
     <div className="building-list">{(["oil", "tank", "dock", "refinery", "steel", "arms"] as BuildingId[]).map(id => <BuildingCard key={id} id={id} game={game} dispatch={dispatch} notify={notify} inspect={onSelectBuilding} />)}</div>
     <div className="drawer-note"><Flame size={16} /> نفت بیشتر برای پالایش، سوخت و مهمات بیشتری برای دفاع فراهم می‌کند.</div>
   </>;
@@ -308,7 +314,7 @@ function CampaignChart({ game, selected, select }: { game: GameState; selected: 
           const boss = wave % 5 === 0;
           return <button key={wave} className={`operation-node ${selected === wave ? "selected" : ""} ${stars ? "completed" : ""} ${boss ? "boss" : ""}`}
             disabled={locked} aria-pressed={selected === wave} onClick={() => select(wave)}
-            aria-label={`عملیات ${fa(wave)}، ${operationInfo(wave).title}${locked ? "، قفل" : ""}`}>
+            aria-label={`عملیات ${fa(wave)}، ${operationForOpening(game,wave,"campaign")?.title_fa ?? operationInfo(wave).title}${locked ? "، قفل" : ""}`}>
             <span>{fa(wave)}</span>
             <small>{stars ? "★".repeat(stars) : boss ? <Swords size={12} /> : locked ? <LockKeyhole size={10} /> : <Anchor size={11} />}</small>
           </button>;
@@ -321,17 +327,20 @@ function CampaignChart({ game, selected, select }: { game: GameState; selected: 
 function War({game,dispatch,close,notify,onSelectBuilding,onSelectTower}:Props){
   const [mode,setMode]=useState<Mode>(game.mode),[selected,setSelected]=useState(Math.min(25,game.highestWave+1));
   const operation=operationInfo(selected);
+  const design=operationForOpening(game,selected,mode);
+  const waiting=mode==="campaign" && selected===1 && !canOfferOpeningWave(game.opening);
   const preparation=operationReadiness(game,mode === "campaign" ? selected : 1,mode);
   const ready=preparation.tips.length===0;
   const prepare=(tip: (typeof preparation.tips)[number])=>{
     if(tip.target.kind==="building")onSelectBuilding(tip.target.id as BuildingId);
     else { const slot=SLOTS.find(s=>game.islands.includes(s.island)&&!game.towers.some(t=>t.slot===s.id)); if(slot)onSelectTower(slot.id); }
   };
-  const start=()=>{if(mode==="campaign")dispatch({type:"select-operation",wave:selected});else dispatch({type:"mode",mode});dispatch({type:"start"});close();notify("عملیات آغاز شد؛ برجک‌ها خودکار دفاع می‌کنند.");};
+  const start=()=>{if(mode==="campaign")dispatch({type:"select-operation",wave:selected});else dispatch({type:"mode",mode});dispatch({type:"start",source:"player"});close();notify("عملیات آغاز شد؛ برجک‌ها خودکار دفاع می‌کنند.");};
   return <><div className="operation-mode-tabs">{modes.map(item=><button key={item.id} aria-pressed={mode===item.id} className={mode===item.id?"active":""} onClick={()=>setMode(item.id)}><item.icon size={17}/><span>{item.title}</span></button>)}</div>
-    {mode==="campaign"?<><CampaignChart game={game} selected={selected} select={setSelected} /><article className={`operation-briefing ${operation.boss?"boss-briefing":""}`}><div><span>عملیات {fa(selected)}</span><h3>{operation.title}</h3>{operation.bossName&&<p>هدف ویژه: {operation.bossName}</p>}</div><div className="operation-rewards"><span><CircleDollarSign size={14}/>${compact(operation.cash)}</span><span><Award size={14}/>{fa(operation.xp)} تجربه</span>{operation.boss&&<span><Gift size={14}/>۲ صندوقچه</span>}</div><div className="readiness-row"><span><ShieldCheck size={15}/>{ready?"هشدار تدارکاتی دیده نشد":"پیش از نبرد بررسی کن"}</span><strong className={ready?"panel-positive":""}>{fa(preparation.units.reduce((n,u)=>n+u.count,0))} دشمن</strong></div><p className="operation-tip">{operation.tip}</p></article></>:<div className="alternate-mode"><span>{mode==="endless"?<Waves size={40}/>:<Swords size={40}/>}</span><h3>{mode==="endless"?"تا آخرین قلب مقاومت کن":"برتری در شرایط دشوار"}</h3><p>{mode==="endless"?"موج‌ها ادامه پیدا می‌کنند و هر بار قوی‌تر می‌شوند. بهترین رکورد شما ذخیره می‌شود.":`قانون این نبرد: «${CHALLENGE_RULES[(game.idle.challengeRuns ?? 0) % 3].name}» — ${CHALLENGE_RULES[(game.idle.challengeRuns ?? 0) % 3].description}`}</p><div><Trophy size={17}/> بهترین موج: {fa(game.idle.modeBest[mode])}</div></div>}
+    {mode==="campaign"?<><CampaignChart game={game} selected={selected} select={setSelected} /><article className={`operation-briefing ${operation.boss?"boss-briefing":""}`}><div><span>عملیات {fa(selected)}</span><h3>{design?.title_fa ?? operation.title}</h3>{design && <p>{design.briefing_fa}</p>}{design && game.openingOperations?.cleared.includes(selected) && <p><Check size={14}/> {design.first_clear_visible_mark.label_fa}</p>}{operation.bossName&&<p>هدف ویژه: {operation.bossName}</p>}</div><div className="operation-rewards"><span><CircleDollarSign size={14}/>{design ? `${fa(openingWinCredit(selected,!game.openingOperations?.cleared.includes(selected)))} اعتبار` : `$${compact(operation.cash)}`}</span><span><Award size={14}/>{fa(operation.xp)} تجربه</span>{operation.boss&&<span><Gift size={14}/>۲ صندوقچه</span>}</div><div className="readiness-row"><span><ShieldCheck size={15}/>{ready?"هشدار تدارکاتی دیده نشد":"پیش از نبرد بررسی کن"}</span><strong className={ready?"panel-positive":""}>{fa((design?.groups ?? preparation.units).reduce((n,u)=>n+u.count,0))} دشمن</strong></div><p className="operation-tip">{design?.preparation_decision_fa ?? operation.tip}</p></article></>:<div className="alternate-mode"><span>{mode==="endless"?<Waves size={40}/>:<Swords size={40}/>}</span><h3>{mode==="endless"?"تا آخرین قلب مقاومت کن":"برتری در شرایط دشوار"}</h3><p>{mode==="endless"?"موج‌ها ادامه پیدا می‌کنند و هر بار قوی‌تر می‌شوند. بهترین رکورد شما ذخیره می‌شود.":`قانون این نبرد: «${CHALLENGE_RULES[(game.idle.challengeRuns ?? 0) % 3].name}» — ${CHALLENGE_RULES[(game.idle.challengeRuns ?? 0) % 3].description}`}</p><div><Trophy size={17}/> بهترین موج: {fa(game.idle.modeBest[mode])}</div></div>}
     <div className="preparation-tips">{preparation.tips.map(tip=><button key={tip.id} onClick={()=>prepare(tip)}><ShieldCheck size={17}/><span>{tip.text}</span><ChevronLeft size={16}/></button>)}</div>
-    <button disabled={game.phase === "battle" || !!(game.idle.lastBattle && !game.idle.lastBattle.claimed)} className="primary-action operation-start" onClick={start}><Swords size={18}/>{mode==="campaign"?`شروع عملیات ${fa(selected)}`:"شروع نبرد"}<ArrowLeft size={17}/></button><div className="drawer-note"><ShieldCheck size={16}/> سلامت و تدارکات را بررسی کنید. نتیجهٔ هر عملیات با ستاره و غنائم ثبت می‌شود.</div></>;
+    {waiting && <p className="drawer-note">پس از اولین عوارض و ۱۲۰ ثانیهٔ فعال می‌توانید دفاع را آغاز کنید.</p>}
+    <button disabled={waiting || game.phase === "battle" || !!(game.idle.lastBattle && !game.idle.lastBattle.claimed)} className="primary-action operation-start" onClick={start}><Swords size={18}/>{mode==="campaign"?`شروع عملیات ${fa(selected)}`:"شروع نبرد"}<ArrowLeft size={17}/></button><div className="drawer-note"><ShieldCheck size={16}/> سلامت و تدارکات را بررسی کنید. نتیجهٔ هر عملیات با ستاره و غنائم ثبت می‌شود.</div></>;
 }
 
 function Heroes({ game, dispatch, notify, close }: Props) {

@@ -56,7 +56,7 @@ async function main() {
     const distance = () => page.evaluate(() => window.__map3d.distance());
     const settleCamera = () => page.waitForFunction(() => !window.__map3d.fly, null, {timeout: 60000});
     const back = () => page.evaluate(() => window.appEvents.backButton({canGoBack: false}));
-    const savedAt = () => page.evaluate(() => JSON.parse(localStorage.getItem('hormuz-game-v1')).lastSavedAt);
+    const savedAt = () => page.evaluate(() => JSON.parse(localStorage.getItem('hormuz-game-v2')).state.lastSavedAt);
 
     const signal = isActive => page.evaluate(active => window.appEvents.appStateChange({isActive:active}), isActive);
     await signal(false);

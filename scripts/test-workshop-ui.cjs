@@ -176,8 +176,9 @@ async function main() {
     if (battleOnly) {
       await page.locator('.main-battle-action.is-paused:visible').click();
     } else {
+      // A fresh reopening port first becomes eligible at 120 active seconds.
+      await page.locator('.idle-battle-start').waitFor({timeout:150000});
       await page.locator('.idle-battle-start').click();
-      await page.locator('.news-actions button').filter({hasText:'آغاز نبرد'}).click();
     }
     const pause = page.locator('.main-battle-action:visible');
     const speed = page.locator('.battle-speed:visible');

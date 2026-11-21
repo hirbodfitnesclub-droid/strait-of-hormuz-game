@@ -1,3 +1,4 @@
+import type { OpeningBattleReceipt } from "./opening-operations";
 import { BALANCE } from "./balance";
 import type { BuildingId, GameState, Mode, TowerKind } from "./game";
 import { scenarioForWave } from "./news";
@@ -18,8 +19,8 @@ export type Reward = {
  *  report show defeatReasonText(reason) so the player learns what
  *  actually killed the operation (audit-2 C1: defeats arrived at 18/20
  *  hearts with no explanation at all). */
-export type DefeatReason = "air-leak" | "escort-lost" | "rescue-lost" | "structure-lost" | "intercept-crossed" | "boss-breakthrough" | "line-broken" | "objective-failed";
-export const DEFEAT_REASONS: readonly DefeatReason[] = ["air-leak", "escort-lost", "rescue-lost", "structure-lost", "intercept-crossed", "boss-breakthrough", "line-broken", "objective-failed"];
+export type DefeatReason = "air-leak" | "escort-lost" | "rescue-lost" | "structure-lost" | "intercept-crossed" | "boss-breakthrough" | "line-broken" | "marked-quota" | "objective-failed";
+export const DEFEAT_REASONS: readonly DefeatReason[] = ["air-leak", "escort-lost", "rescue-lost", "structure-lost", "intercept-crossed", "boss-breakthrough", "line-broken", "objective-failed", "marked-quota"];
 export function defeatReasonText(reason?: string | null): string {
   switch (reason) {
     case "air-leak": return "نشت هوایی از حد مجاز گذشت؛ پرنده‌های دشمن از پدافند رد شدند.";
@@ -29,11 +30,13 @@ export function defeatReasonText(reason?: string | null): string {
     case "intercept-crossed": return "دشمن از خط رهگیری گذشت.";
     case "boss-breakthrough": return "غول‌آخر از خط دفاع گذشت و قلب‌ها به صفر رسید.";
     case "line-broken": return "قلب‌ها با نشت دشمن به صفر رسید.";
+    case "marked-quota": return "حداقل سهم گروه‌های علامت‌دار رهگیری نشد.";
     case "objective-failed": return "هدف عملیات از دست رفت.";
     default: return "";
   }
 }
 export interface BattleReport {
+  openingReceipt?: OpeningBattleReceipt;
   id: string; wave: number; title: string; victory: boolean; stars: number;
   cash: number; xp: number; chests: number; destroyed: number; seconds: number; hearts: number; claimed: boolean;
   /** Defeats only (D-024): the mechanical cause, from the defeat path. */

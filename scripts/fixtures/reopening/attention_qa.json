@@ -1,0 +1,56 @@
+{
+  "scope": "deterministic reference; zero human play or device measurements",
+  "cases": 35,
+  "results": {
+    "normal_cash_points_to_tank": "tank",
+    "cash_in_bank_routes_to_bank": "treasury_to_tank",
+    "post_claim_routes_to_tank": "tank",
+    "fractional_treasury_cannot_fund_purchase": "wave",
+    "wait_before_first_wave": null,
+    "enough_anyway_unforced_purchase": "wave",
+    "insolvent_during_battle": "battle_ability",
+    "no_ability_no_pulses": null,
+    "suspend_clears": null,
+    "manual_panel_clears": null,
+    "repeat_stall_static_controls": null,
+    "eligible_cash_first": "treasury",
+    "wave_waits_for_true_first_receipt": null,
+    "exact_threshold": "treasury",
+    "below_threshold": "wave",
+    "focus_started": [
+      "pulse",
+      "tank"
+    ],
+    "timeout_at_3": null,
+    "cycle_reappears_with_same_reason": [
+      "pulse",
+      "tank"
+    ],
+    "stale_pulse_removed": null,
+    "reduced_motion_silent": [
+      "steady-outline",
+      "tank"
+    ],
+    "wave_preempts_current_focus": [
+      "pulse",
+      "battle_ability"
+    ],
+    "intentional_positive_recovery_only": true,
+    "natural_resumption_never_awards": false,
+    "rejected_payment_never_awards": false,
+    "previous_episode_cannot_mark_new": false,
+    "too_late_unrelated_resumption": false,
+    "purchase_coinciding_with_natural_resumption": false,
+    "no_treasury_hint_on_opening_credit_before_first_toll": null,
+    "first_wave_hint_not_repeated_after_first_manual_start": null,
+    "opening_panel_does_not_reset_quiet_cadence": null,
+    "dismiss_current_hint": null,
+    "dismissed_hint_stays_quiet_after_resume": null,
+    "new_stall_episode_permits_new_hint": [
+      "pulse",
+      "tank"
+    ],
+    "guide_distinct_terminal_facts": 16,
+    "guide_lines_under_twelve_words": true
+  }
+}

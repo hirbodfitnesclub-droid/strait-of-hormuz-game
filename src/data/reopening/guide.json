@@ -1,0 +1,184 @@
+{
+  "version": 5,
+  "sequence": [
+    {
+      "id": "G01",
+      "title_fa": "اولین عوارض",
+      "terminal_metric": "regular_toll_posted",
+      "min": 1,
+      "focus": "ship_receipt",
+      "copy_fa": "عوارض از همین کشتی رسید.",
+      "title_en": "First transit dues",
+      "reveal_when": "ship_enter",
+      "family": "crossing"
+    },
+    {
+      "id": "G02",
+      "title_fa": "نفت‌کش خودمان",
+      "terminal_metric": "export_barrels_realized",
+      "min": 1,
+      "focus": "oil_terminal",
+      "copy_fa": "این نفت از مخزن بندر بارگیری می‌شود.",
+      "title_en": "Our export tanker",
+      "reveal_when": "own_tanker_moored",
+      "family": "loading"
+    },
+    {
+      "id": "G03",
+      "title_fa": "برداشت از خزانه",
+      "terminal_metric": "bank_collected",
+      "min": 1,
+      "focus": "treasury",
+      "copy_fa": "درآمد بندر را بردار.",
+      "title_en": "Collect earnings",
+      "reveal_when": "first_due_posted",
+      "family": "bank"
+    },
+    {
+      "id": "G04",
+      "title_fa": "اولین توقف",
+      "terminal_metric": "tank_stall_inspected",
+      "min": 1,
+      "focus": "tank",
+      "copy_fa": "پمپ ایستاده؛ مخزن پُر شده.",
+      "title_en": "See a stopped pump",
+      "reveal_when": "actual_full_block_active",
+      "family": "industry"
+    },
+    {
+      "id": "G05",
+      "title_fa": "تغییر با دست خودت",
+      "terminal_metric": "tank_user_recovered",
+      "min": 1,
+      "focus": "tank",
+      "copy_fa": "جا باز شد؛ پمپ دوباره کار می‌کند.",
+      "title_en": "Restore production",
+      "reveal_when": "actual_full_block_active",
+      "family": "industry"
+    },
+    {
+      "id": "G06",
+      "title_fa": "اولین دفاع",
+      "terminal_metric": "wave_1_user_started",
+      "min": 1,
+      "focus": "wave",
+      "copy_fa": "هر وقت آماده‌ای، دفاع را شروع کن.",
+      "title_en": "Start defense voluntarily",
+      "reveal_when": "wave_1_available",
+      "family": "defense"
+    },
+    {
+      "id": "G07",
+      "title_fa": "پالایش و نیروگاه",
+      "terminal_metric": "refinery_produced_fuel",
+      "min": 1,
+      "focus": "refinery",
+      "copy_fa": "پالایشگاه سوخت نیروگاه را می‌سازد.",
+      "title_en": "Refine fuel",
+      "reveal_when": "first_clear_2",
+      "family": "fuel"
+    },
+    {
+      "id": "G08",
+      "title_fa": "هزینهٔ موج",
+      "terminal_metric": "damage_report_read",
+      "min": 1,
+      "focus": "result",
+      "copy_fa": "ببین کدام ساختمان مراقبت می‌خواهد.",
+      "title_en": "Damage report",
+      "reveal_when": "resolved_operation_3",
+      "family": "damage"
+    },
+    {
+      "id": "G09",
+      "title_fa": "بازگشت به کار",
+      "terminal_metric": "repair_or_clean_debrief",
+      "min": 1,
+      "focus": "condition",
+      "copy_fa": "تعمیرش کن، یا بندر سالم را ببین.",
+      "title_en": "Back in service",
+      "reveal_when": "resolved_operation_3",
+      "family": "repair"
+    },
+    {
+      "id": "G10",
+      "title_fa": "پیش از ساخت فولاد",
+      "terminal_metric": "steel_forecast_viewed",
+      "min": 1,
+      "focus": "steel",
+      "copy_fa": "برقِ لازم را پیش از ساخت ببین.",
+      "title_en": "Preview steel",
+      "reveal_when": "first_clear_5",
+      "family": "forecast"
+    },
+    {
+      "id": "G11",
+      "title_fa": "فولاد در انبار",
+      "terminal_metric": "steel_realized",
+      "min": 1,
+      "focus": "steel",
+      "copy_fa": "فولاد آماده است؛ حالا کجا خرجش می‌کنی؟",
+      "title_en": "Produce steel",
+      "reveal_when": "first_steel_available",
+      "family": "steel"
+    },
+    {
+      "id": "G12",
+      "title_fa": "آب شهرک",
+      "terminal_metric": "utilities_read",
+      "min": 1,
+      "focus": "city",
+      "copy_fa": "چراغ آب، حال شهرک را نشان می‌دهد.",
+      "title_en": "Water service",
+      "reveal_when": "utilities_unlocked",
+      "family": "utilities"
+    },
+    {
+      "id": "G13",
+      "title_fa": "تدارکات",
+      "terminal_metric": "supply_previewed",
+      "min": 1,
+      "focus": "arms",
+      "copy_fa": "انبار تدارکات چقدر جا دارد؟",
+      "title_en": "Supplies",
+      "reveal_when": "supply_unlocked",
+      "family": "supply"
+    },
+    {
+      "id": "G14",
+      "title_fa": "مدیر بندر",
+      "terminal_metric": "manager_effect_viewed",
+      "min": 1,
+      "focus": "manager",
+      "copy_fa": "ببین مدیر چه کاری را بر عهده گرفت.",
+      "title_en": "Meet the manager",
+      "reveal_when": "first_manager_owned",
+      "family": "manager"
+    },
+    {
+      "id": "G15",
+      "title_fa": "گذر استثنایی",
+      "terminal_metric": "traffic_status_seen",
+      "min": 1,
+      "focus": "traffic",
+      "copy_fa": "شناور از مسیر خارج شده؛ وضعیت را ببین.",
+      "title_en": "Inspect a crossing",
+      "reveal_when": "op10_and_12_regular_passages",
+      "family": "traffic"
+    },
+    {
+      "id": "G16",
+      "title_fa": "شیفت انتخابی",
+      "terminal_metric": "shift_archive_opened",
+      "min": 1,
+      "focus": "shifts",
+      "copy_fa": "هدف بعدی بندرت را انتخاب کن.",
+      "title_en": "Choose a shift",
+      "reveal_when": "first_clear_25",
+      "family": "shift"
+    }
+  ],
+  "guide_is_campaign_gate": false,
+  "skip_scope": "optional dialogue only; facts and world controls remain",
+  "missing_fact_policy": "process eligible observations even out of sequence; never stall new facility, wave or free choice; independent verified step grants once"
+}
