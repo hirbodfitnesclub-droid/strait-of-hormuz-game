@@ -140,6 +140,12 @@ async function main() {
       if (viewport.width === 390) {
         await page.setViewportSize({width:844, height:390});
         await inspect('construction-wheel', '.slot-radial');
+        const modelsVisible = await page.locator('.radial-kind').evaluateAll(cards => cards.every(card => {
+          const model = card.querySelector('.radial-kind-model').getBoundingClientRect();
+          const title = card.querySelector('strong').getBoundingClientRect();
+          return title.top - model.top >= model.height * 0.6;
+        }));
+        assert.ok(modelsVisible, 'each tower must remain visible above its nameplate in landscape');
       }
       await page.locator('.radial-close').click();
       await page.locator('.slot-radial').waitFor({state:'hidden'});

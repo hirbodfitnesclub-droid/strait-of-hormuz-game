@@ -352,6 +352,13 @@
   .workshop-wheel.wheel-empty .workshop-wheel-pivot { display: contents; }
   .workshop-wheel.wheel-empty .workshop-wheel-pivot::before { display: none; }
   .workshop-wheel.wheel-empty .radial-kind { position: relative; inset: auto; transform: none; }
+  .workshop-wheel.wheel-empty .radial-kind strong {
+    max-width: min(116px, 29vw);
+    padding: 3px 6px;
+    font-size: 12px;
+    line-height: 1.3;
+    bottom: -6px;
+  }
   .workshop-wheel.wheel-empty .radial-close,
   .workshop-wheel.wheel-empty .radial-details { position: static; transform: none; }
   .workshop-wheel.wheel-empty .radial-details { grid-row: 3; grid-column: 1 / 3; width: 100%; }
