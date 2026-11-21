@@ -99,7 +99,8 @@ async function main() {
     await page.waitForFunction(() => window.__gamesync3d?.perfInfo().calls > 0 &&
       !document.body.innerText.includes('در حال آماده‌سازی تنگه'), null, {timeout: 180000});
     await page.evaluate(() => document.fonts.ready);
-    for (const viewport of [{width: 390, height: 844}, {width: 320, height: 640}]) {
+    const portraitSizes = [{width:390, height:844}, {width:320, height:640}];
+    for (const viewport of process.argv.includes('--battle-only') ? [] : portraitSizes) {
       await page.setViewportSize(viewport);
       await inspect('harbor');
       await page.getByRole('button', {name:/^فولاد /}).click();
@@ -157,6 +158,9 @@ async function main() {
     for (const viewport of [{width:390, height:844}, {width:320, height:640}, {width:844, height:390}]) {
       await page.setViewportSize(viewport);
       await inspect('pause');
+      const readableIcon = await pause.evaluate(button =>
+        getComputedStyle(button.querySelector('svg')).color === getComputedStyle(button).color);
+      assert.ok(readableIcon, 'paused icon must use the light foreground on its dark button');
       for (const control of [pause, speed]) {
         const box = await control.boundingBox();
         const bar = await page.locator('.essential-resources').boundingBox();
@@ -165,6 +169,21 @@ async function main() {
           problems.push(viewport.width + 'px battle control outside its upper strip');
         }
         await control.click({trial:true});
+      }
+      if (viewport.width > viewport.height) {
+        const exit = page.locator('.command-pause .command-exit');
+        await exit.waitFor();
+        const target = await exit.boundingBox();
+        assert.ok(target && target.x >= 0 && target.y >= 0 &&
+          target.x + target.width <= viewport.width && target.y + target.height <= viewport.height,
+          'native exit control must fit the landscape viewport');
+        const previousSpeed = await speed.getAttribute('aria-label');
+        await speed.click();
+        assert.notEqual(await speed.getAttribute('aria-label'), previousSpeed);
+        await exit.click();
+        await page.getByRole('alertdialog', {name:'خروج از بازی'}).waitFor();
+        await page.getByRole('button', {name:'ادامهٔ بازی'}).click();
+        await page.locator('.main-battle-action.is-paused:visible').waitFor();
       }
     }
     await pause.click();

@@ -121,6 +121,7 @@
 .workshop .war-hearts strong, .workshop .war-wave { color: #fff1c8; font-weight: 800; font-size: 16px; }
 .workshop .war-wave { direction: rtl; color: var(--wk-ink); background: var(--wk-paper); }
 .workshop .war-strip .main-battle-action { pointer-events: auto; padding: 2px; color: #fff0c0; background: var(--wk-enamel); }
+.workshop .war-strip .main-battle-action > svg { color: inherit; }
 .workshop .war-strip .battle-speed { pointer-events: auto; color: #4e330f; background: var(--wk-gold); }
 .workshop .war-status, .workshop .objective-bar { direction: rtl; display: flex; flex-wrap: wrap; align-items: center; gap: 7px; padding: 4px 9px; background: var(--wk-enamel); border: 1px solid #ba9758; border-radius: 8px; box-shadow: 0 2px 2px #14222580; }
 .workshop .war-remaining, .workshop .objective-bar span { color: var(--wk-cream); }

@@ -199,3 +199,13 @@
   .game-shell .pause-indicator.command-pause h2, .game-shell .pause-indicator .command-exit { grid-column: 1 / -1; }
   .game-shell .command-backdrop .exit-dialog { margin-bottom: 0; }
 }
+
+@media (orientation: landscape) and (max-height: 540px) {
+  .workshop.in-battle :is(.quick-build-button, .view-controls) { bottom: var(--wk-dock-bottom); }
+  .workshop.in-battle .game-map:has(.pause-indicator) > .command-bar { visibility: hidden; }
+  .workshop.in-battle .pause-indicator.command-pause {
+    z-index: 32; bottom: calc(env(safe-area-inset-bottom, 0px) + 71px);
+    max-height: calc(100% - var(--wk-header-bottom) - 125px);
+    overflow-y: auto; overscroll-behavior: contain;
+  }
+}
