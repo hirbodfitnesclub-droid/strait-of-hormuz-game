@@ -116,7 +116,7 @@ async function reopenCheckpoint(cdp, snapshot) {
   await cdp.send('Page.navigate',{url:urls.game});
   await until(() => cdp.evaluate(`window.__gamesync3d?.perfInfo().calls &&
     !!document.querySelector('.map-view-toggle:not(:disabled)') && !document.querySelector('.battle-result-dialog') &&
-    window.__gamesync3d.state.phase === 'peace' && window.__gamesync3d.state.wave === ${snapshot.wave}`));
+    window.__gamesync3d.state.phase === ${JSON.stringify(snapshot.phase)} && window.__gamesync3d.state.wave === ${snapshot.wave}`));
 }
 
 async function playOperations(cdp, trace) {
