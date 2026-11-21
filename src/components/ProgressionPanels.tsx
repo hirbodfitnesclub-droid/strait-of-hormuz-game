@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, type Dispatch } from "react";
-import { Anchor, ArrowLeft, Award, BookOpen, Check, ChevronDown, ChevronsLeft, Clock3, Coins, Compass, Crown, Flag, Gift, LockKeyhole, Microscope, Shield, Ship, ShipWheel, UsersRound, Wrench, X, Zap } from "lucide-react";
+import { Anchor, ArrowLeft, Award, BookOpen, Check, ChevronDown, ChevronsLeft, Clock3, Coins, Crown, Flag, Gift, LockKeyhole, Microscope, Shield, Ship, UsersRound, Wrench, X, Zap } from "lucide-react";
 import { type Action, type GameState } from "@/lib/game";
 import { CHAPTERS, CONTRACTS, MANAGERS, MISSIONS, currentChapter, currentMission, managerCost, missionProgress, rankInfo, type ContractId, type ManagerId, type Mission, type MissionTarget } from "@/lib/progression";
 import { DAILY_REWARDS, type DailyStatus } from "@/lib/daily";
@@ -27,19 +27,29 @@ type Props = {
 };
 
 const headings = {
-  missions: { title: "مأموریت‌ها", icon: Compass },
-  managers: { title: "مدیریت بندر", icon: ShipWheel },
-  contracts: { title: "قراردادهای تجاری", icon: Ship },
-  daily: { title: "هدیهٔ روزانه", icon: Gift },
+  missions: { title: "مأموریت‌ها", art: "helm" },
+  managers: { title: "مدیریت بندر", art: "helm" },
+  contracts: { title: "قراردادهای تجاری", art: "freighter" },
+  daily: { title: "هدیهٔ روزانه", art: "gift" },
 };
 
 function MissionIllustration({ mission }: { mission: Mission }) {
   const icons = { collect: Coins, building: Wrench, manager: UsersRound, tower: Shield, battle: Flag, research: Microscope, chest: Gift, contract: Ship, island: Anchor, journal: BookOpen };
   const Icon = icons[mission.navigate.kind];
-  const image = mission.navigate.kind === "collect" ? "/assets/workshop/cash.webp"
-    : mission.navigate.kind === "building" && mission.metricId
-    ? `/assets/buildings/${mission.metricId}.png`
-    : mission.navigate.kind === "contract" ? "/assets/ships/merchant.png" : null;
+  const illustrations: Partial<Record<MissionTarget["kind"], string>> = {
+    collect: "/assets/workshop/cash.webp",
+    manager: "/assets/workshop/progression/harbor.webp",
+    chest: "/assets/workshop/progression/strongbox.webp",
+    contract: "/assets/workshop/progression/freighter.webp",
+    island: "/assets/workshop/progression/lighthouse.webp",
+  };
+  const building = mission.metricId;
+  const image = mission.navigate.kind === "building" && building
+    ? building === "oil" || building === "tank" ? "/assets/workshop/progression/barrels.webp"
+      : building === "steel" ? "/assets/workshop/steel.webp"
+      : building === "dock" ? "/assets/workshop/progression/freighter.webp"
+      : `/assets/buildings/${building}.png`
+    : illustrations[mission.navigate.kind];
   return <span className={`mission-node mission-art-${mission.navigate.kind}`} aria-hidden="true">
     {image ? <img src={image} alt="" loading="lazy"/> : <Icon size={28}/>}
   </span>;
@@ -80,17 +90,19 @@ function Missions({ game, dispatch, navigate, close, feedback }: Props) {
       return <article key={mission.id} className={`journey-mission workshop-ticket ${done ? "done" : isCurrent ? "current" : "locked"}`}>
         <MissionIllustration mission={mission}/>
         <div className="mission-detail">
-          <strong>{mission.title}</strong>
-          <p>{mission.description}</p>
+          <details className="mission-brief">
+            <summary>{mission.title}<ChevronDown size={13} aria-hidden="true"/></summary>
+            <p>{mission.description}</p>
+            <div className="mission-prizes">
+              <span title="دلار نفتی"><Coins size={13}/>{compact(mission.cash)}</span>
+              <span title="تجربه"><Award size={13}/>{fa(mission.xp)}</span>
+              {!!mission.chests && <span title="صندوقچه"><Gift size={13}/>{fa(mission.chests)}</span>}
+              {!!mission.boosts && <span title="تقویت تولید"><Zap size={13}/>{fa(mission.boosts)}</span>}
+            </div>
+          </details>
           <div className="mission-meter" role="progressbar" aria-label={mission.title} aria-valuenow={progress.value} aria-valuemin={0} aria-valuemax={progress.target}>
             <i style={{ width: `${progress.fraction * 100}%` }}/>
             <b>{fa(progress.value)} / {fa(progress.target)}</b>
-          </div>
-          <div className="mission-prizes">
-            <span title="دلار نفتی"><Coins size={13}/>{compact(mission.cash)}</span>
-            <span title="تجربه"><Award size={13}/>{fa(mission.xp)}</span>
-            {!!mission.chests && <span title="صندوقچه"><Gift size={13}/>{fa(mission.chests)}</span>}
-            {!!mission.boosts && <span title="تقویت تولید"><Zap size={13}/>{fa(mission.boosts)}</span>}
           </div>
         </div>
         {isCurrent ? <button className="mission-go" aria-label={`${progress.complete ? "دریافت پاداش" : "رفتن به"} ${mission.title}`} onClick={() => act(mission)}>
@@ -121,8 +133,8 @@ function Managers({ game, dispatch, feedback, notify, navigate, close }: Props) 
       const cost = managerCost(id, level);
       const unlocked = game.idle.xp >= manager.unlockXp;
       return <article className={`manager-card workshop-ticket manager-${manager.color} ${level > 0 ? "hired" : ""}`} key={id}>
-        <div className="manager-portrait"><img src={manager.image} alt=""/><span>{level ? `سطح ${fa(level)}` : "متخصص"}</span></div>
-        <div className="manager-details"><span className="manager-role">{manager.role}</span><h3>{manager.name}</h3></div>
+        <div className="manager-portrait"><img src={`/assets/workshop/progression/${id}.webp`} alt=""/></div>
+        <div className="manager-details"><h3>{manager.name}</h3><span className="manager-role">{manager.role} · {level ? `سطح ${fa(level)}` : "متخصص"}</span></div>
         <div className="manager-action">{unlocked ? <>
           <button disabled={level >= 5 || game.cash < cost} onClick={() => {
             dispatch({ type: "hire-manager", id });
@@ -144,7 +156,6 @@ function Managers({ game, dispatch, feedback, notify, navigate, close }: Props) 
   </>;
 }
 
-const freighters = { coastal: "merchant", regional: "container", international: "freighter" };
 
 function Contracts({ game, dispatch, close, feedback, notify }: Props) {
   const active = game.idle.contract;
@@ -153,7 +164,7 @@ function Contracts({ game, dispatch, close, feedback, notify }: Props) {
     {active && definition && <div className="active-contract workshop-ticket">
       <span className="contract-live"><i/>{active.elapsed >= definition.duration ? "محموله رسید" : "در مسیر آبراه"}</span>
       <h3>{definition.title}</h3><p>{definition.destination}</p>
-      <div className="contract-track"><Ship size={20} style={{ right: `${Math.min(90, active.elapsed / definition.duration * 90)}%` }}/><i style={{ width: `${Math.min(100, active.elapsed / definition.duration * 100)}%` }}/></div>
+      <div className="contract-track"><img src="/assets/workshop/progression/freighter.webp" alt="" style={{ right: `${Math.min(79, active.elapsed / definition.duration * 79)}%` }}/><i style={{ width: `${Math.min(100, active.elapsed / definition.duration * 100)}%` }}/></div>
       <div className="contract-countdown"><span><Clock3 size={14}/>{fa(Math.max(0, Math.ceil(definition.duration - active.elapsed)))} ثانیه</span><strong>${compact(definition.cash)}</strong></div>
       <button className="primary-action" disabled={active.elapsed < definition.duration} onClick={() => { dispatch({ type: "claim-contract" }); feedback(); close(); }}>
         {active.elapsed >= definition.duration ? "تسویهٔ قرارداد" : "محموله در راه است"}<ArrowLeft size={16}/>
@@ -163,7 +174,7 @@ function Contracts({ game, dispatch, close, feedback, notify }: Props) {
       const contract = CONTRACTS[id];
       const locked = game.highestWave < contract.unlock;
       return <article className={`trade-contract workshop-ticket ${locked ? "locked" : ""}`} key={id}>
-        <span className="trade-contract-icon"><img src={`/assets/ships/${freighters[id]}.png`} alt=""/></span>
+        <span className="trade-contract-icon"><img src="/assets/workshop/progression/freighter.webp" alt=""/></span>
         <div><h3>{contract.title}</h3><p>{contract.destination}</p>
           <span className="trade-contract-meta"><Clock3 size={12}/>{fa(contract.duration / 60)} دقیقه <i/> سود خالص <b>+${compact(contract.cash - contract.cost)}</b></span>
         </div>
@@ -186,8 +197,9 @@ function Daily({ daily, dailyBusy, dailyError, claimDaily, reloadDaily, dailyWeb
         const today = step === day;
         const claimed = (step !== undefined && day < step) || (today && daily?.available === false);
         return <div className={`daily-day ${today ? "today" : ""} ${claimed ? "claimed" : ""} ${day === 7 ? "grand" : ""}`} key={day} aria-current={today ? "date" : undefined}>
-          <span>روز {fa(day)}</span>
-          <div className="day-symbol" aria-hidden="true">{day === 7 ? <span className="workshop-icon wk-anchor"/> : reward.chests ? <Gift size={27}/> : <span className="workshop-icon wk-cash"/>}</div>
+          <span className="calendar-day-label">روز {fa(day)}</span>
+          {day === 7 && <img className="grand-harbor" src="/assets/workshop/progression/lighthouse.webp" alt=""/>}
+          <div className="day-symbol" aria-hidden="true">{day === 7 ? <span className="workshop-icon wk-anchor"/> : reward.chests ? <img src="/assets/workshop/progression/gift.webp" alt=""/> : <span className="workshop-icon wk-cash"/>}</div>
           <strong>${compact(reward.cash)}</strong>
           <small>{[reward.chests > 0 && `${fa(reward.chests)} صندوقچه`, reward.boosts > 0 && `${fa(reward.boosts)} تقویت`].filter(Boolean).join(" · ")}</small>
           {claimed && <span className="day-check" aria-label="دریافت شد"><Check size={13}/></span>}
@@ -197,7 +209,7 @@ function Daily({ daily, dailyBusy, dailyError, claimDaily, reloadDaily, dailyWeb
     {dailyWebOnly ? <div className="daily-error daily-web-only"><p>هدیهٔ روزانه در نسخهٔ وب در دسترس است.</p></div> :
       dailyError ? <div className="daily-error"><p>هدیه آماده نشد. فضای ذخیرهٔ دستگاه را بررسی و دوباره تلاش کنید.</p><button className="primary-action" onClick={reloadDaily}>تلاش دوباره</button></div> :
       <button className="primary-action daily-claim" data-autofocus disabled={!daily || dailyBusy || !daily.available} onClick={claimDaily}>
-        <Gift size={22}/>{dailyBusy ? "در حال ثبت پاداش…" : !daily ? "در حال آماده‌سازی هدیه…" : daily.available ? "دریافت هدیهٔ امروز" : "هدیهٔ امروز دریافت شد"}
+        <img className="day-gift-icon" src="/assets/workshop/progression/gift.webp" alt=""/>{dailyBusy ? "در حال ثبت پاداش…" : !daily ? "در حال آماده‌سازی هدیه…" : daily.available ? "دریافت هدیهٔ امروز" : "هدیهٔ امروز دریافت شد"}
       </button>}
     <p className="daily-server-note"><Shield size={14}/>پیشرفت هفت‌روزه‌تان حفظ می‌شود.{!dailyWebOnly && " هدیهٔ بعدی با آغاز روز تهران آماده می‌شود."}</p>
   </>;
@@ -205,12 +217,12 @@ function Daily({ daily, dailyBusy, dailyError, claimDaily, reloadDaily, dailyWeb
 
 export default function ProgressionPanels(props: Props) {
   const heading = headings[props.panel];
-  const Icon = heading.icon;
   const ref = useDialog<HTMLElement>(props.close);
   return <div className="drawer-overlay workshop-progress-overlay" onClick={props.close}>
     <section className={`drawer progression-drawer panel-${props.panel}`} ref={ref} role="dialog" aria-modal="true" aria-labelledby="progress-panel-title" tabIndex={-1} onClick={event => event.stopPropagation()}>
       <header className="drawer-header">
-        <h2 id="progress-panel-title"><Icon size={23} aria-hidden="true"/>{heading.title}</h2>
+        {props.panel === "missions" && <img className="journal-clamp" src="/assets/workshop/progression/clip.webp" alt=""/>}
+        <h2 id="progress-panel-title"><img className="progress-heading-icon" src={`/assets/workshop/progression/${heading.art}.webp`} alt=""/>{heading.title}</h2>
         <button className="icon-close" onClick={props.close} aria-label="بستن"><X size={19}/></button>
       </header>
       <div className="drawer-body">

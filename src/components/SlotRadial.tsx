@@ -2,10 +2,10 @@
 
 import { useEffect, useRef, useState, type CSSProperties, type Dispatch } from "react";
 import Image from "next/image";
-import { ArrowUp, Castle, Crosshair, Info, LockKeyhole, Trash2, X } from "lucide-react";
+import { Info, LockKeyhole, Trash2, X } from "lucide-react";
 import { PRIORITY_LABELS, SLOTS, TOWERS, TOWER_KINDS, towerUpgradeCost, type Action, type GameState, type TowerKind } from "@/lib/game";
 import { compact, fa, sellRefund, TargetEmojis } from "./game-ui";
-import TowerModel, { towerModelUrl } from "./TowerModel";
+import { towerModelUrl } from "./TowerModel";
 import { useDialog } from "./useDialog";
 
 /* Radial slot menu (PRD §10.2): opens ON the tapped slot — upgrade top, priority
@@ -72,10 +72,10 @@ export default function SlotRadial({ game, slot, dispatch, close, openSheet, onB
         <button className="radial-btn radial-close" onClick={close} aria-label="بستن"><X size={16} /></button>
       </> : tower ? <>
         <button className="radial-btn radial-top" onClick={doUpgrade} disabled={tower.tier >= 4} aria-label="ارتقای برجک">
-          {tower.tier >= 4 ? <><LockKeyhole size={17} /><span>کامل</span></> : tower.tier === 3 ? <><ArrowUp size={17} /><span>{game.research.includes("special") ? "شاخه ویژه" : "ارتقا"}</span></> : <><ArrowUp size={17} /><span>ارتقا</span><small>${compact(upgradeCost!.cash)} · {fa(upgradeCost!.steel)}⚙</small></>}
+          {tower.tier >= 4 ? <><LockKeyhole size={17} /><span>کامل</span></> : tower.tier === 3 ? <><Image src="/assets/workshop/instruments/upgrade.webp" width={26} height={26} alt="" unoptimized /><span>{game.research.includes("special") ? "شاخه ویژه" : "ارتقا"}</span></> : <><Image src="/assets/workshop/instruments/upgrade.webp" width={26} height={26} alt="" unoptimized /><span>ارتقا</span><small>${compact(upgradeCost!.cash)} · {fa(upgradeCost!.steel)}⚙</small></>}
         </button>
         <button className="radial-btn radial-left" onClick={() => { dispatch({ type: "priority", slot }); feedback(); }} aria-label="تغییر هدف‌گیری">
-          <Crosshair size={17} /><span>هدف‌گیری</span><small>{PRIORITY_LABELS[tower.priority]}</small>
+          <Image src="/assets/workshop/instruments/reticle.webp" width={27} height={27} alt="" unoptimized /><span>هدف‌گیری</span><small>{PRIORITY_LABELS[tower.priority]}</small>
         </button>
         <button className={`radial-btn radial-bottom ${confirmSell ? "confirm" : ""}`} onClick={doSell} aria-label={`فروش برجک؛ بازگشت ${refund ? compact(refund.cash) : ""} دلار و ${refund ? fa(refund.steel, refund.steel % 1 ? 1 : 0) : ""} فولاد`}>
           <Trash2 size={17} /><span>{confirmSell ? "مطمئنی؟ بفروش" : "فروش"}</span>{refund && <small>بازگشت ${compact(refund.cash)} + {fa(refund.steel, refund.steel % 1 ? 1 : 0)}⚙</small>}
@@ -84,7 +84,7 @@ export default function SlotRadial({ game, slot, dispatch, close, openSheet, onB
           <Info size={17} /><span>جزئیات</span>
         </button>
         <div className="radial-center">
-          <span className={`radial-model tower-color-${tower.kind}`}><TowerModel kind={tower.kind} tier={tower.tier} branch={tower.branch} preview /></span>
+          <span className="radial-model"><Image src={towerModelUrl(tower.kind, tower.tier, tower.branch)} width={71} height={65} alt="" unoptimized /></span>
           <strong>{tower.tier === 4 && tower.branch !== null ? TOWERS[tower.kind].branches[tower.branch] : TOWERS[tower.kind].short}</strong>
           <span className="radial-pips">{[1, 2, 3, 4].map(l => <i key={l} className={l <= tower.tier ? "filled" : ""} />)}</span>
           <small>{slotDef.label}</small>
@@ -97,15 +97,15 @@ export default function SlotRadial({ game, slot, dispatch, close, openSheet, onB
           return <button key={kind} className={`radial-kind ${afford ? "" : "unaffordable"}`}
             onClick={() => { if (afford) { onBuild(kind); } else { notify("منابع کافی نیست — درآمد جمع کن یا فولاد بساز."); openSheet(); } }}
             aria-label={`ساخت ${def.short}`} aria-describedby={`build-price-${kind}`}>
-            <span className="radial-kind-model"><Image src={towerModelUrl(kind, 1)} width={72} height={72} alt="" unoptimized draggable={false} /></span>
+            <span className="radial-kind-model"><Image src={towerModelUrl(kind, 1)} width={105} height={105} alt="" unoptimized draggable={false} /></span>
             <strong>{def.short}</strong><TargetEmojis targets={def.targets} /><small><i className="workshop-icon wk-cash" aria-hidden="true" /> {compact(def.cost)} <i className="workshop-icon wk-steel" aria-hidden="true" /> {fa(def.steel)}</small>
             <span id={`build-price-${kind}`} hidden>{fa(def.cost)} دلار و {fa(def.steel)} فولاد{!afford && "، منابع کافی نیست"}</span>
           </button>;
         })}
         <div className="radial-center empty">
-          <Castle size={23} aria-hidden="true" /><strong>انتخاب برجک</strong><small>{slotDef.label}</small>
+          <Image src="/assets/workshop/instruments/shield.webp" width={37} height={37} alt="" unoptimized /><strong>انتخاب برجک</strong><small>{slotDef.label}</small>
         </div>
-        <button className="radial-details" onClick={openSheet}><Info size={16} /> مقایسه و جزئیات</button>
+        <button className="radial-details" onClick={openSheet}><Image src="/assets/workshop/instruments/gear.webp" width={30} height={30} alt="" unoptimized /> مقایسه و ساخت</button>
         <button className="radial-btn radial-close" onClick={close} aria-label="بستن"><X size={16} /></button>
       </>}
       </div>

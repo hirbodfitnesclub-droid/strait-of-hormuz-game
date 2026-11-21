@@ -1,5 +1,6 @@
 'use client';
-import { CloudUpload, Download, Upload } from 'lucide-react';
+import { Download, Upload } from 'lucide-react';
+import Image from 'next/image';
 import { useRef, type Dispatch } from 'react';
 import { hydrateGame, type Action, type GameState } from '@/lib/game';
 import { exportJson } from '@/lib/export-file';
@@ -7,7 +8,7 @@ import { writeSnapshot } from '@/lib/save-storage';
 
 export default function SaveBackup({ game, dispatch, notify, close }: {game: GameState; dispatch: Dispatch<Action>; notify: (s:string)=>void; close:()=>void}) {
   const input = useRef<HTMLInputElement>(null);
-  return <div className="diagnostics-settings backup-settings"><strong><CloudUpload size={22} />پشتیبان پیشرفت</strong><p>برای انتقال به دستگاه دیگر، یک فایل پشتیبان نگه دارید. بازی در دستگاه تازه از همین نقطه ادامه پیدا می‌کند.</p>
+  return <div className="diagnostics-settings backup-settings"><strong><Image src="/assets/workshop/command/folio.webp" width={40} height={40} alt="" unoptimized />پشتیبان پیشرفت</strong><p>برای انتقال به دستگاه دیگر، یک فایل پشتیبان نگه دارید. بازی در دستگاه تازه از همین نقطه ادامه پیدا می‌کند.</p>
     <button onClick={() => { void exportJson('hormuz-save.json', {format:'hormuz-save',version:1,state:{...game,shots:[],popups:[],lastSavedAt:Date.now()}}).catch(()=>notify('فایل ذخیره نشد؛ دوباره تلاش کنید.')); }}><Download size={17} />دریافت فایل پشتیبان</button>
     <button onClick={() => input.current?.click()}><Upload size={17} />بازیابی از فایل</button>
     <input ref={input} type="file" accept="application/json,.json" hidden onChange={async event => {

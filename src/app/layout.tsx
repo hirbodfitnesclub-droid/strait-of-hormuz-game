@@ -7,6 +7,7 @@ import "@fontsource/vazirmatn/500.css";
 import "@fontsource/vazirmatn/600.css";
 import "@fontsource/vazirmatn/700.css";
 import "@fontsource/vazirmatn/800.css";
+import "@fontsource/vazirmatn/900.css";
 import "./globals.css";
 import "./mobile-game.css";
 import "./workshop.css";

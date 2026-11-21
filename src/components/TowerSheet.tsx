@@ -1,12 +1,13 @@
 "use client";
 
-import { useState, type Dispatch } from "react";
-import { ArrowLeft, ArrowUp, Check, ChevronDown, Crosshair, Gauge, LockKeyhole, Pause, Radar, Shield, Sparkles, Timer, Trash2, X } from "lucide-react";
+import { useRef, useState, type Dispatch } from "react";
+import Image from "next/image";
+import { ArrowLeft, Check, ChevronDown, Crosshair, LockKeyhole, Pause, Sparkles, Trash2, X } from "lucide-react";
 import { PRIORITY_LABELS, SLOTS, TOWERS, TOWER_KINDS, damageTech, getRange, getStats, towerDps, towerPowerMw, towerUpgradeCost, type Action, type GameState, type Tower, type TowerKind } from "@/lib/game";
 import { specInterval, weaponSpec } from "@/lib/weapons-spec";
 import { compact, fa, sellRefund, TargetTypes } from "./game-ui";
 import { useDialog } from "./useDialog";
-import TowerModel from "./TowerModel";
+import TowerModel, { towerModelUrl } from "./TowerModel";
 
 type Props = { game: GameState; slot: number; kind: TowerKind; onKindChange: (kind: TowerKind) => void; dispatch: Dispatch<Action>; close: () => void; onResearch: () => void; onBuild: (kind: TowerKind) => void; feedback: () => void; notify: (text: string) => void };
 const roles: Record<TowerKind, string> = { cannon: "رگبار سریع · ضد تندرو و پهپاد", heavy: "انفجار منطقه‌ای · ضد دسته‌ها", missile: "دوربرد سنگین · شکار ناو", air: "پدافند و لیزر · هوا و دریا", ew: "کندکننده و سونار · پشتیبانی", boat: "رهگیر دریایی · سد مسیر" };
@@ -33,6 +34,7 @@ const BRANCH_INFO: Record<string, string> = {
 export default function TowerSheet(props: Props) {
   const { game, slot, kind, dispatch, close, notify } = props;
   const ref = useDialog<HTMLElement>(close);
+  const catalog = useRef<HTMLDetailsElement>(null);
   const [advanced, setAdvanced] = useState(false);
   const [confirmSell, setConfirmSell] = useState(false);
   const tower = game.towers.find(t => t.slot === slot), def = TOWERS[tower?.kind ?? kind];
@@ -60,43 +62,62 @@ export default function TowerSheet(props: Props) {
   return <div className="tower-sheet-backdrop workshop-sheet-backdrop" onClick={close}>
     <section className="tower-sheet workshop-sheet" ref={ref} role="dialog" aria-modal="true" aria-labelledby="tower-sheet-title" tabIndex={-1} onClick={e => e.stopPropagation()}>
       <header className="tower-sheet-header workshop-sheet-header">
-        <div className="workshop-heading"><Shield size={23} aria-hidden="true" /><h2 id="tower-sheet-title">{tower ? name : "انتخاب برجک"}</h2></div>
+        <div className="workshop-heading"><Image src="/assets/workshop/instruments/shield.webp" width={38} height={38} alt="" unoptimized /><h2 id="tower-sheet-title">{tower ? "ارتقای برج دفاعی" : "ساخت برج دفاعی"}</h2></div>
         <button className="close-control" onClick={close} aria-label="بستن منوی برجک"><X size={19} /></button>
       </header>
       <div className="tower-sheet-body">
-        <div className="sheet-eyebrow">جایگاه {SLOTS[slot].label}{game.phase === "battle" && <small><Pause size={10} /> نبرد موقتاً متوقف است</small>}</div>
-        {!tower ? <div className="tower-choice-grid">{TOWER_KINDS.map(item => {
-          const selected = item === kind, definition = TOWERS[item];
-          const canAfford = game.cash >= definition.cost && game.steel >= definition.steel;
-          const itemSpec = weaponSpec(item, 1, null);
-          const itemPreview = { slot, kind: item, tier: 1, branch: null, priority: "first" as const };
-          const itemShot = itemSpec.damage * damageTech(game, itemPreview as Tower) * stats.grid;
-          const itemInterval = specInterval(itemSpec);
-          return <button key={item} className={`tower-choice ${selected ? "chosen" : ""} ${canAfford ? "" : "unaffordable"}`} onClick={() => props.onKindChange(item)} aria-pressed={selected} aria-label={`انتخاب ${definition.short}`}>
-            <span className={`choice-icon tower-color-${item}`}><TowerModel kind={item} tier={1} preview /></span><span className="choice-copy"><strong>{definition.short}</strong><small>{roles[item]}</small><small className="choice-dps">آسیب {fa(itemShot)} · شلیک هر {fa(itemInterval, 2)}ث · برد {fa(getRange(game, itemPreview as Tower), 1)}</small></span>
-            <span className="choice-bottom"><TargetTypes targets={definition.targets} /><span>${compact(definition.cost)} + {fa(definition.steel)}⚙</span></span>{selected && <span className="choice-check"><Check size={11} /></span>}
-          </button>;
-        })}</div> : <div className="selected-tower-card"><span className={`selected-tower-art tower-color-${tower.kind}`}><TowerModel kind={tower.kind} tier={tower.tier} branch={tower.branch} preview /></span><div><span className="tier-label">سطح {fa(tower.tier)} از ۴{tower.tier === 4 ? " · ویژه" : ""}</span><p>{tower.tier === 4 && tower.branch !== null ? BRANCH_INFO[`${tower.kind}:${tower.branch}`] : def.description}</p><TargetTypes targets={def.targets} /></div><div className="level-pips">{[1, 2, 3, 4].map(level => <i className={level <= tower.tier ? "filled" : ""} key={level} />)}</div></div>}
-        <div className="tower-specs-grid" aria-label="مشخصات واقعی برجک">
-          <div className="spec-cell"><span><Crosshair size={13} /> آسیب هر شلیک</span><strong>{spec.mode === "beam" ? "پرتو پیوسته" : fa(perShot)}</strong>{spec.mode === "beam" && <small>بدون شلیک مجزا</small>}</div>
-          <div className="spec-cell"><span><Timer size={13} /> فاصلهٔ شلیک</span><strong>{spec.mode === "beam" ? "پیوسته" : `هر ${fa(interval, 2)} ث`}</strong>{spec.units > 1 && <small>{fa(spec.units)} واحد شلیک هم‌زمان</small>}</div>
-          <div className="spec-cell"><span><Gauge size={13} /> آسیب بر ثانیه</span><strong>{fa(dpsNow)}</strong>{dpsNext && <small className="dps-gain">سطح بعد {fa(dpsNext)} (+{fa(dpsGain)}٪)</small>}</div>
-          <div className="spec-cell"><span><Radar size={13} /> برد</span><strong>{fa(rangeNow, 1)}</strong>{rangeNext && <small>سطح بعد {fa(rangeNext, 1)}</small>}</div>
-          <div className="spec-cell"><span>مهمات هر شلیک</span><strong>{spec.ammoPerShot === 0 ? "مصرف ندارد" : fa(spec.ammoPerShot)}</strong></div>
-          <div className="spec-cell"><span>برق مصرفی</span><strong>{fa(towerPowerMw(game, preview as Tower), 1)} MW</strong></div>
-          <div className="spec-cell"><span>ضربهٔ بحرانی</span><strong>{fa(spec.critChance * 100)}٪</strong><small>آسیب ×۲</small></div>
-          <div className="spec-cell"><span>کارت خانواده</span><strong>سطح {fa(card.level)}</strong><small>{card.level > 1 ? `+${fa((card.level - 1) * 10)}٪ آسیب پایه` : "هنوز اثری ندارد"}</small></div>
+        <div className="tower-workshop-hero">
+          <Image className="hero-tower-model" src={towerModelUrl(preview.kind, preview.tier, preview.branch)} alt="" width={150} height={150} unoptimized />
+          <div className="tower-hero-copy">
+            <small>جایگاه {SLOTS[slot].label}</small>
+            <h3>{name}</h3>
+            <p>{roles[preview.kind]}</p>
+            <span className="tower-tier-stamp">سطح {fa(preview.tier)} <span className="tier-gauge" aria-label={`سطح ${fa(preview.tier)} از ۴`}>{[1, 2, 3, 4].map(level => <i key={level} className={level <= preview.tier ? "filled" : ""} />)}</span></span>
+          </div>
         </div>
+        {game.phase === "battle" && <small className="sheet-battle-paused"><Pause size={12} /> نبرد موقتاً متوقف است</small>}
+        {!tower && <details className="tower-catalog" ref={catalog}>
+          <summary>انتخاب و مقایسهٔ برجک‌ها <ChevronDown size={17} /></summary>
+          <div className="tower-choice-grid">{TOWER_KINDS.map(item => {
+            const definition = TOWERS[item], selected = item === kind;
+            const canAfford = game.cash >= definition.cost && game.steel >= definition.steel;
+            return <button key={item} className={`tower-choice ${selected ? "chosen" : ""} ${canAfford ? "" : "unaffordable"}`}
+              onClick={() => { props.onKindChange(item); if (catalog.current) catalog.current.open = false; }}
+              aria-pressed={selected} aria-label={`انتخاب ${definition.short}`}>
+              <Image src={towerModelUrl(item, 1)} width={64} height={64} alt="" unoptimized />
+              <strong>{definition.short}</strong>
+              <span className="choice-price"><i className="workshop-icon wk-cash" aria-label="دلار" /> {compact(definition.cost)} <i className="workshop-icon wk-steel" aria-label="فولاد" /> {fa(definition.steel)}</span>
+              {selected && <span className="choice-check"><Check size={11} /></span>}
+            </button>;
+          })}</div>
+        </details>}
+        <div className="tower-field-stats" aria-label="مشخصات واقعی برجک">
+          <div><Image src="/assets/workshop/instruments/reticle.webp" alt="" width={39} height={39} unoptimized /><span>آسیب هر شلیک</span><strong>{spec.mode === "beam" ? "پرتو پیوسته" : fa(perShot)}</strong></div>
+          <div><Image src="/assets/workshop/instruments/radar.webp" alt="" width={39} height={39} unoptimized /><span>برد</span><strong>{fa(rangeNow, 1)}</strong></div>
+          <div><Image src="/assets/workshop/instruments/stopwatch.webp" alt="" width={39} height={39} unoptimized /><span>فاصلهٔ شلیک</span><strong>{spec.mode === "beam" ? "پیوسته" : `${fa(interval, 2)} ث`}</strong></div>
+        </div>
+        <details className="tower-blueprint">
+          <summary>مشخصات کامل و مدل سه‌بعدی <ChevronDown size={17} /></summary>
+          <div className="blueprint-model"><TowerModel kind={preview.kind} tier={preview.tier} branch={preview.branch} preview /><div><p>{tower?.tier === 4 && tower.branch !== null ? BRANCH_INFO[`${tower.kind}:${tower.branch}`] : def.description}</p><TargetTypes targets={def.targets} /></div></div>
+          <dl className="blueprint-stats">
+            <div><dt>آسیب بر ثانیه</dt><dd>{fa(dpsNow)}{dpsNext !== null && <small>سطح بعد {fa(dpsNext)} (+{fa(dpsGain)}٪)</small>}</dd></div>
+            {rangeNext !== null && <div><dt>برد سطح بعد</dt><dd>{fa(rangeNext, 1)}</dd></div>}
+            <div><dt>مهمات هر شلیک</dt><dd>{spec.ammoPerShot === 0 ? "مصرف ندارد" : fa(spec.ammoPerShot)}</dd></div>
+            <div><dt>برق مصرفی</dt><dd>{fa(towerPowerMw(game, preview as Tower), 1)} MW</dd></div>
+            <div><dt>ضربهٔ بحرانی</dt><dd>{fa(spec.critChance * 100)}٪ <small>آسیب ×۲</small></dd></div>
+            <div><dt>واحد شلیک هم‌زمان</dt><dd>{fa(spec.units)}</dd></div>
+            <div><dt>کارت خانواده</dt><dd>سطح {fa(card.level)}{card.level > 1 && <small>+{fa((card.level - 1) * 10)}٪ آسیب پایه</small>}</dd></div>
+          </dl>
+        </details>
         {tower?.tier === 3 && game.research.includes("special") && <div className="special-branches"><p><Sparkles size={14} /> مسیر ویژه را انتخاب کنید — هر شاخه سبک نبرد را عوض می‌کند</p>{def.branches.map((branch, index) => { const bSpec = weaponSpec(tower.kind, 4, index); const bInterval = specInterval(bSpec); const bTower = { ...tower, tier: 4, branch: index }; const bShot = bSpec.damage * damageTech(game, bTower) * stats.grid; const bPower = towerPowerMw(game, bTower); return <button key={branch} disabled={!affordable} onClick={() => upgrade(index)}><span><span className="branch-model"><TowerModel kind={tower.kind} tier={4} branch={index} preview /></span><span className="branch-copy"><strong>{branch}</strong><small>{BRANCH_INFO[`${tower.kind}:${index}`]}</small><small className="branch-spec">{bSpec.mode === "beam" ? `پرتو پیوسته · ${fa(bShot)} آسیب/ث` : `آسیب ${fa(bShot)} · شلیک هر ${fa(bInterval, 2)}ث`} · برق {fa(bPower, 1)} MW</small></span></span><span className="branch-cost">${compact(cost.cash)} + {fa(cost.steel)}⚙ <ArrowLeft size={15} /></span></button>; })}</div>}
         {tower && <div className="tower-advanced"><button className="advanced-toggle" onClick={() => setAdvanced(!advanced)} aria-expanded={advanced}>تنظیمات بیشتر <ChevronDown size={14} className={advanced ? "rotated" : ""} /></button>{advanced && <div className="advanced-content"><button className="priority-toggle" onClick={() => dispatch({ type: "priority", slot })}><Crosshair size={15} /><span>هدف‌گیری</span><strong>{PRIORITY_LABELS[tower.priority]}</strong></button><div className="priority-hint">اولین: نزدیک‌ترین به بندر · قوی‌ترین: باس‌کش · هوایی: ضد پهپاد</div>{!confirmSell ? <button className="sell-tower" onClick={() => setConfirmSell(true)}><Trash2 size={14} /> فروش برجک · بازگشت ${compact(refund!.cash)} + {fa(refund!.steel, refund!.steel % 1 ? 1 : 0)} فولاد</button> : <div className="sell-confirm"><span>{fa(refund!.rate * 100)}٪ کل هزینهٔ ساخت و ارتقا برمی‌گردد (${compact(refund!.cash)} + {fa(refund!.steel, refund!.steel % 1 ? 1 : 0)} فولاد)؛ فولاد تا ظرفیت انبار اضافه می‌شود. برجک فروخته شود؟</span><button onClick={() => { dispatch({ type: "sell-tower", slot }); close(); notify("برجک فروخته شد و سهم هزینهٔ ساخت و ارتقا بازگشت."); }}>بله، فروش</button><button onClick={() => setConfirmSell(false)}>انصراف</button></div>}</div>}</div>}
       </div>
       {(!tower || tower.tier < 3) && <footer className="tower-sheet-footer">
-        <div className="build-cost"><b>{tower ? "هزینهٔ ارتقا" : "هزینهٔ ساخت"}</b><span><i className="workshop-icon wk-cash" aria-hidden="true" /> {compact(cost.cash)} دلار</span><span><i className="workshop-icon wk-steel" aria-hidden="true" /> {fa(cost.steel)} فولاد</span>{!affordable && <small>منابع کافی نیست — درآمد جمع کن یا فولاد بساز</small>}</div>
-        <div className="workshop-sheet-actions"><button className="primary-action build-confirm" data-autofocus disabled={!affordable} onClick={() => tower ? upgrade() : props.onBuild(kind)}>{tower ? <><ArrowUp size={18} /> ارتقا به سطح {fa(tower.tier + 1)}</> : <><PlusIcon /> ساخت {def.short}</>}</button><button className="workshop-cancel" onClick={close}>انصراف</button></div>
+        <div className="build-cost"><b>{tower ? `هزینهٔ سطح ${fa(tower.tier + 1)}` : "هزینهٔ ساخت"}</b><span className={game.cash < cost.cash ? "missing-cost" : ""}><i className="workshop-icon wk-cash" aria-hidden="true" /> {compact(cost.cash)} دلار</span><span className={game.steel < cost.steel ? "missing-cost" : ""}><i className="workshop-icon wk-steel" aria-hidden="true" /> {fa(cost.steel)} فولاد</span>{!affordable && <small>منابع کافی نیست</small>}</div>
+        <div className="workshop-sheet-actions"><button className="primary-action build-confirm" disabled={!affordable} onClick={() => tower ? upgrade() : props.onBuild(kind)}><Image src="/assets/workshop/instruments/upgrade.webp" width={31} height={31} alt="" unoptimized /> {tower ? `ارتقا به سطح ${fa(tower.tier + 1)}` : "ساخت برجک"}</button><button className="workshop-cancel" onClick={close}>انصراف</button></div>
       </footer>}
       {tower?.tier === 3 && !game.research.includes("special") && <footer className="tower-sheet-footer"><p className="unlock-note">برای ادامهٔ ارتقا، فناوری برجک‌های ویژه را پژوهش کنید.</p><button className="primary-action" onClick={props.onResearch}><LockKeyhole size={16} /> رفتن به پژوهشگاه <ArrowLeft size={16} /></button></footer>}
       {tower?.tier === 4 && <div className="max-tower-note"><Sparkles size={15} /> این برجک به بالاترین سطح رسیده است — کارت‌هایش را برای قدرت دائمی ارتقا بده.</div>}
     </section>
   </div>;
 }
-function PlusIcon() { return <span className="build-plus">+</span>; }

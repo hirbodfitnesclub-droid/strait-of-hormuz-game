@@ -88,7 +88,7 @@ async function main() {
       console.log(label + (result.length ? ' — ' + result.join(', ') : ' OK'));
     }
 
-    const nav = label => page.locator('.nav-item').filter({hasText: label});
+    const port = page.getByRole('button', {name:'فرماندهی بندر'});
     async function allArtLoaded(selector) {
       await page.waitForFunction(selector => {
         const images = [...document.querySelectorAll(selector)];
@@ -124,18 +124,28 @@ async function main() {
       await page.keyboard.press('Escape');
       await page.locator('.building-sheet').waitFor({state:'hidden'});
 
-      await nav('عملیات').click();
+      await port.click();
+      await page.locator('.more-menu').getByRole('button', {name:'عملیات', exact:true}).click();
       await inspect('operations', '.drawer');
       assert.equal(await page.locator('.operation-node').count(), 25);
       await page.locator('.preparation-tips button').first().click();
       await inspect('construction-wheel', '.slot-radial');
       await page.locator('.radial-details').click();
-      await allArtLoaded('.tower-sheet .tower-turntable img');
+      const towerPortrait = '.tower-sheet .tower-workshop-hero .hero-tower-model';
+      await allArtLoaded(towerPortrait);
+      const portrait = await page.locator(towerPortrait).boundingBox();
+      assert.ok(portrait && portrait.width >= 100, 'the tower detail must show its full-sized illustration on a phone');
       await inspect('tower', '.tower-sheet');
       await page.getByRole('button', {name:'بستن منوی برجک'}).click();
+      if (viewport.width === 390) {
+        await page.setViewportSize({width:844, height:390});
+        await inspect('construction-wheel', '.slot-radial');
+      }
       await page.locator('.radial-close').click();
+      await page.locator('.slot-radial').waitFor({state:'hidden'});
+      await page.setViewportSize(viewport);
 
-      await nav('بیشتر').click();
+      await port.click();
       await inspect('command', '.more-menu');
       await page.locator('.more-menu button').filter({hasText:'هدیهٔ روزانه'}).click();
       await page.locator('.daily-calendar').waitFor();
@@ -149,6 +159,14 @@ async function main() {
     await page.locator('.news-actions button').filter({hasText:'آغاز نبرد'}).click();
     const pause = page.locator('.main-battle-action:visible');
     const speed = page.locator('.battle-speed:visible');
+    async function checkBattleGlyph(file) {
+      const glyph = page.locator('.main-battle-action:visible img.harbor-glyph');
+      await glyph.waitFor();
+      await glyph.evaluate(el => el.decode());
+      const source = await glyph.evaluate(el => new URL(el.currentSrc).pathname);
+      assert.ok(source.endsWith('/' + file), 'battle control must show ' + file + ', found ' + source);
+    }
+    await checkBattleGlyph('pause.webp');
     await inspect('battle');
     await pause.click();
     await page.locator('.main-battle-action.is-paused:visible').waitFor();
@@ -158,9 +176,7 @@ async function main() {
     for (const viewport of [{width:390, height:844}, {width:320, height:640}, {width:844, height:390}]) {
       await page.setViewportSize(viewport);
       await inspect('pause');
-      const readableIcon = await pause.evaluate(button =>
-        getComputedStyle(button.querySelector('svg')).color === getComputedStyle(button).color);
-      assert.ok(readableIcon, 'paused icon must use the light foreground on its dark button');
+      await checkBattleGlyph('play.webp');
       for (const control of [pause, speed]) {
         const box = await control.boundingBox();
         const bar = await page.locator('.essential-resources').boundingBox();

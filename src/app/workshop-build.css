@@ -1,269 +1,195 @@
-/* An enamel instrument wheel and two parchment work orders, mounted over the live port. */
-.workshop-wheel,
-.workshop-sheet {
-  --work-ink: var(--wk-ink);
-  --work-label: #604723;
+/* The illustrated fittings are nine-sliced so corners and fasteners retain their proportions. */
+.workshop-sheet, .workshop-wheel {
+  --work-ink: #382311;
+  --work-label: #604321;
   --work-gold: #e7b451;
-  --work-edge: #845525;
-  --work-stamped: inset 0 1px 1px #fff5c6, inset 0 -2px 1px #a37742, 0 2px 2px #51331a55;
-  --work-card: linear-gradient(165deg, #fff0c9, #f6ddb0 76%, #e8c18b);
-  --work-brass: var(--wk-gold);
   --work-enamel: var(--wk-enamel);
-  --work-brass-shadow: inset 0 0 0 1px #ffeb99, inset 0 -3px 0 #a96c1f, 0 2px 0 #593717, 0 3px 5px #31221466;
+  --work-paper: var(--skin-paper, url('/assets/workshop/skin/paper-plaque.webp'));
+  --work-wood: var(--skin-wood, url('/assets/workshop/skin/wood-board.webp'));
+  --work-blue: var(--skin-blue, url('/assets/workshop/skin/blue-plaque.webp'));
+  --work-yellow: var(--skin-gold, url('/assets/workshop/skin/brass-button.webp'));
+  --work-red: var(--skin-red, url('/assets/workshop/skin/red-button.webp'));
 }
-
 .workshop-sheet-backdrop {
-  align-items: flex-end;
-  justify-content: center;
-  padding: 0 10px max(9px, env(safe-area-inset-bottom));
-  background: linear-gradient(to bottom, transparent 12%, #151a1c13 43%, #20150c5c 100%);
+  align-items: flex-end; justify-content: center;
+  padding: 0 7px max(9px, env(safe-area-inset-bottom));
+  background: linear-gradient(transparent 13%, #13211b16 49%, #21190e77);
 }
 .game-shell .workshop-sheet {
-  position: relative;
-  width: min(100%, 476px);
-  max-height: min(72dvh, calc(100dvh - env(safe-area-inset-top, 0px) - 64px), 740px);
-  padding: 7px 7px 9px;
-  overflow: hidden;
-  border: 2px solid #654024;
-  border-radius: 17px;
-  color: var(--work-ink);
-  background:
-    repeating-linear-gradient(7deg, #78402116 0 1px, transparent 1px 6px),
-    linear-gradient(110deg, #c07d4f, #af6540 45%, #9e5937);
-  box-shadow: inset 0 1px #ffe0a4, inset 0 0 0 2px #c58e5f, 0 4px 0 #482b1c, 0 7px 19px #15212673;
-  backdrop-filter: none;
+  position: relative; width: min(100%, 474px); max-height: min(72dvh, 730px);
+  padding: 9px 10px 8px; margin: 0; overflow: hidden;
+  background: none; border: 4px solid transparent; border-radius: 17px;
+  border-image: var(--work-wood) 40 44 44 fill / 19px 23px 22px stretch;
+  box-shadow: none; filter: drop-shadow(0 5px 3px #231d11bb);
+  color: var(--work-ink); backdrop-filter: none;
 }
 .workshop-sheet .workshop-sheet-header {
-  position: relative;
-  flex: 0 0 auto;
-  z-index: 1;
-  justify-content: center;
-  min-height: 47px;
-  padding: 0 48px 6px;
+  position: relative; z-index: 1; flex: none; justify-content: center;
+  min-height: 50px; padding: 0 42px; margin: -5px 0 -4px;
 }
 .workshop-heading {
-  position: relative;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  gap: 7px;
-  min-width: min(100%, 178px);
-  padding: 3px 17px;
-  border: 2px solid var(--work-gold);
-  border-radius: 10px;
-  color: #ffe3a5;
-  background: var(--work-enamel);
-  box-shadow: inset 0 0 0 1px #162e32, 0 1px 0 1px #835220, 0 3px 3px #39211475;
+  display: flex; align-items: center; justify-content: center; gap: 7px;
+  min-height: 49px; padding: 4px 21px;
+  border: 2px solid transparent; border-image: var(--work-blue) 40 44 44 fill / 12px 15px 13px stretch;
+  color: #ffebbb; filter: drop-shadow(0 3px 1px #4e3327a8);
 }
-.workshop-heading::before,
-.workshop-heading::after {
-  content: "";
-  position: absolute;
-  top: calc(50% - 2px);
-  width: 4px;
-  height: 4px;
-  border-radius: 50%;
-  background: linear-gradient(145deg, #fff5bd, #d5a059 65%, #855528);
-  box-shadow: 0 1px 1px #021d24;
-}
-.workshop-heading::before { left: 4px; }
-.workshop-heading::after { right: 4px; }
-.workshop-heading h2 { margin: 0; color: #fff1c9; line-height: 1.55; font-size: 18px; text-align: center; text-shadow: 0 2px #0c2b35; }
+.workshop-heading h2 { margin: 0; font-size: clamp(18px, 5vw, 23px); font-weight: 800; line-height: 1.4; color: #fff0c8; text-shadow: 0 2px #0d242f; text-align: center; }
+.workshop-heading img { width: 34px; height: 34px; object-fit: contain; }
 .workshop-sheet-header .close-control {
-  position: absolute;
-  inset-inline-end: 0;
-  top: -2px;
-  width: 44px;
-  height: 44px;
-  color: #fff0cb;
-  background: radial-gradient(circle, #bd613c 42%, #964728 49%, #edbd74 50% 55%, #754523 56% 61%, transparent 63%);
-  border: 0;
+  position: absolute; inset-inline-end: -4px; top: 4px; width: 44px; min-height: 44px;
+  border: 1px solid transparent; border-image: var(--work-red) 40 44 44 fill / 8px 9px 9px stretch;
+  background: none; border-radius: 11px; color: #ffedc7; filter: drop-shadow(0 2px 1px #45301a99);
 }
-.workshop-sheet .tower-sheet-body,
-.workshop-building-body {
-  flex: 1 1 auto;
-  min-height: 0;
-  overflow: auto;
-  overscroll-behavior: contain;
-  scrollbar-width: thin;
-  scrollbar-color: #b08554 #efd4a5;
-  padding: 8px 12px;
-  background: linear-gradient(100deg, #f1d2a3, #fbe9c5 35%, #f3d7af);
-  border: 1px solid var(--work-edge);
-  border-radius: 10px 10px 4px 4px;
-  box-shadow: inset 0 1px 2px #fff7de;
+.workshop-sheet .tower-sheet-body, .workshop-building-body {
+  flex: 1 1 auto; min-height: 0; overflow: auto; overscroll-behavior: contain;
+  scrollbar-width: thin; scrollbar-color: #a87f4b #f3d9a9;
+  padding: 12px 12px 10px; background: none;
+  border: 2px solid transparent; border-image: var(--work-paper) 40 44 44 fill / 14px 15px 15px stretch;
 }
-.workshop-sheet .sheet-eyebrow { margin-bottom: 6px; color: var(--work-label); font-weight: 700; }
-.workshop-sheet .sheet-eyebrow small { color: #894223; }
-.workshop-sheet .tower-choice-grid { gap: 6px; }
-.workshop-sheet .tower-choice,
-.workshop-sheet .selected-tower-card,
-.workshop-sheet .spec-cell,
-.workshop-sheet .special-branches > button,
-.workshop-sheet .upgrade-comparison {
-  background: var(--work-card);
-  border: 1px solid #bb965f;
-  border-radius: 8px;
-  color: var(--work-ink);
-  box-shadow: var(--work-stamped);
+.tower-workshop-hero, .workshop-sheet .building-showcase {
+  display: flex; flex-direction: row-reverse; justify-content: space-around; align-items: center; gap: 7px;
+  position: relative; margin: 0; padding: 0 2px; min-height: 0; border: 0; background: none; overflow: visible;
 }
+.hero-tower-model, .workshop-sheet .building-showcase .building-model {
+  width: clamp(114px, 32vw, 158px); height: clamp(100px, 27vw, 134px); flex: none; object-fit: contain;
+  filter: contrast(1.03) saturate(1.16) brightness(1.12) drop-shadow(0 3px 2px #513d2244);
+}
+.tower-hero-copy, .workshop-building-intro { flex: 1; min-width: 0; }
+.tower-hero-copy h3, .workshop-building-intro h3 { margin: 0; font-size: clamp(18px, 5.2vw, 25px); line-height: 1.45; font-weight: 800; color: var(--work-ink); }
+.tower-hero-copy > small, .workshop-building-intro > small { color: var(--work-label); font-size: 12px; font-weight: 600; }
+.tower-hero-copy p { margin-block: 2px 5px; color: var(--work-label); font-size: 12px; line-height: 1.65; }
+.tower-tier-stamp, .workshop-sheet .showcase-level {
+  position: static; display: inline-flex; align-items: center; gap: 7px; padding: 4px 10px;
+  border: 1px solid #ad7c43; border-radius: 7px 8px 6px 8px; color: #443016;
+  background: linear-gradient(#ffecb8, #efc37d); box-shadow: inset 0 1px #fff6d8, 0 2px 0 #a77a47;
+  font-size: 13px; font-weight: 800;
+}
+.tier-gauge { display: flex; gap: 2px; direction: ltr; height: 11px; transform: skewX(-13deg); }
+.tier-gauge i { width: 8px; height: 100%; border-radius: 2px; background: #987b52; box-shadow: inset 0 1px 1px #5b472a; }
+.tier-gauge i.filled { background: linear-gradient(#8cc65c, #4b8f44); box-shadow: inset 0 1px #bcdc94; }
+.sheet-battle-paused { display: flex; justify-content: center; gap: 5px; font-size: 12px; color: #793b20; }
+.tower-catalog summary, .tower-blueprint summary, .building-blueprint summary {
+  list-style: none; display: flex; justify-content: space-between; align-items: center; gap: 8px;
+  min-height: 44px; width: 100%; padding: 5px 9px;
+  cursor: pointer; font-size: 13px; font-weight: 700; color: var(--work-label);
+}
+.tower-catalog summary::-webkit-details-marker, .tower-blueprint summary::-webkit-details-marker, .building-blueprint summary::-webkit-details-marker { display: none; }
+.workshop-sheet details[open] > summary svg { transform: rotate(180deg); }
+.tower-catalog { margin-top: 4px; }
+.tower-catalog > summary { justify-content: center; gap: 8px; border: 1px solid transparent; border-image: var(--work-blue) 40 44 44 fill / 8px 10px 10px stretch; color: #ffedc8; }
+.workshop-sheet .tower-choice-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; padding: 7px 0; }
 .workshop-sheet .tower-choice {
-  grid-template-columns: 47px minmax(0, 1fr);
-  gap: 4px;
-  text-align: start;
-  min-height: 91px;
-  padding: 7px 6px;
+  display: flex; flex-direction: column; justify-content: flex-start; align-items: center; gap: 2px; min-width: 0; min-height: 96px; padding: 6px 3px;
+  border: 1px solid #c29b6b; border-radius: 9px; background: linear-gradient(#ffedcb, #efd1a1);
+  box-shadow: inset 0 1px #fff9de, 0 2px 1px #8f6e47; color: var(--work-ink); text-align: center;
 }
-.workshop-sheet .tower-choice.chosen {
-  background: linear-gradient(145deg, #ffeaae, #f8cc75);
-  border-color: #9e6829;
-  box-shadow: inset 0 0 0 2px #e2a344, 0 2px 2px #51331a55;
+.workshop-sheet .tower-choice.chosen { border: 2px solid #b38738; background: linear-gradient(#ffe1a0, #eabd67); }
+.tower-choice > img { height: 57px; width: 70px; object-fit: contain; }
+.tower-choice > strong { font-size: 12px; line-height: 1.4; font-weight: 800; }
+.tower-choice .choice-price { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 2px; font-size: 11px; }
+.tower-choice .choice-price .workshop-icon { width: 16px; height: 16px; }
+.tower-choice.unaffordable .choice-price { color: #873722; }
+.workshop-sheet .choice-check { left: 3px; top: 3px; background: #38633e; color: white; border: 1px solid #ffc45b; }
+.tower-field-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px; margin-top: 6px; }
+.tower-field-stats > div {
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px;
+  min-width: 0; padding: 6px 2px 7px; border: 1px solid #c49a63; border-radius: 9px;
+  background: linear-gradient(125deg, #fff1d3, #f3d9ad 75%, #ebc798);
+  box-shadow: inset 0 1px #fff9e4, inset 0 -2px 1px #bd9562, 0 2px 2px #7a563c66;
 }
-.workshop-sheet .tower-choice.unaffordable .choice-bottom > span:last-child { color: #853b28; }
-.workshop-sheet .choice-copy strong { color: var(--work-ink); }
-.workshop-sheet .choice-copy small { color: var(--work-label); }
-.workshop-sheet .choice-copy .choice-dps { color: #50482f !important; font-size: 10px !important; line-height: 1.55; }
-.workshop-sheet .choice-bottom { gap: 3px; border-top: 1px solid #c0925755; }
-.workshop-sheet .choice-bottom > span:last-child { color: #71440f; }
-.workshop-sheet .target-types { color: #2b5361; }
-.workshop-sheet .choice-check { left: 2px; top: 2px; background: #246859; color: white; border: 1px solid #d3b676; }
-.workshop-sheet .choice-icon,
-.workshop-sheet .selected-tower-art,
-.workshop-sheet .branch-model {
-  overflow: hidden;
-  border: 2px solid #ddb15a;
-  border-radius: 50%;
-  background: var(--work-enamel);
-  box-shadow: 0 1px 2px #69451e88;
-}
-.workshop-sheet .choice-icon { width: 46px; height: 46px; }
-.workshop-sheet .choice-icon .tower-asset { width: 44px; height: 44px; }
-.workshop-sheet .selected-tower-card { padding: 7px 10px; }
-.workshop-sheet .selected-tower-art { width: 68px; height: 68px; }
-.workshop-sheet .selected-tower-art .tower-asset { width: 64px; height: 64px; }
-.workshop-sheet .tier-label,
-.workshop-sheet .showcase-level {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  padding: 2px 9px;
-  border: 1px solid #bd8d4e;
-  border-radius: 6px;
-  background: linear-gradient(#ffe1a4, #edbf72);
-  color: var(--work-ink);
-  font-weight: 800;
-  box-shadow: 0 1px 1px #78502742;
-}
-.workshop-sheet .selected-tower-card p { color: var(--work-label); }
-.workshop-sheet .level-pips i { background: #b49b77; }
-.workshop-sheet .level-pips i.filled,
-.workshop-sheet .evolution-meter i { background: linear-gradient(#84b653, #3c7937); }
-.workshop-sheet .tower-specs-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 5px; padding: 5px 0 8px; }
-.workshop-sheet .spec-cell { padding: 6px 5px; text-align: center; justify-content: center; }
-.workshop-sheet .spec-cell > span { display: flex; justify-content: center; align-items: center; flex-wrap: wrap; gap: 2px; color: var(--work-label); }
-.workshop-sheet .spec-cell strong { color: var(--work-ink); white-space: normal; }
-.workshop-sheet .spec-cell small,
-.workshop-sheet .spec-cell .dps-gain { color: #446031; }
-.workshop-sheet .special-branches > p, .workshop-sheet .advanced-toggle,
-.workshop-sheet .priority-toggle, .workshop-sheet .priority-toggle strong, .workshop-sheet .sell-confirm { color: var(--work-ink); }
-.workshop-sheet .priority-hint { color: var(--work-label); }
-.workshop-sheet .priority-toggle { background: #ece0c3; border-color: #ba9a69; }
-.workshop-sheet .special-branches .branch-spec { color: #3f6040 !important; }
-.workshop-sheet .special-branches .branch-cost { white-space: normal; color: #774b20; }
-.workshop-sheet .special-branches button:disabled { opacity: .72; }
-.workshop-sheet .tower-advanced { margin: 0; border-color: #b38b5b; }
-.workshop-sheet .sell-tower, .workshop-sheet .sell-confirm button { color: #882f24; }
+.tower-field-stats img { height: clamp(29px, 8vw, 37px); width: auto; object-fit: contain; }
+.tower-field-stats span { font-size: 12px; color: var(--work-label); font-weight: 600; }
+.tower-field-stats strong { color: var(--work-ink); font-size: clamp(17px, 4.8vw, 22px); line-height: 1.3; }
+.blueprint-model { display: flex; align-items: center; gap: 12px; }
+.blueprint-model .tower-asset { width: 86px; height: 86px; flex: none; }
+.blueprint-model p, .building-blueprint > p { color: var(--work-label); font-size: 13px; line-height: 1.85; }
+.blueprint-model .target-types { color: #244e51; }
+.blueprint-stats { margin: 3px 0 8px; color: var(--work-label); font-size: 13px; }
+.blueprint-stats > div { display: flex; align-items: center; justify-content: space-between; gap: 6px; padding: 4px 2px; border-top: 1px solid #ae8a554f; }
+.blueprint-stats dd { margin: 0; color: var(--work-ink); font-weight: 700; }
+.blueprint-stats dd small { margin-inline-start: 4px; color: #375c31; }
+.workshop-sheet .tower-advanced { margin: 0; border-color: #b8966b; }
+.workshop-sheet :is(.special-branches > p,.advanced-toggle,.priority-toggle,.priority-toggle strong,.sell-confirm,.priority-hint) { color: var(--work-label); font-size: 13px; }
+.workshop-sheet .special-branches button, .workshop-sheet .priority-toggle { background: #efd6ad; border: 1px solid #ac814e; color: var(--work-ink); }
+.workshop-sheet .special-branches .branch-spec { color: #405b31 !important; }
+.workshop-sheet .special-branches .branch-cost { white-space: normal; color: #785025; }
+.workshop-sheet .special-branches button:disabled { opacity: .7; }
+.workshop-sheet .sell-tower, .workshop-sheet .sell-confirm button { color: #8a372a; }
 .workshop-sheet .sell-confirm button:last-child { color: var(--work-label); }
-.workshop-sheet .tower-sheet-footer,
-.workshop-sheet .building-sheet-footer,
-.workshop-sheet .max-tower-note {
-  flex: 0 0 auto;
-  margin-top: 4px;
-  padding: 7px;
-  background: var(--work-card);
-  border: 1px solid var(--work-edge);
-  border-radius: 4px 4px 10px 10px;
-  color: var(--work-ink);
+.workshop-sheet .tower-sheet-footer, .workshop-sheet .building-sheet-footer, .workshop-sheet .max-tower-note {
+  flex: none; padding: 6px 0 0; border: 0; background: none; color: #ffe5b1;
 }
-.workshop-sheet .build-cost { display: flex; flex-wrap: wrap; justify-content: center; gap: 3px 7px; padding: 0 0 6px; }
-.workshop-sheet .build-cost b { color: var(--work-label); align-self: center; }
+.workshop-sheet .build-cost {
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 3px 7px; margin: 0 0 4px;
+  padding: 4px 8px 6px; border: 1px solid transparent; border-image: var(--work-paper) 40 44 44 fill / 9px 11px 10px stretch;
+  color: var(--work-label); font-size: 13px;
+}
+.workshop-sheet .build-cost b { font-weight: 700; }
 .workshop-sheet .build-cost > span {
-  padding: 2px 8px;
-  gap: 4px;
-  border-radius: 5px;
-  border: 1px solid #c29b69;
-  background: #ffebc7;
-  color: var(--work-ink);
+  direction: rtl; display: inline-flex; align-items: center; gap: 2px; padding: 1px 3px;
+  color: var(--work-ink); font-size: 15px; font-weight: 800;
 }
-.workshop-sheet .build-cost .workshop-icon, .workshop-sheet .building-upgrade-cost .workshop-icon { width: 23px; height: 23px; }
-.workshop-sheet .build-cost small { width: 100%; color: #8a3020; text-align: center; }
-.workshop-sheet-actions { display: grid; grid-template-columns: minmax(0, 2fr) minmax(70px, 1fr); gap: 6px; }
+.workshop-sheet .build-cost .workshop-icon { width: 31px; height: 31px; }
+.workshop-sheet .build-cost .missing-cost, .workshop-sheet .build-cost small { color: #943619; }
+.workshop-sheet .build-cost small { width: 100%; font-size: 12px; text-align: center; }
+.workshop-sheet-actions { display: grid; grid-template-columns: minmax(0, 2.2fr) minmax(65px, 1fr); align-items: stretch; gap: 3px; }
 .workshop-sheet .primary-action, .workshop-cancel, .workshop-wheel .radial-details {
-  min-height: 44px;
-  border: 2px solid #9d6828;
-  border-radius: 15px;
-  background: var(--work-brass);
-  box-shadow: var(--work-brass-shadow);
-  color: var(--work-ink);
-  font-weight: 800;
+  display: flex; align-items: center; justify-content: center; gap: 7px;
+  min-height: 53px; padding: 7px 13px; color: #38240d; font-size: clamp(16px, 4.7vw, 21px); font-weight: 800; line-height: 1.45;
+  border: 2px solid transparent; border-image: var(--work-yellow) 40 44 44 fill / 13px 17px 16px stretch;
+  border-radius: 15px; background: none; box-shadow: none; filter: drop-shadow(0 3px 1px #46280d); text-shadow: 0 1px #ffe799;
 }
-.workshop-sheet .primary-action:hover:not(:disabled), .workshop-wheel .radial-details:hover { background: linear-gradient(#fff096, #ffca40 80%, #eba52d); }
-.workshop-sheet .primary-action:disabled { background: #d5c19c; color: #695638; border-color: #ad9776; box-shadow: inset 0 1px #f4e6ca, inset 0 -2px #bda782; }
-.workshop-sheet .primary-action > svg:last-child { margin: 0; }
-.workshop-cancel { background: linear-gradient(#ffe6b5, #efc786); }
-.workshop-sheet .unlock-note, .workshop-sheet .building-economy-link { color: #64411b; }
-.workshop-sheet .building-showcase {
-  min-height: 0;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 6px;
-  margin: 0;
-  padding: 0 8px;
-  border: 0;
-  border-bottom: 1px solid #b58e56;
-  border-radius: 0;
-  background: none;
+.workshop-sheet .primary-action:hover:not(:disabled), .workshop-wheel .radial-details:hover { background: none; filter: brightness(1.055) drop-shadow(0 3px 1px #46280d); }
+.workshop-sheet .primary-action:disabled { border-color: transparent; background: none; color: #564630; filter: saturate(.35) brightness(.9); }
+.workshop-cancel { border-image-source: var(--work-paper); font-size: 15px; }
+.workshop-sheet .building-sheet-footer > small, .workshop-sheet .unlock-note { color: #ffebbf; font-size: 12px; }
+.workshop-sheet .building-sheet-copy { padding: 0; }
+.workshop-sheet .showcase-boost { right: auto; left: 0; bottom: 0; }
+.workshop-sheet .upgrade-comparison {
+  display: flex; align-items: center; gap: 7px; margin: 7px 0 2px; padding: 7px 9px;
+  border: 1px solid #c49b69; border-radius: 9px; background: linear-gradient(100deg, #ffedc4, #f1d4a6);
+  box-shadow: inset 0 1px #fff8dd, 0 2px 1px #a58154;
 }
-.workshop-sheet .workshop-building-intro > span:first-child { font-size: 11px; color: var(--work-label); }
-.workshop-building-intro h3 { font-size: 17px; line-height: 1.55; margin-bottom: 4px; }
-.workshop-sheet .showcase-level { position: static; }
-.workshop-sheet .building-showcase .building-model { width: 105px; height: 100px; flex: none; }
-.workshop-sheet .showcase-boost { right: auto; left: 5px; bottom: 4px; }
-.workshop-sheet .building-sheet-copy { padding: 7px 0 0; }
-.workshop-sheet .building-sheet-copy > p:first-child, .workshop-sheet .building-effect p { color: var(--work-label); }
-.workshop-sheet .upgrade-comparison { margin-top: 6px; padding: 9px 12px; }
-.workshop-sheet .upgrade-comparison > div > span, .workshop-sheet .upgrade-comparison small { color: var(--work-label); }
-.workshop-sheet .upgrade-comparison strong { color: var(--work-ink); }
-.workshop-sheet .upgrade-comparison svg, .workshop-sheet .upgrade-comparison b { color: #436c39; }
-.workshop-sheet .upgrade-comparison .green-text { color: #2b6537 !important; }
-.workshop-sheet .building-effect { background: #f4ddb7; border: 1px solid #bc9867; }
-.workshop-sheet .building-effect-label, .workshop-sheet .evolution-heading, .workshop-sheet .evolution-heading strong,
-.workshop-sheet .evolution-reward-note, .workshop-sheet .evolution-reward-note svg { color: var(--work-label); }
-.workshop-sheet .evolution-meter { height: 7px; background: #cfb793; box-shadow: inset 0 1px 2px #9a774a; }
-.workshop-sheet .building-manager-row { color: #174b55; background: #e8d3a8; border: 1px solid #b69a6c; }
-.workshop-sheet .building-manager-row strong { color: var(--work-ink); }
-.workshop-sheet .building-manager-row small { color: var(--work-label); }
-.workshop-sheet .upgrade-grid-warning, .workshop-sheet .building-sheet-footer > small { color: #892f20; }
-.workshop-sheet .bulk-upgrade-selector { gap: 5px; padding: 0; margin: 0 0 6px; background: none; }
-.workshop-sheet .bulk-upgrade-selector button { min-height: 36px; border: 1px solid #b29364; border-radius: 7px; background: #f3d9ad; color: var(--work-label); font-weight: 700; }
-.workshop-sheet .bulk-upgrade-selector .selected { border-color: var(--work-edge); background: var(--work-enamel); color: #ffeba9; }
-.workshop-sheet button:focus-visible, .workshop-wheel button:focus-visible { outline: 3px solid #3776b7; outline-offset: 1px; }
-
+.workshop-sheet .upgrade-comparison img { width: 44px; height: 44px; object-fit: contain; }
+.workshop-sheet .upgrade-comparison > div { flex: 1; gap: 3px; }
+.workshop-sheet .upgrade-comparison > div > span { color: var(--work-label); font-size: 13px; font-weight: 700; }
+.workshop-sheet .upgrade-comparison p { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; color: #6c512f; }
+.workshop-sheet .upgrade-comparison strong { color: var(--work-ink); font-size: 20px; }
+.workshop-sheet .upgrade-comparison .green-text { color: #315f2d !important; }
+.workshop-sheet .upgrade-comparison p small { color: var(--work-label); font-size: 12px; }
+.gain-ticket { padding: 2px 5px; background: #d6d4a1; border: 1px solid #a5a065; border-radius: 6px; color: #2f5729; font-size: 12px; }
+.workshop-sheet .building-economy-link { color: #61431e; min-height: 44px; text-decoration: underline; }
+.workshop-sheet :is(.evolution-heading,.evolution-heading strong,.evolution-reward-note,.evolution-reward-note svg) { color: var(--work-label); font-size: 12px; }
+.workshop-sheet .evolution-meter { height: 9px; background: #bf9c6d; }
+.workshop-sheet .evolution-meter i { background: linear-gradient(#94b95a, #477e40); }
+.workshop-sheet .building-manager-row { color: #224c4c; background: #f4e0bb; border-color: #b49360; }
+.workshop-sheet .building-manager-row strong { color: var(--work-ink); font-size: 13px; }
+.workshop-sheet .building-manager-row small { color: var(--work-label); font-size: 12px; }
+.workshop-sheet .upgrade-grid-warning { color: #903b21; font-size: 12px; }
+.building-order-quantity { display: flex; gap: 6px; align-items: center; justify-content: center; margin-bottom: 4px; }
+.building-order-quantity > span { font-size: 12px; font-weight: 700; color: #ffe6b8; }
+.workshop-sheet .bulk-upgrade-selector { flex: 1; max-width: 230px; display: flex; gap: 3px; padding: 0; margin: 0; background: none; }
+.workshop-sheet .bulk-upgrade-selector button {
+  min-height: 44px; padding-inline: 5px; border: 1px solid transparent; border-image: var(--work-paper) 40 44 44 fill / 8px 9px 10px stretch;
+  font-size: 13px; font-weight: 700; color: var(--work-label); background: none;
+}
+.workshop-sheet .bulk-upgrade-selector .selected { border-image-source: var(--work-blue); background: none; color: #fff0b7; box-shadow: none; }
+.workshop-sheet :is(button,summary):focus-visible, .workshop-wheel button:focus-visible { outline: 3px solid #2786ac; outline-offset: -2px; }
 .workshop-wheel-backdrop { background: linear-gradient(transparent 10%, #0a252c2b 56%, #0c202f45); }
 .workshop-wheel {
-  --wheel-x: min(29vw, 103px);
-  --wheel-y: 58px;
-  --wheel-node: clamp(74px, 21vw, 85px);
+  --wheel-node: clamp(83px, 25vw, 110px);
+  --wheel-x: min(calc((100vw - var(--wheel-node) - 24px) / 2), 150px);
+  --wheel-y: clamp(60px, 16vw, 75px);
   --wheel-half: calc(var(--wheel-x) + var(--wheel-node) / 2 + 6px);
   --shell-gutter: max(0px, calc((100vw - 600px) / 2));
-  --wheel-above: 164px;
-  --wheel-below: 226px;
+  --wheel-above: calc(2 * var(--wheel-y) + var(--wheel-node) / 2 + 8px);
+  --wheel-controls: calc(var(--wheel-above) + 49px);
+  --wheel-below: calc(var(--wheel-controls) + 31px);
   width: calc(2 * var(--wheel-half));
   height: calc(var(--wheel-above) + var(--wheel-below));
   transform: translate(-50%, calc(-1 * var(--wheel-above)));
-  --safe-top: calc(env(safe-area-inset-top, 0px) + 222px);
-  --safe-bottom: calc(env(safe-area-inset-bottom, 0px) + 232px);
+  --safe-top: calc(env(safe-area-inset-top, 0px) + 63px + var(--wheel-above));
+  --safe-bottom: calc(env(safe-area-inset-bottom, 0px) + 8px + var(--wheel-below));
   left: clamp(calc(var(--shell-gutter) + var(--wheel-half)), var(--slot-x, 50vw), calc(100vw - var(--shell-gutter) - var(--wheel-half)));
   top: clamp(var(--safe-top), var(--slot-y, 46dvh), calc(100dvh - var(--safe-bottom)));
   outline: none;
@@ -294,9 +220,9 @@
 .workshop-wheel .radial-kind,
 .workshop-wheel .radial-btn {
   transform: translate(-50%, -50%);
-  background: var(--work-enamel);
-  border: 3px solid var(--work-gold);
-  box-shadow: inset 0 0 0 2px #183945, 0 0 0 1px #785129, 0 3px 0 #8a5928, 0 5px 7px #22201a66;
+  border: 5px solid transparent;
+  background: var(--work-blue) center / 220% 200% no-repeat padding-box, conic-gradient(from -38deg, #ffec99, #ebad4b 50deg, #926026 112deg, #dbac59 148deg, #ffee9e 211deg, #aa722e 285deg, #efd18b) border-box;
+  box-shadow: inset 0 0 0 1px #594621, inset 0 1px 3px #021925aa, 0 0 0 1px #70502b, 0 4px 0 #835827, 0 7px 7px #171e1c88;
   border-radius: 50%;
   color: #ffe8b5;
   backdrop-filter: none;
@@ -315,35 +241,28 @@
 .workshop-wheel .radial-kind:nth-child(4) { left: 0; top: calc(2 * var(--wheel-y)); }
 .workshop-wheel .radial-kind:nth-child(5) { left: calc(-1 * var(--wheel-x)); top: var(--wheel-y); }
 .workshop-wheel .radial-kind:nth-child(6) { left: calc(-1 * var(--wheel-x)); top: calc(-1 * var(--wheel-y)); }
-.workshop-wheel .radial-kind-model { width: 89%; height: 77%; }
+.workshop-wheel .radial-kind-model { width: 95%; height: 83%; }
 .workshop-wheel .radial-kind-model img { width: 100%; height: 100%; object-fit: contain; filter: brightness(1.21) saturate(1.15) drop-shadow(0 2px 2px #122b35); }
 .workshop-wheel .radial-model .tower-asset { width: 100%; height: 100%; }
 .workshop-wheel .radial-kind strong {
-  position: absolute;
-  bottom: 1px;
-  width: max-content;
-  max-width: calc(var(--wheel-node) + 11px);
-  padding: 2px 6px;
-  border: 1px solid #b78443;
-  border-radius: 8px;
-  background: linear-gradient(#fff1cb, #f7d595 62%, #deaf69);
-  color: var(--work-ink);
-  box-shadow: inset 0 1px #fff3cb, 0 2px 2px #4f3a24a6;
-  font-size: 11px;
+  position: absolute; bottom: -4px; width: max-content; max-width: calc(var(--wheel-node) + 10px); padding: 3px 8px;
+  color: var(--work-ink); font-size: clamp(12px, 3.3vw, 14px); font-weight: 800; line-height: 1.4;
+  border: 1px solid transparent; border-image: var(--work-paper) 40 44 44 fill / 6px 8px 8px stretch;
+  filter: drop-shadow(0 2px 1px #402c1a);
 }
 .workshop-wheel .radial-kind small {
   position: absolute;
-  bottom: -15px;
+  bottom: -21px;
   gap: 2px;
   padding: 1px 4px;
   border-radius: 6px;
   background: #18343a;
   box-shadow: 0 1px 2px #091c21aa;
   color: #ffebbb;
-  font-size: 9px;
+  font-size: 10.5px;
   font-weight: 700;
 }
-.workshop-wheel .radial-kind small .workshop-icon { width: 13px; height: 13px; }
+.workshop-wheel .radial-kind small .workshop-icon { width: 15px; height: 15px; }
 .workshop-wheel .target-emojis {
   position: absolute;
   top: -5px;
@@ -360,8 +279,8 @@
 .workshop-wheel .radial-kind.unaffordable small { background: #683e31; color: #fff1dc; }
 .workshop-wheel .radial-kind:hover, .workshop-wheel .radial-btn:hover { border-color: #ffdd85; }
 .workshop-wheel .radial-center {
-  width: 85px;
-  min-height: 84px;
+  width: clamp(83px, 24vw, 101px);
+  min-height: clamp(83px, 24vw, 101px);
   justify-content: center;
   border-radius: 50%;
   border: 3px solid #eabb68;
@@ -371,39 +290,47 @@
   line-height: 1.4;
 }
 .workshop-wheel .radial-center small { color: #6c4c28; }
-.workshop-wheel .radial-center.empty strong { font-size: 13px; }
+.workshop-wheel .radial-center.empty strong { font-size: 14px; line-height: 1.25; }
+.workshop-wheel .radial-center.empty img { height: 31px; width: 31px; }
 .workshop-wheel .radial-center.locked { width: 108px; min-height: 106px; }
 .workshop-wheel .radial-center:not(.empty):not(.locked) { border-radius: 20px; padding: 4px 6px; width: 102px; }
-.workshop-wheel .radial-model { width: 51px; height: 45px; }
+.workshop-wheel .radial-model { width: 70px; height: 54px; }
+.workshop-wheel .radial-model img { width: 100%; height: 100%; object-fit: contain; }
 .workshop-wheel .radial-pips i { background: #b09668; }
 .workshop-wheel .radial-pips i.filled { background: #568142; }
 .workshop-wheel .radial-btn:not(.radial-close) { width: 77px; height: 75px; gap: 1px; }
 .workshop-wheel .radial-btn small { color: #f7d696; line-height: 1.3; padding-inline: 3px; }
 .workshop-wheel .radial-btn.confirm,
-.workshop-wheel .radial-close { background: radial-gradient(circle at 36% 20%, #d68549, #ad5030 65%, #783b2c); }
-.workshop-wheel .radial-close { width: 43px; height: 43px; color: #fff4d2; }
+.workshop-wheel .radial-close {
+  background: radial-gradient(circle at 36% 20%, #d68549, #ad5030 65%, #783b2c) padding-box,
+    conic-gradient(from 15deg, #ffec9a, #a07132, #ebbd66 46%, #996526 74%, #ffec9a) border-box;
+}
+.workshop-wheel .radial-close { width: 48px; height: 48px; color: #fff4d2; }
 .workshop-wheel .radial-close svg { width: 21px; height: 21px; stroke-width: 3; }
 .workshop-wheel .radial-top { top: -94px; }
 .workshop-wheel .radial-bottom { top: 94px; }
 .workshop-wheel .radial-right { left: 98px; }
 .workshop-wheel .radial-left { left: -98px; }
-.workshop-wheel.wheel-empty .radial-close { left: -89px; top: 200px; }
+.workshop-wheel.wheel-empty .radial-close { left: -104px; top: var(--wheel-controls); }
 .workshop-wheel .radial-details {
   position: absolute;
-  top: 200px;
-  left: 23px;
-  width: 157px;
+  top: var(--wheel-controls);
+  left: 29px;
+  width: 195px;
   margin: 0;
   justify-content: center;
   transform: translate(-50%, -50%);
-  font-size: 12px;
+  font-size: 18px;
 }
 
-@media (max-width: 370px) {
-  .workshop-sheet .tower-specs-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .workshop-sheet .tower-choice { grid-template-columns: 36px minmax(0, 1fr); }
-  .workshop-sheet .choice-icon, .workshop-sheet .choice-icon .tower-asset { width: 36px; height: 36px; }
-  .workshop-sheet .tower-sheet-body, .workshop-building-body { padding: 7px; }
+@media (max-width: 355px) {
+  .game-shell .workshop-sheet { padding-inline: 6px; }
+  .workshop-sheet .tower-sheet-body, .workshop-building-body { padding-inline: 8px; }
+  .workshop-heading { padding-inline: 14px; gap: 3px; }
+  .workshop-heading img { width: 29px; height: 29px; }
+  .workshop-sheet .build-cost { gap: 3px; font-size: 12px; }
+  .workshop-sheet .build-cost > span { font-size: 13px; }
+  .workshop-sheet .build-cost .workshop-icon { width: 25px; height: 25px; }
 }
 @media (max-height: 570px) {
   .game-shell .workshop-sheet { max-height: calc(100dvh - env(safe-area-inset-top, 0px) - 64px); }
@@ -414,17 +341,17 @@
     grid-template-columns: repeat(3, minmax(0, 1fr));
     justify-items: center;
     align-items: center;
-    gap: 19px 5px;
+    gap: 22px 5px;
     width: min(390px, 95vw);
     height: auto;
     left: 50%;
     top: calc(50% + 23px);
     transform: translate(-50%, -50%);
-    --wheel-node: 61px;
+    --wheel-node: 65px;
   }
   .workshop-wheel.wheel-empty .workshop-wheel-pivot { display: contents; }
   .workshop-wheel.wheel-empty .workshop-wheel-pivot::before { display: none; }
-  .workshop-wheel.wheel-empty .radial-kind,
+  .workshop-wheel.wheel-empty .radial-kind { position: relative; inset: auto; transform: none; }
   .workshop-wheel.wheel-empty .radial-close,
   .workshop-wheel.wheel-empty .radial-details { position: static; transform: none; }
   .workshop-wheel.wheel-empty .radial-details { grid-row: 3; grid-column: 1 / 3; width: 100%; }

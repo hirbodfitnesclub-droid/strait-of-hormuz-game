@@ -3,10 +3,10 @@
 import Image from "next/image";
 import { useState, type CSSProperties, type Dispatch } from "react";
 import {
-  Activity, Anchor, ArrowLeft, Award, BatteryCharging, Check, ChevronLeft,
-  CircleDollarSign, Factory, Flame, FlaskConical, Gift, Globe2,
-  LockKeyhole, Mountain, RotateCcw, Ship, Shield, Settings as SettingsGear,
-  AudioLines, Clapperboard, Vibrate, FileDown, SquareActivity,
+  Anchor, ArrowLeft, Award, Check, ChevronLeft,
+  CircleDollarSign, Flame, FlaskConical, Gift, Globe2,
+  LockKeyhole, Mountain, RotateCcw, Ship, Shield,
+  FileDown, SquareActivity,
   ShieldCheck, Sparkles, Swords, Target, Trophy, Waves, X, Zap,
 } from "lucide-react";
 import {
@@ -35,20 +35,20 @@ type Props = {
   onSelectBuilding: (id: BuildingId) => void;
 };
 
-const panelInfo: Record<PanelName, { title: string; subtitle: string }> = {
-  economy: { title: "اقتصاد و صنعت", subtitle: "مدیریت منابع ملی" },
-  defense: { title: "شبکهٔ دفاعی", subtitle: "برجک‌ها و کارت‌های ارتقا" },
-  city: { title: "شهر و زیرساخت", subtitle: "توسعه سرزمین" },
-  research: { title: "پژوهشگاه ملی", subtitle: "درخت فناوری" },
-  war: { title: "اتاق جنگ", subtitle: "انتخاب عملیات" },
-  hero: { title: "فرماندهان", subtitle: "یگان‌های ویژه" },
-  events: { title: "مرکز رویدادها", subtitle: "گزارش‌های تنگه" },
-  settings: { title: "تنظیمات", subtitle: "مرکز فرماندهی" },
+const panelTitles: Record<PanelName, string> = {
+  economy: "اقتصاد و صنعت",
+  defense: "شبکهٔ دفاعی",
+  city: "شهر و زیرساخت",
+  research: "پژوهشگاه ملی",
+  war: "اتاق جنگ",
+  hero: "فرماندهان",
+  events: "مرکز رویدادها",
+  settings: "تنظیمات",
 };
 
-const panelIcons = {
-  economy: Factory, defense: Shield, city: BatteryCharging, research: FlaskConical,
-  war: Swords, hero: Anchor, events: Activity, settings: SettingsGear,
+const panelArt: Record<PanelName, string> = {
+  economy: "command/helm", defense: "command/tower", city: "instruments/gear", research: "command/folio",
+  war: "command/chart", hero: "command/helm", events: "command/lantern", settings: "command/gear",
 };
 
 function BuildingCard({ id, game, dispatch, notify, inspect }: { id: BuildingId; game: GameState; dispatch: Dispatch<Action>; notify: (m: string) => void; inspect: (id: BuildingId) => void }) {
@@ -107,29 +107,33 @@ function Economy({ game, dispatch, notify, onSelectBuilding, onCollect }: Props)
     { id: "oil", name: "نفت", amount: game.oil },
   ];
   return <>
-    <dl className="stock-ledger" aria-label="موجودی انبار">
-      {stocks.map(stock => <div key={stock.id}>
-        <dt><Image alt="" src={`/assets/workshop/${stock.id}.webp`} width={44} height={44} unoptimized />{stock.name}</dt>
-        <dd>{compact(stock.amount)}</dd>
-      </div>)}
-    </dl>
-    <dl className="reserve-balances" aria-label="موجودی خزانه و مهمات">
-      <div><dt><Image src="/assets/workshop/cash.webp" width={25} height={25} alt="" unoptimized />خزانه</dt><dd>${compact(game.cash)}</dd></div>
-      <div><dt><Image src="/assets/workshop/ammo.webp" width={25} height={25} alt="" unoptimized />مهمات</dt><dd>{compact(game.ammo)}</dd></div>
-    </dl>
+    <div className="terminal-manifest">
+      <button className="terminal-illustration" onClick={() => onSelectBuilding("dock")} aria-label="مدیریت اسکلهٔ صادرات نفت">
+        <Image src="/assets/workshop/panels/export-terminal.webp" width={620} height={620} alt="" unoptimized />
+        <span>اسکلهٔ صادرات <ChevronLeft size={15} /></span>
+      </button>
+      <dl className="stock-ledger" aria-label="موجودی انبار">
+        {stocks.map(stock => <div key={stock.id}>
+          <dt><Image alt="" src={`/assets/workshop/${stock.id}.webp`} width={44} height={44} unoptimized />{stock.name}</dt>
+          <dd>{compact(stock.amount)}</dd>
+        </div>)}
+      </dl>
+    </div>
     <section className="oil-allocation" aria-label="تخصیص صادرات">
       <div className="allocation-heading">
-        <Ship aria-hidden="true" size={26} />
         <h3>تخصیص صادرات نفت</h3>
       </div>
       <div className="allocation-labels">
         <span>صادرات <b>{fa(game.oilSplit)}٪</b></span>
         <span>پالایش <b>{fa(100 - game.oilSplit)}٪</b></span>
       </div>
-      <input type="range" dir="ltr" min="0" max="100" value={game.oilSplit}
+      <div className="allocation-lever" style={{ "--export-share": `${game.oilSplit}%` } as CSSProperties}>
+        <input type="range" dir="ltr" min="0" max="100" value={game.oilSplit}
         onChange={e => dispatch({ type: "split", value: Number(e.target.value) })}
         aria-label="درصد صادرات نفت" aria-valuetext={`صادرات ${fa(game.oilSplit)} درصد، پالایش ${fa(100 - game.oilSplit)} درصد`}
-        style={{ "--export-share": `${game.oilSplit}%` } as CSSProperties} />
+        />
+        <span className="lever-grip" aria-hidden="true">‹ ›</span>
+      </div>
       <div className="allocation-presets">
         {exportPresets.map(preset => <button key={preset.value} aria-pressed={game.oilSplit === preset.value}
           className={game.oilSplit === preset.value ? "selected" : ""}
@@ -142,6 +146,10 @@ function Economy({ game, dispatch, notify, onSelectBuilding, onCollect }: Props)
       <Image src="/assets/workshop/cash.webp" width={36} height={36} alt="" unoptimized />
       دریافت درآمد بندر <b>${compact(game.idle.bank)}</b>
     </button>
+    <dl className="reserve-balances" aria-label="موجودی خزانه و مهمات">
+      <div><dt><Image src="/assets/workshop/cash.webp" width={25} height={25} alt="" unoptimized />خزانه</dt><dd>${compact(game.cash)}</dd></div>
+      <div><dt><Image src="/assets/workshop/ammo.webp" width={25} height={25} alt="" unoptimized />مهمات</dt><dd>{compact(game.ammo)}</dd></div>
+    </dl>
     <div className="summary-grid three">
       <div><span>تولید نفت</span><strong>{fa(stats.oilRate, 1)} <small>بشکه/ث</small></strong></div>
       <div><span>درآمد لحظه‌ای صادرات</span><strong className="panel-positive">+${fa(stats.realExportRate, 1)} <small>/ ثانیه</small></strong></div>
@@ -167,10 +175,11 @@ function Defense({ game, dispatch, notify, onSelectTower, close }: Props) {
         const def = TOWERS[kind], card = game.cards[kind];
         return <article className="blueprint-card" key={kind}>
           <div className="blueprint-illustration">
+            <span className="blueprint-level">سطح {fa(card.level)}</span>
             <TowerModel kind={kind} tier={1} preview />
             <TargetTypes targets={def.targets} />
           </div>
-          <div className="blueprint-copy"><strong>{def.short}</strong><span>سطح {fa(card.level)}</span><p>{def.description}</p></div>
+          <div className="blueprint-copy"><strong>{def.short}</strong><details><summary>جزئیات</summary><p>{def.description}</p></details></div>
           <button className={`card-count${card.count >= 3 ? " can-upgrade" : ""}`} aria-label={`ارتقای کارت ${def.short}، ${fa(card.count)} از ۳ کارت`}
             onClick={() => {
               if (card.count < 3) { notify("برای ارتقا، ۳ کارت یکسان جمع کنید."); return; }
@@ -191,7 +200,12 @@ function City({ game, dispatch, notify, onSelectBuilding }: Props) {
   const maxUse = Math.max(1, ...power.consumers.map(item => item.mw));
   const waterBalance = stats.waterProduced - stats.waterUsed;
   return <>
-    <section className="power-console" aria-label="شبکهٔ برق">
+    <div className="powerhouse-board">
+      <button className="plant-illustration" onClick={() => onSelectBuilding("power")} aria-label="مدیریت نیروگاه و ارتقای تولید برق">
+        <Image src="/assets/workshop/panels/powerhouse.webp" width={620} height={620} alt="" unoptimized />
+        <span><Zap size={18} />مدیریت نیروگاه <ChevronLeft size={15} /></span>
+      </button>
+      <section className="power-console" aria-label="شبکهٔ برق">
       <div className="power-reading"><Zap size={18} /><span>تولید</span><strong>{fa(power.produced)}</strong><small>مگاوات</small></div>
       <div className="power-dial" role="meter" aria-label="راندمان شبکه برق" aria-valuenow={Math.round(power.grid * 100)}
         aria-valuemin={0} aria-valuemax={100} style={{ "--needle-angle": `${power.grid * 180 - 90}deg` } as CSSProperties}>
@@ -199,7 +213,8 @@ function City({ game, dispatch, notify, onSelectBuilding }: Props) {
         <span>راندمان <b>{fa(power.grid * 100)}٪</b></span>
       </div>
       <div className="power-reading"><Zap size={18} /><span>مصرف</span><strong>{fa(power.used)}</strong><small>مگاوات</small></div>
-    </section>
+      </section>
+    </div>
     <section className="grid-breakdown">
       <div className="grid-breakdown-head"><strong>مصرف شبکهٔ برق</strong><span>مگاوات</span></div>
       {power.consumers.length === 0 ? <p className="grid-empty">هنوز مصرف‌کننده‌ای ساخته نشده است.</p> : power.consumers.map(item =>
@@ -264,8 +279,9 @@ function Research({ game, dispatch, notify }: Props) {
   const next=items.findIndex(item=>!game.research.includes(item.id));
   const visible=showAll ? items : next<0 ? items.slice(-2) : items.filter((_,index)=>index>=Math.max(0,next-1)&&index<=next+1);
   return <>
+    <div className="research-bench"><Image src="/assets/workshop/panels/turbine-drawing.webp" width={620} height={620} alt="" unoptimized /><div className="research-paperclip" aria-hidden="true" /></div>
     <div className="research-tabs">{[{id:"energy" as const,name:"انرژی",icon:Flame},{id:"defense" as const,name:"مهندسی دفاع",icon:Shield},{id:"city" as const,name:"شهرسازی",icon:Globe2}].map(tab=><button key={tab.id} aria-pressed={branch===tab.id} className={branch===tab.id ? "active" : ""} onClick={()=>{setBranch(tab.id);setShowAll(false);}}><tab.icon size={15}/>{tab.name}</button>)}</div>
-    <div className="research-overview"><div><strong>{next<0 ? "این شاخه تکمیل شد" : "مسیر پیشرفت شما"}</strong><span>{fa(completed)} از {fa(items.length)} پژوهش</span></div><div className="research-steps">{items.map(item=><i key={item.id} className={game.research.includes(item.id) ? "complete" : item.id===items[next]?.id ? "next" : ""}/>)}</div></div>
+    <div className="research-overview"><div className="research-ledger"><strong>{next<0 ? "این شاخه تکمیل شد" : "مسیر پیشرفت شما"}</strong><span>{fa(completed)} از {fa(items.length)} پژوهش</span></div><div className="research-steps">{items.map(item=><i key={item.id} className={game.research.includes(item.id) ? "complete" : item.id===items[next]?.id ? "next" : ""}/>)}</div></div>
     <div className="research-list">{visible.map(tech=>{
       const index=items.findIndex(item=>item.id===tech.id),done=game.research.includes(tech.id),locked=index>0&&!game.research.includes(items[index-1].id);
       return <div className={`research-card ${done ? "researched" : ""} ${locked ? "locked" : ""} ${index===next ? "next-research" : ""}`} key={tech.id}><div className="tech-index">{done ? <Check size={16}/> : locked ? <LockKeyhole size={15}/> : <FlaskConical size={16}/>}</div><div><strong>{tech.name}</strong><p>{tech.description}</p>{index===next&&<small className="next-tech-tag">آمادهٔ پژوهش</small>}</div><button disabled={done||locked} onClick={()=>{if(game.cash<tech.cost){notify("برای این پژوهش، دلار بیشتری نیاز دارید.");return;}dispatch({type:"research",id:tech.id});notify("فناوری جدید آماده شد و اثر آن اعمال شد.");}}>{done ? "تکمیل شد" : locked ? "قدم بعد" : <><span>پژوهش</span><small>${compact(tech.cost)}</small></>}</button></div>;
@@ -280,6 +296,28 @@ const modes: { id: Mode; title: string; en: string; description: string; icon: t
   { id: "endless", title: "بقای بی‌نهایت", en: "INFINITE", description: "تا آخرین قلب مقاومت کنید و رکورد تازه‌ای ثبت کنید.", icon: Waves, badge: "بی‌پایان" },
   { id: "challenge", title: "چالش تاکتیکی", en: "CHALLENGE", description: "نبرد در شب طوفانی با ۵۰٪ برد کمتر برجک‌ها.", icon: Swords, badge: "جایزه ویژه" },
 ];
+function CampaignChart({ game, selected, select }: { game: GameState; selected: number; select: (wave: number) => void }) {
+  return <div className="campaign-chart">
+    <div className="operations-summary"><strong>عملیات‌های کمپین</strong><span><Trophy size={15} />{fa(Math.min(25, game.highestWave))}/۲۵</span></div>
+    <div className="operation-grid">
+      {Array.from({ length: 5 }, (_, row) => <div className="chart-course" key={row}>
+        {Array.from({ length: 5 }, (_, column) => {
+          const wave = row * 5 + column + 1;
+          const locked = wave > game.highestWave + 1;
+          const stars = game.idle.stars[String(wave)] ?? 0;
+          const boss = wave % 5 === 0;
+          return <button key={wave} className={`operation-node ${selected === wave ? "selected" : ""} ${stars ? "completed" : ""} ${boss ? "boss" : ""}`}
+            disabled={locked} aria-pressed={selected === wave} onClick={() => select(wave)}
+            aria-label={`عملیات ${fa(wave)}، ${operationInfo(wave).title}${locked ? "، قفل" : ""}`}>
+            <span>{fa(wave)}</span>
+            <small>{stars ? "★".repeat(stars) : boss ? <Swords size={12} /> : locked ? <LockKeyhole size={10} /> : <Anchor size={11} />}</small>
+          </button>;
+        })}
+      </div>)}
+    </div>
+  </div>;
+}
+
 function War({game,dispatch,close,notify,onSelectBuilding,onSelectTower}:Props){
   const [mode,setMode]=useState<Mode>(game.mode),[selected,setSelected]=useState(Math.min(25,game.highestWave+1));
   const operation=operationInfo(selected);
@@ -291,57 +329,57 @@ function War({game,dispatch,close,notify,onSelectBuilding,onSelectTower}:Props){
   };
   const start=()=>{if(mode==="campaign")dispatch({type:"select-operation",wave:selected});else dispatch({type:"mode",mode});dispatch({type:"start"});close();notify("عملیات آغاز شد؛ برجک‌ها خودکار دفاع می‌کنند.");};
   return <><div className="operation-mode-tabs">{modes.map(item=><button key={item.id} aria-pressed={mode===item.id} className={mode===item.id?"active":""} onClick={()=>setMode(item.id)}><item.icon size={17}/><span>{item.title}</span></button>)}</div>
-    {mode==="campaign"?<><div className="operations-summary"><div><span>کمپین آب‌های آزاد</span><strong>عملیات‌های کمپین</strong></div><span><Trophy size={17}/>{fa(Math.min(25,game.highestWave))}/۲۵</span></div><div className="operation-grid">{Array.from({length:25},(_,i)=>{const wave=i+1,locked=wave>game.highestWave+1,stars=game.idle.stars[String(wave)]??0;return <button key={wave} className={`operation-node ${selected===wave?"selected":""} ${stars?"completed":""} ${wave%5===0?"boss":""}`} disabled={locked} aria-pressed={selected===wave} onClick={()=>setSelected(wave)} aria-label={`عملیات ${fa(wave)}، ${operationInfo(wave).title}${locked?"، قفل":""}`}><span>{locked?<LockKeyhole size={17}/>:wave%5===0?<Swords size={21}/>:fa(wave)}</span><small>{stars?"★".repeat(stars):wave%5===0?"غول‌آخر":"···"}</small></button>;})}</div><article className={`operation-briefing ${operation.boss?"boss-briefing":""}`}><div><span>عملیات {fa(selected)}</span><h3>{operation.title}</h3>{operation.bossName&&<p>هدف ویژه: {operation.bossName}</p>}</div><div className="operation-rewards"><span><CircleDollarSign size={14}/>${compact(operation.cash)}</span><span><Award size={14}/>{fa(operation.xp)} تجربه</span>{operation.boss&&<span><Gift size={14}/>۲ صندوقچه</span>}</div><div className="readiness-row"><span><ShieldCheck size={15}/>{ready?"هشدار تدارکاتی دیده نشد":"پیش از نبرد بررسی کن"}</span><strong className={ready?"panel-positive":""}>{fa(preparation.units.reduce((n,u)=>n+u.count,0))} دشمن</strong></div><p className="operation-tip">{operation.tip}</p></article></>:<div className="alternate-mode"><span>{mode==="endless"?<Waves size={40}/>:<Swords size={40}/>}</span><h3>{mode==="endless"?"تا آخرین قلب مقاومت کن":"برتری در شرایط دشوار"}</h3><p>{mode==="endless"?"موج‌ها ادامه پیدا می‌کنند و هر بار قوی‌تر می‌شوند. بهترین رکورد شما ذخیره می‌شود.":`قانون این نبرد: «${CHALLENGE_RULES[(game.idle.challengeRuns ?? 0) % 3].name}» — ${CHALLENGE_RULES[(game.idle.challengeRuns ?? 0) % 3].description}`}</p><div><Trophy size={17}/> بهترین موج: {fa(game.idle.modeBest[mode])}</div></div>}
+    {mode==="campaign"?<><CampaignChart game={game} selected={selected} select={setSelected} /><article className={`operation-briefing ${operation.boss?"boss-briefing":""}`}><div><span>عملیات {fa(selected)}</span><h3>{operation.title}</h3>{operation.bossName&&<p>هدف ویژه: {operation.bossName}</p>}</div><div className="operation-rewards"><span><CircleDollarSign size={14}/>${compact(operation.cash)}</span><span><Award size={14}/>{fa(operation.xp)} تجربه</span>{operation.boss&&<span><Gift size={14}/>۲ صندوقچه</span>}</div><div className="readiness-row"><span><ShieldCheck size={15}/>{ready?"هشدار تدارکاتی دیده نشد":"پیش از نبرد بررسی کن"}</span><strong className={ready?"panel-positive":""}>{fa(preparation.units.reduce((n,u)=>n+u.count,0))} دشمن</strong></div><p className="operation-tip">{operation.tip}</p></article></>:<div className="alternate-mode"><span>{mode==="endless"?<Waves size={40}/>:<Swords size={40}/>}</span><h3>{mode==="endless"?"تا آخرین قلب مقاومت کن":"برتری در شرایط دشوار"}</h3><p>{mode==="endless"?"موج‌ها ادامه پیدا می‌کنند و هر بار قوی‌تر می‌شوند. بهترین رکورد شما ذخیره می‌شود.":`قانون این نبرد: «${CHALLENGE_RULES[(game.idle.challengeRuns ?? 0) % 3].name}» — ${CHALLENGE_RULES[(game.idle.challengeRuns ?? 0) % 3].description}`}</p><div><Trophy size={17}/> بهترین موج: {fa(game.idle.modeBest[mode])}</div></div>}
     <div className="preparation-tips">{preparation.tips.map(tip=><button key={tip.id} onClick={()=>prepare(tip)}><ShieldCheck size={17}/><span>{tip.text}</span><ChevronLeft size={16}/></button>)}</div>
     <button disabled={game.phase === "battle" || !!(game.idle.lastBattle && !game.idle.lastBattle.claimed)} className="primary-action operation-start" onClick={start}><Swords size={18}/>{mode==="campaign"?`شروع عملیات ${fa(selected)}`:"شروع نبرد"}<ArrowLeft size={17}/></button><div className="drawer-note"><ShieldCheck size={16}/> سلامت و تدارکات را بررسی کنید. نتیجهٔ هر عملیات با ستاره و غنائم ثبت می‌شود.</div></>;
 }
 
 function Heroes({ game, dispatch, notify, close }: Props) {
   const heroes = [
-    { name: "ناخدا یکم تکاور", ship: "ناوچه شهید سلیمانی", skill: "+۲۰٪ سرعت شلیک برجک‌های نزدیک", model: "destroyer" },
-    { name: "دریادار مهندس", ship: "ناو پهپادبر", skill: "حمله به قوی‌ترین هدف در میدان", model: "carrier" },
-    { name: "فرمانده زیردریایی فاتح", ship: "زیردریایی شکارچی", skill: "تخصص در شکار ناوهای سنگین", model: "submarine" },
+    { name: "ناخدا یکم تکاور", ship: "ناوچه شهید سلیمانی", skill: "+۲۰٪ سرعت شلیک برجک‌های نزدیک", portrait: "captain" },
+    { name: "دریادار مهندس", ship: "ناو پهپادبر", skill: "حمله به قوی‌ترین هدف در میدان", portrait: "engineer" },
+    { name: "فرمانده زیردریایی فاتح", ship: "زیردریایی شکارچی", skill: "تخصص در شکار ناوهای سنگین", portrait: "submariner" },
   ];
   const inBattle = game.phase === "battle";
-  return <><div className="drawer-intro"><div className="intro-icon gold"><Award size={23} /></div><div><strong>فرمانده خود را انتخاب کنید</strong><p>یگان فرمانده را روی نقشه لمس کنید و به آبراه بفرستید.</p></div></div>{inBattle && <div className="drawer-note"><LockKeyhole size={15} /> وسط نبرد تعویض فرمانده ممکن نیست؛ تغییر پرسونا فقط بیرون از نبرد انجام می‌شود.</div>}<div className="hero-list">{heroes.map((hero, i) => <div className={`hero-card ${game.hero.active === i ? "chosen" : ""}`} key={hero.name}><div className="hero-avatar"><Image src={`/assets/ships/${hero.model}.png`} width={24} height={78} alt="" unoptimized /></div><div><strong>{hero.name}</strong><span>{hero.ship}</span><p><Sparkles size={13} /> {hero.skill}</p></div><button disabled={inBattle} onClick={() => { dispatch({ type: "hero-select", hero: i }); close(); notify("فرمانده انتخاب شد. برای جابه‌جایی، ناو قهرمان را لمس کنید."); }}>{game.hero.active === i ? "انتخاب‌شده" : inBattle ? "قفل در نبرد" : "انتخاب"}</button></div>)}</div>
-  {game.highestWave >= 5 ? <><div className="drawer-section-heading space-top"><div><strong>فرمانده دوم — استقرار همزمان</strong><p>دو فرمانده می‌توانند همزمان در آبراه بجنگند؛ پرسونا باید متفاوت از فرمانده اول باشد.</p></div></div><div className="hero-list">{heroes.map((hero, i) => { const deployed = game.hero2?.active === i, isFirst = game.hero.active === i, swapLocked = inBattle && !!game.hero2; return <div className={`hero-card ${deployed ? "chosen" : ""}`} key={`h2-${hero.name}`}><div className="hero-avatar"><Image src={`/assets/ships/${hero.model}.png`} width={24} height={78} alt="" unoptimized /></div><div><strong>{hero.name}</strong><span>{hero.ship}</span><p><Sparkles size={13} /> {hero.skill}</p></div><button disabled={isFirst || swapLocked} onClick={() => { if (game.hero2) { dispatch({ type: "hero2-select", hero: i }); notify("پرسونای فرمانده دوم تغییر کرد."); } else { if (game.cash < 3000) { notify("برای استقرار فرمانده دوم ۳۰۰۰ دلار لازم است."); return; } dispatch({ type: "deploy-hero2", hero: i }); notify("فرمانده دوم در آبراه مستقر شد."); } close(); }}>{isFirst ? "فرمانده اول" : deployed ? "فرمانده دوم" : swapLocked ? "قفل در نبرد" : game.hero2 ? "جایگزینی" : "استقرار · $۳٬۰۰۰"}</button></div>; })}</div>{game.hero2 && <button className="all-research-toggle" onClick={() => { dispatch({ type: "recall-hero2" }); notify("فرمانده دوم فراخوانده شد."); }}>فراخوان فرمانده دوم</button>}</> : <div className="drawer-note"><LockKeyhole size={15} /> فرمانده دوم پس از شکست نخستین غول‌آخر (موج ۵) آزاد می‌شود.</div>}</>;
+  return <><div className="drawer-intro"><div className="intro-icon gold"><Award size={23} /></div><div><strong>فرمانده خود را انتخاب کنید</strong><p>یگان فرمانده را روی نقشه لمس کنید و به آبراه بفرستید.</p></div></div>{inBattle && <div className="drawer-note"><LockKeyhole size={15} /> وسط نبرد تعویض فرمانده ممکن نیست؛ تغییر پرسونا فقط بیرون از نبرد انجام می‌شود.</div>}<div className="hero-list">{heroes.map((hero, i) => <div className={`hero-card ${game.hero.active === i ? "chosen" : ""}`} key={hero.name}><div className="hero-avatar"><Image src={`/assets/workshop/panels/${hero.portrait}.webp`} width={208} height={208} alt="" unoptimized /></div><div><strong>{hero.name}</strong><span>{hero.ship}</span><p><Sparkles size={13} /> {hero.skill}</p></div><button disabled={inBattle} onClick={() => { dispatch({ type: "hero-select", hero: i }); close(); notify("فرمانده انتخاب شد. برای جابه‌جایی، ناو قهرمان را لمس کنید."); }}>{game.hero.active === i ? "انتخاب‌شده" : inBattle ? "قفل در نبرد" : "انتخاب"}</button></div>)}</div>
+  {game.highestWave >= 5 ? <><div className="drawer-section-heading space-top"><div><strong>فرمانده دوم — استقرار همزمان</strong><p>دو فرمانده می‌توانند همزمان در آبراه بجنگند؛ پرسونا باید متفاوت از فرمانده اول باشد.</p></div></div><div className="hero-list">{heroes.map((hero, i) => { const deployed = game.hero2?.active === i, isFirst = game.hero.active === i, swapLocked = inBattle && !!game.hero2; return <div className={`hero-card ${deployed ? "chosen" : ""}`} key={`h2-${hero.name}`}><div className="hero-avatar"><Image src={`/assets/workshop/panels/${hero.portrait}.webp`} width={208} height={208} alt="" unoptimized /></div><div><strong>{hero.name}</strong><span>{hero.ship}</span><p><Sparkles size={13} /> {hero.skill}</p></div><button disabled={isFirst || swapLocked} onClick={() => { if (game.hero2) { dispatch({ type: "hero2-select", hero: i }); notify("پرسونای فرمانده دوم تغییر کرد."); } else { if (game.cash < 3000) { notify("برای استقرار فرمانده دوم ۳۰۰۰ دلار لازم است."); return; } dispatch({ type: "deploy-hero2", hero: i }); notify("فرمانده دوم در آبراه مستقر شد."); } close(); }}>{isFirst ? "فرمانده اول" : deployed ? "فرمانده دوم" : swapLocked ? "قفل در نبرد" : game.hero2 ? "جایگزینی" : "استقرار · $۳٬۰۰۰"}</button></div>; })}</div>{game.hero2 && <button className="all-research-toggle" onClick={() => { dispatch({ type: "recall-hero2" }); notify("فرمانده دوم فراخوانده شد."); }}>فراخوان فرمانده دوم</button>}</> : <div className="drawer-note"><LockKeyhole size={15} /> فرمانده دوم پس از شکست نخستین غول‌آخر (موج ۵) آزاد می‌شود.</div>}</>;
 }
 function Events({ game, dispatch, notify }: Props) {
   const titles = { spill: "بحران نشت نفت", storm: "طوفان حاره‌ای مونسون", vip: "اسکورت کاروان ویژه" };
   const descriptions = { spill: "لوله زیرآبی آسیب دیده است؛ کشتی مهار را اعزام کنید.", storm: "برد برجک‌ها ۲۰٪ کاهش یافته است. مراقب آبراه باشید.", vip: "یک کاروان دیپلماتیک از تنگه عبور می‌کند؛ از آن پشتیبانی کنید." };
-  return <><div className="drawer-intro"><div className="intro-icon gold"><Activity size={23} /></div><div><strong>گزارش زنده منطقه</strong><p>در برابر بحران‌ها واکنش به‌موقع نشان دهید.</p></div></div>{game.event ? <div className="event-card"><span className="event-alert">رویداد فعال</span><strong>{titles[game.event]}</strong><p>{descriptions[game.event]}</p><span className="event-countdown">پایان خودکار رویداد تا {fa(Math.max(0, Math.ceil(60 - game.eventClock)))} ثانیه</span><button onClick={() => {
+  return <>{game.event ? <div className="event-card"><Image className="event-emblem" src={game.event === "spill" ? "/assets/workshop/progression/barrels.webp" : game.event === "vip" ? "/assets/workshop/progression/freighter.webp" : "/assets/workshop/progression/lighthouse.webp"} width={100} height={100} alt="" unoptimized /><span className="event-alert">رویداد فعال</span><strong>{titles[game.event]}</strong><p>{descriptions[game.event]}</p><span className="event-countdown">پایان خودکار رویداد تا {fa(Math.max(0, Math.ceil(60 - game.eventClock)))} ثانیه</span><button onClick={() => {
     if (game.event === "spill" && game.cash < 300) { notify("برای اعزام کشتی ۳۰۰ دلار نیاز است."); return; }
     dispatch({ type: "resolve-event" }); notify("فرمان رسیدگی به رویداد ثبت شد.");
-  }}>{game.event === "spill" ? "اعزام کشتی مهار · $۳۰۰" : game.event === "vip" ? "پشتیبانی از کاروان" : "عبور از طوفان"}</button></div> : <div className="empty-event"><ShieldCheck size={32} /><strong>همه چیز آرام است</strong><p>در حال حاضر رویداد فعالی در تنگه گزارش نشده است. رویداد بعدی تا حدود {fa(Math.max(0, Math.ceil(180 - game.eventClock)))} ثانیهٔ دیگر گزارش می‌شود.</p></div>}<div className="drawer-section-heading space-top"><div><strong>گزارش فرماندهی</strong><p>آخرین وضعیت منطقه تحت کنترل شما</p></div></div><div className="report-row"><span><Ship size={16} /> کشتی‌های عبوری</span><strong>{fa(game.trafficCount)}</strong></div><div className="report-row"><span><Target size={16} /> دشمنان منهدم‌شده</span><strong>{fa(game.destroyed)}</strong></div><div className="report-row"><span><ShieldCheck size={16} /> امنیت آبراه</span><strong>{fa(game.security)}٪</strong></div></>;
+  }}>{game.event === "spill" ? "اعزام کشتی مهار · $۳۰۰" : game.event === "vip" ? "پشتیبانی از کاروان" : "عبور از طوفان"}</button></div> : <div className="empty-event"><Image className="event-emblem" src="/assets/workshop/progression/lighthouse.webp" width={100} height={100} alt="" unoptimized /><strong>همه چیز آرام است</strong><p>در حال حاضر رویداد فعالی در تنگه گزارش نشده است. رویداد بعدی تا حدود {fa(Math.max(0, Math.ceil(180 - game.eventClock)))} ثانیهٔ دیگر گزارش می‌شود.</p></div>}<div className="drawer-section-heading space-top"><div><strong>گزارش فرماندهی</strong><p>آخرین وضعیت منطقه تحت کنترل شما</p></div></div><div className="report-row"><span><Ship size={16} /> کشتی‌های عبوری</span><strong>{fa(game.trafficCount)}</strong></div><div className="report-row"><span><Target size={16} /> دشمنان منهدم‌شده</span><strong>{fa(game.destroyed)}</strong></div><div className="report-row"><span><ShieldCheck size={16} /> امنیت آبراه</span><strong>{fa(game.security)}٪</strong></div></>;
 }
 function Settings({ game, close, dispatch, notify, sound, setSound, vibration, setVibration, cinematic, setCinematic }: Props) {
   const settings = [
-    {name:"صدای بازی",description:"صدای شلیک، انفجار و مهارت‌ها",value:sound,set:setSound,icon:AudioLines},
-    {name:"جلوه‌های سینمایی",description:"دنبالهٔ موشک، ذرات، دود و ضربهٔ دوربین",value:cinematic,set:setCinematic,icon:Clapperboard},
-    {name:"لرزش لمسی",description:"بازخورد کوتاه در دستگاه‌های سازگار",value:vibration,set:setVibration,icon:Vibrate},
+    {name:"صدای بازی",description:"صدای شلیک، انفجار و مهارت‌ها",value:sound,set:setSound,art:"phonograph"},
+    {name:"جلوه‌های سینمایی",description:"دنبالهٔ موشک، ذرات، دود و ضربهٔ دوربین",value:cinematic,set:setCinematic,art:"camera"},
+    {name:"لرزش لمسی",description:"بازخورد کوتاه در دستگاه‌های سازگار",value:vibration,set:setVibration,art:"radio"},
   ];
   return <><div className="settings-plaques">{settings.map(setting =>
     <div className="setting-row" key={setting.name}>
-      <setting.icon size={23} aria-hidden="true" />
+      <Image className="instrument-badge" src={`/assets/workshop/panels/${setting.art}.webp`} width={115} height={115} alt="" unoptimized />
       <div><strong>{setting.name}</strong><p>{setting.description}</p></div>
       <button className={`switch ${setting.value ? "on" : ""}`} role="switch" aria-checked={setting.value}
         onClick={() => setting.set(!setting.value)} aria-label={setting.name}>
-        <i>{setting.value ? <Check size={13} /> : <X size={12} />}</i>
+        <i>{setting.value ? <Check size={18} strokeWidth={3} /> : <X size={16} strokeWidth={3} />}</i>
       </button>
-    </div>)}</div><div className="drawer-note"><Sparkles size={16}/> با فعال بودن «کاهش حرکت» در تنظیمات دستگاه، افکت‌ها خودکار ملایم‌تر می‌شوند.</div><div className="save-status"><Check size={16}/> ذخیرهٔ خودکار روی دستگاه فعال است.</div><div className="diagnostics-settings"><strong>گزارش بازی و حریم خصوصی</strong><p>گزارش پیشرفت و روزهای بازی فقط روی همین دستگاه نگه‌داری می‌شود. ارسال خودکار ندارد. خروجی را تنها اگر بخواهید با تیم سازنده به اشتراک بگذارید.</p><button onClick={()=>{void exportDiagnostics().catch(()=>notify("گزارش ذخیره نشد؛ دوباره تلاش کنید."));}}><FileDown size={16} />دریافت گزارش بازی</button><button onClick={() => {
+    </div>)}</div><SaveBackup game={game} dispatch={dispatch} notify={notify} close={close}/><div className="drawer-note"><Sparkles size={16}/> با فعال بودن «کاهش حرکت» در تنظیمات دستگاه، افکت‌ها خودکار ملایم‌تر می‌شوند.</div><div className="save-status"><Check size={16}/> ذخیرهٔ خودکار روی دستگاه فعال است.</div><div className="diagnostics-settings"><strong>گزارش بازی و حریم خصوصی</strong><p>گزارش پیشرفت و روزهای بازی فقط روی همین دستگاه نگه‌داری می‌شود. ارسال خودکار ندارد. خروجی را تنها اگر بخواهید با تیم سازنده به اشتراک بگذارید.</p><button onClick={()=>{void exportDiagnostics().catch(()=>notify("گزارش ذخیره نشد؛ دوباره تلاش کنید."));}}><FileDown size={16} />دریافت گزارش بازی</button><button onClick={() => {
       window.dispatchEvent(new Event('hormuz:record-frames'));
       close();
-    }}><SquareActivity size={16} />ثبت عملکرد رندر</button></div><SaveBackup game={game} dispatch={dispatch} notify={notify} close={close}/><details className="danger-settings"><summary>مدیریت پیشرفت بازی <ChevronLeft size={14}/></summary><p>شروع دوباره، ذخیرهٔ فعلی و پیشرفت بازی را پاک می‌کند.</p><button className="reset-button" onClick={()=>{if(window.confirm("تمام پیشرفت بازی پاک می‌شود. از شروع دوباره مطمئنید؟")){dispatch({type:"reset"});notify("یک فرماندهی تازه آغاز شد.");}}}><RotateCcw size={16}/> شروع دوباره بازی</button></details><p className="version-label">تنگه هرمز · فرمانروایی زنده · نسخهٔ {version.replace(/\d/g, digit => fa(Number(digit)))}<br/><a href="/assets/CREDITS.txt" target="_blank" rel="noreferrer">منابع و مجوز مدل‌های آزاد ↗</a></p></>;
+    }}><SquareActivity size={16} />ثبت عملکرد رندر</button></div><details className="danger-settings"><summary>مدیریت پیشرفت بازی <ChevronLeft size={14}/></summary><p>شروع دوباره، ذخیرهٔ فعلی و پیشرفت بازی را پاک می‌کند.</p><button className="reset-button" onClick={()=>{if(window.confirm("تمام پیشرفت بازی پاک می‌شود. از شروع دوباره مطمئنید؟")){dispatch({type:"reset"});notify("یک فرماندهی تازه آغاز شد.");}}}><RotateCcw size={16}/> شروع دوباره بازی</button></details><p className="version-label">تنگه هرمز · فرمانروایی زنده · نسخهٔ {version.replace(/\d/g, digit => fa(Number(digit)))}<br/><a href="/assets/CREDITS.txt" target="_blank" rel="noreferrer">منابع و مجوز مدل‌های آزاد ↗</a></p></>;
 }
 
 
 export default function Panels(props: Props) {
-  const { panel, close } = props, info = panelInfo[panel];
+  const { panel, close } = props;
+  const title = panelTitles[panel];
   const dialogRef = useDialog<HTMLElement>(close);
-  const PanelIcon = panelIcons[panel];
   return <div className="drawer-overlay" onClick={close} role="presentation">
-    <section ref={dialogRef} className={`drawer workshop-panel panel-${panel}`} tabIndex={-1} role="dialog" aria-modal="true" aria-label={info.title} onClick={e => e.stopPropagation()}>
-      <div className="drawer-header"><div className="workshop-title"><PanelIcon size={24} aria-hidden="true" /><div><span>{info.subtitle}</span><h2>{info.title}</h2></div></div><button className="icon-close" onClick={close} aria-label="بستن"><X size={19} /></button></div>
+    <section ref={dialogRef} className={`drawer workshop-panel panel-${panel}`} tabIndex={-1} role="dialog" aria-modal="true" aria-label={title} onClick={e => e.stopPropagation()}>
+      <div className="drawer-header"><div className="workshop-title"><Image src={`/assets/workshop/${panelArt[panel]}.webp`} width={54} height={54} alt="" unoptimized /><h2>{title}</h2></div><button className="icon-close" onClick={close} aria-label="بستن"><X size={19} /></button></div>
       <div className="drawer-body">
         {panel === "economy" && <Economy {...props} />}
         {panel === "defense" && <Defense {...props} />}

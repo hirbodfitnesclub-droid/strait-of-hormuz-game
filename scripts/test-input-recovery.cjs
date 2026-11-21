@@ -62,12 +62,12 @@ async function main() {
     await signal(false);
     await signal(true);
     const audioBeforeGesture = await page.evaluate(() => window.observedAudio?.state ?? null);
-    await page.locator('.nav-item').filter({hasText:'اقتصاد'}).click();
+    await page.getByRole('button', {name:/^فولاد /}).click();
     await page.locator('.drawer').waitFor();
     await page.waitForFunction(() => window.observedAudio?.state === 'running');
     await back();
     await page.locator('.drawer').waitFor({state:'hidden'});
-    await page.locator('.nav-item').filter({hasText:'بیشتر'}).click();
+    await page.getByRole('button', {name:'فرماندهی بندر'}).click();
     await page.locator('.more-menu').waitFor();
     await back();
     await page.locator('.more-menu').waitFor({state:'hidden'});

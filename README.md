@@ -9,7 +9,7 @@
 
 ## مستندات
 
-مستندات نسخهٔ آزمایشی ۰٫۷٫۳ و رابط «کارگاه بندر» در این پوشه است. [فهرست مستندات](strait-of-hormuz-game-docs/README.md)، [وضعیت واقعی و تست‌ها](strait-of-hormuz-game-docs/status.md)، [ساخت و انتشار](strait-of-hormuz-game-docs/release.md).
+مستندات نسخهٔ آزمایشی ۰٫۷٫۴ و رابط «کارگاه بندر» در این پوشه است. [فهرست مستندات](strait-of-hormuz-game-docs/README.md)، [وضعیت واقعی و تست‌ها](strait-of-hormuz-game-docs/status.md)، [ساخت و انتشار](strait-of-hormuz-game-docs/release.md).
 
 ## فناوری
 Next.js 16 + React 19 + TypeScript + Three.js — بسته‌بندی اندروید با Capacitor (پکیج `ir.hormuz.sovereign`).

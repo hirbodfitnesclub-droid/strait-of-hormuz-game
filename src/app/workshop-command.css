@@ -1,211 +1,259 @@
-/* Command boards share the wood backing, brass edges and enamel signs of the port HUD. */
-.command-backdrop,
-.command-pause,
-.news-bulletin,
-.diary-card {
-  --command-wood: repeating-linear-gradient(3deg, transparent 0 4px, #b0703314 5px, transparent 7px 11px), linear-gradient(100deg, #4a291d, #795038 45%, #4e3024);
-  --command-enamel: linear-gradient(174deg, #315a68, #194451 40%, #173641 75%, #294650);
-  --command-paper: radial-gradient(ellipse at 62% 14%, #fff0c4, transparent 74%), linear-gradient(121deg, #d9b277, #f4dcab 44%, #e3c18b);
-  --command-green: linear-gradient(#638b40, #3c6c32 52%, #2e562f);
-  --command-yellow: linear-gradient(#ffdc70, #f2b43b 54%, #d99526);
-  --command-red: linear-gradient(#b05b4b, #914334 54%, #793729);
+/* Nine-slice frames keep the painted brass corners, rivets and plank edges intact as the board resizes. */
+.command-backdrop, .command-pause, .news-bulletin, .diary-card {
+  --rack-wood: var(--skin-wood, url('/assets/workshop/skin/wood-board.webp'));
+  --rack-blue: var(--skin-blue, url('/assets/workshop/skin/blue-plaque.webp'));
+  --rack-paper: var(--skin-paper, url('/assets/workshop/skin/paper-plaque.webp'));
+  --rack-gold: var(--skin-gold, url('/assets/workshop/skin/brass-button.webp'));
+  --rack-green: var(--skin-green, url('/assets/workshop/skin/green-button.webp'));
+  --rack-red: var(--skin-red, url('/assets/workshop/skin/red-button.webp'));
+  --rack-ink: #382214;
+  --rack-cream: #fff1cc;
 }
 .game-shell .command-backdrop {
   position: absolute;
-  align-items: flex-end;
   inset: 0;
-  padding: calc(env(safe-area-inset-top, 0px) + 58px) 12px max(12px, env(safe-area-inset-bottom, 0px));
-  background: linear-gradient(0deg, #17171565, #09253418 68%, transparent 86%);
+  align-items: flex-end;
+  padding: var(--wk-header-bottom, 60px) 6px max(7px, env(safe-area-inset-bottom, 0px));
+  background: linear-gradient(0deg, #1c140e48, #17364508 60%, transparent 75%);
+  backdrop-filter: none;
 }
-.game-shell .command-backdrop :is(.more-menu, .quick-guide, .exit-dialog),
-.game-shell :is(.command-pause, .news-bulletin, .diary-card) {
-  border: 2px solid #4e3021;
-  border-radius: 13px;
-  box-shadow: inset 0 0 0 1px #e5b46e, inset 0 0 0 4px #89582f, inset 0 0 0 5px #bc8b50, 0 3px 0 #30241f, 0 9px 22px #07131c80;
-  background: var(--command-wood);
-  color: #fff0c8;
+.game-shell :is(.more-menu, .quick-guide, .command-pause, .news-bulletin, .diary-card,
+               .command-cap, .command-titleplate, .command-plaque, .plaque-chevron, .command-other,
+               .command-fast-links > button, .command-stations > button, .command-pause h2, .command-pause button,
+               .quick-guide ol, .quick-guide .command-resume, .news-head, .bulletin-paper, .news-actions > button,
+               .diary-item, .diary-empty) {
+  background: transparent;
+  border: 1px solid transparent;
+  border-image: var(--rack-face, var(--rack-wood)) 40 44 44 fill / var(--rack-trim, 10px 13px 12px) / 0 stretch;
+  border-radius: 10px;
+  box-shadow: none;
 }
-.game-shell .command-backdrop :is(.more-menu, .quick-guide, .exit-dialog) {
-  flex-shrink: 1;
-  width: min(100%, 414px);
+.game-shell .command-backdrop :is(.more-menu, .quick-guide, .exit-dialog), .game-shell :is(.news-bulletin, .diary-card) {
+  --rack-face: var(--rack-wood);
+  --rack-trim: 18px 21px 19px;
+  width: min(100%, 430px);
   max-height: 100%;
+  align-self: flex-end;
   margin: 0;
-  padding: 10px;
+  padding: 11px 13px 13px;
   overflow-y: auto;
   overscroll-behavior: contain;
   scrollbar-width: thin;
-  scrollbar-color: #d3aa6e #4e3224;
-  align-self: flex-end;
+  scrollbar-color: #dab16b #69432c;
+  color: var(--rack-cream);
+  filter: drop-shadow(0 3px 1px #281b17b3) drop-shadow(0 6px 5px #10202f54);
 }
-.game-shell .workshop-menu-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
-.workshop-menu-grid .command-heading, .command-titleplate, .command-pause h2, .game-shell .news-head {
-  background: var(--command-enamel);
-  border: 1px solid #c99b57;
-  border-radius: 6px;
-  box-shadow: inset 0 0 0 1px #112f39, inset 0 3px 0 #8ca9a44a, 0 2px 1px #201910a8;
-  color: #ffe6a8;
-  text-shadow: 0 2px #192b30;
-}
-.workshop-menu-grid .command-heading {
+.game-shell .more-menu > .command-cap {
+  --rack-face: var(--rack-blue);
+  --rack-trim: 10px 14px 10px;
   display: flex;
   align-items: center;
-  grid-column: 1 / -1;
-  grid-row: 1;
-  padding-inline: 11px 43px;
+  width: 100%;
+  flex-shrink: 0;
+  gap: 0;
+  margin: 0 0 6px;
+  padding: 1px 6px;
 }
-.workshop-menu-grid .command-heading h2, .game-shell .command-titleplate h2 {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin: 0;
-  color: #fff0c9;
-  font-size: 17px;
+.command-heading { display: flex; align-items: center; gap: 5px; flex: 1; min-width: 0; }
+.game-shell .command-heading h2, .game-shell .command-titleplate h2 {
+  display: flex; align-items: center; gap: 6px;
+  margin: 0; color: var(--rack-cream); font-size: clamp(17px, 5vw, 21px); font-weight: 800; text-shadow: 0 2px #142b39;
 }
-.workshop-menu-grid .command-help, .game-shell .workshop-menu-grid > .command-return, .command-titleplate .close-control, .game-shell .news-x {
-  display: grid;
-  place-items: center;
-  width: 44px;
-  height: 44px;
-  min-height: 44px;
-  border: 0;
-  border-radius: 6px;
-  background: transparent;
-  color: #ffe6ab;
-  padding: 0;
+.command-anchor, .command-folio, .command-lantern, .command-shortcut-art, .game-shell .quick-guide .guide-art {
+  display: inline-block; flex-shrink: 0; background-position: center; background-size: contain; background-repeat: no-repeat;
 }
-.workshop-menu-grid .command-help { margin-inline-start: auto; }
-.game-shell .workshop-menu-grid > .command-return { grid-column: 3; grid-row: 1; justify-self: end; }
+.command-anchor { width: 33px; height: 34px; background-image: url('/assets/workshop/anchor.webp'); }
+.command-folio { width: 42px; height: 45px; background-image: url('/assets/workshop/command/folio.webp'); }
+.command-lantern { width: 36px; height: 45px; background-image: url('/assets/workshop/command/lantern.webp'); }
+.game-shell .command-cap :is(.command-help, .command-return), .game-shell .command-titleplate .close-control, .game-shell .news-x {
+  display: grid; place-items: center; position: static; flex: 0 0 auto;
+  width: 44px; height: 44px; min-height: 44px; margin: 0; padding: 0;
+  border: 0; border-radius: 7px; color: #ffdfa5; background: transparent; box-shadow: none;
+}
+.game-shell .command-cap .command-help { margin-inline-start: auto; }
+.game-shell .workshop-menu-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: clamp(3px, .8vh, 8px); }
 .game-shell .workshop-menu-grid > .command-plaque {
+  --rack-face: var(--rack-paper);
+  --rack-trim: 17px 20px 17px;
+  position: relative;
   display: grid;
-  grid-template-columns: 35px 1fr 74px;
+  grid-template-columns: clamp(37px, 12%, 48px) 1fr 31%;
   align-items: center;
-  grid-column: 1 / -1;
-  min-height: 63px;
-  padding: 2px 10px;
-  border: 2px solid #9a632c;
-  border-radius: 9px;
-  background: var(--command-paper);
-  box-shadow: inset 0 0 0 1px #ffe2a0, inset 0 -4px #be9257, 0 2px 2px #382116;
-  color: #423024;
+  width: 100%;
+  height: clamp(75px, min(25vw, 11.6dvh), 106px);
+  min-height: 0;
+  padding: 4px clamp(10px, 3.5%, 16px);
+  isolation: isolate;
+  color: var(--rack-ink);
   text-align: center;
+  background-color: transparent;
+  filter: drop-shadow(0 3px 1px #28160fbe);
 }
-.game-shell .workshop-menu-grid > .command-plaque::before {
-  content: "";
-  position: absolute;
-  inset: 4px;
+.game-shell .workshop-menu-grid > .command-plaque.defense { --rack-face: var(--rack-blue); color: var(--rack-cream); }
+.game-shell .command-plaque strong {
+  z-index: 1;
+  font-size: clamp(21px, 6.3vw, 24px);
+  font-weight: 800;
+  color: inherit;
+  white-space: nowrap;
+  line-height: 1.45;
+  text-shadow: 0 1px #fff3c8;
+}
+.game-shell .command-plaque.defense strong { text-shadow: 0 2px #182638, 1px 1px #312718; }
+.plaque-description { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.game-shell .command-plaque .plaque-chevron {
+  --rack-face: var(--rack-gold);
+  --rack-trim: 10px 8px 11px;
+  display: grid; place-items: center; justify-self: center;
+  width: clamp(31px, 9vw, 40px); height: clamp(39px, 11vw, 48px);
+  color: #a53f0f; filter: drop-shadow(0 1px 1px #523219);
+}
+.plaque-chevron svg { filter: drop-shadow(0 1px 0 #fff1ae); }
+.game-shell .command-plaque .more-icon {
+  display: block; align-self: center; justify-self: center;
+  width: 110%; height: 95%; max-width: 130px; margin: 0;
+  background-position: center; background-size: contain; background-repeat: no-repeat;
+  filter: drop-shadow(0 2px 1px #3c25166b);
   pointer-events: none;
-  background: radial-gradient(circle, #f2cf88 0 0.7px, #977141 1px 1.6px, transparent 2px) left top / 5px 5px no-repeat,
-              radial-gradient(circle, #f2cf88 0 0.7px, #977141 1px 1.6px, transparent 2px) right bottom / 5px 5px no-repeat;
 }
-.game-shell .workshop-menu-grid > .command-plaque.defense { background: var(--command-enamel); color: #ffe7ae; box-shadow: inset 0 0 0 1px #d7b279, inset 0 -4px #122f3b, 0 2px 2px #382116; }
-.command-plaque .plaque-text { display: grid; justify-items: center; padding-block: 5px; line-height: 1.25; }
-.game-shell .command-plaque strong { font-size: 20px; font-weight: 800; color: inherit; text-shadow: 0 1px #fff4d19c; }
-.game-shell .command-plaque.defense strong { text-shadow: 0 2px #12232f; }
-.game-shell .command-plaque small { font-size: 10px; font-weight: 600; margin-top: 4px; color: #715332; }
-.game-shell .command-plaque.defense small { color: #d9d1b2; }
-.plaque-chevron {
-  width: 27px;
-  height: 30px;
-  display: grid;
-  place-items: center;
-  justify-self: center;
-  background: var(--command-yellow);
-  color: #69411f;
-  border: 1px solid #a27033;
-  border-radius: 6px;
-  box-shadow: inset 0 1px #fff1ac, 0 2px #6d4a2b;
+.game-shell .command-plaque.defense .more-icon {
+  align-self: end; height: calc(100% + 12px); transform: scaleX(1.09); background-image: url('/assets/workshop/command/tower.webp'); background-position: center bottom;
 }
-.command-plaque .more-icon { width: 68px; height: 48px; margin: 0; justify-self: center; }
-.plaque-tower-art { width: 66px; height: 50px; background: url('/assets/models/towers/cannon-3.png') center 47% / contain no-repeat; filter: drop-shadow(0 2px 1px #142930); }
-.plaque-chart-art {
-  position: relative; display: grid; place-items: center; width: 46px; height: 39px;
-  transform: rotate(-7deg); color: #906d40; filter: drop-shadow(1px 2px 1px #805c36);
+.command-plaque.missions .more-icon { background-image: url('/assets/workshop/command/chart.webp'); transform: rotate(-3deg); }
+.command-plaque.settings .more-icon { background-image: url('/assets/workshop/command/gear.webp'); }
+.game-shell .command-fast-links, .game-shell .command-stations { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 3px; margin: 6px 0 0; }
+.game-shell .command-fast-links > button, .game-shell .command-stations > button {
+  --rack-face: var(--rack-blue);
+  --rack-trim: 8px 10px 9px;
+  display: flex; flex-direction: row; justify-content: center; align-items: center; gap: 3px;
+  min-height: 46px; min-width: 0; padding: 5px;
+  color: #fff2d4; text-shadow: 0 1.5px #122a38; font-size: clamp(11px, 3.2vw, 14px); font-weight: 700; white-space: nowrap;
 }
-.plaque-chart-art::before {
-  content: ""; position: absolute; inset: 4px 3px;
-  clip-path: polygon(0 12%, 34% 0, 66% 12%, 100% 0, 100% 87%, 66% 100%, 34% 88%, 0 100%);
-  background: radial-gradient(ellipse at 72% 31%, #c7643b 0 2px, transparent 3px),
-    linear-gradient(90deg, transparent 31%, #b78e5380 33%, transparent 36% 62%, #bf925890 66%, transparent 69%),
-    radial-gradient(ellipse at 15% 94%, #7fa5ac 35%, #a4b5a1 37% 40%, transparent 43%),
-    linear-gradient(132deg, #f6e1aa, #e0bf80);
+.game-shell .command-fast-links svg { margin: 0; flex-shrink: 0; color: #ffe3a8; }
+.command-shortcut-art { width: clamp(21px, 6.3vw, 30px); height: 28px; }
+.shortcut-cash { background-image: url('/assets/workshop/cash.webp'); }
+.shortcut-war { background-image: url('/assets/workshop/hud-glyphs/flag.webp'); }
+.shortcut-gift { background-image: url('/assets/workshop/hud-glyphs/gift.webp'); }
+.game-shell .command-other { --rack-face: var(--rack-wood); --rack-trim: 7px 10px 8px; margin-top: 4px; }
+.command-other summary {
+  display: flex; align-items: center; justify-content: center; gap: 7px;
+  min-height: 44px; font-size: 13px; font-weight: 700; list-style: none; cursor: pointer;
+  color: #ffe9bd; text-shadow: 0 2px #452416;
 }
-.plaque-chart-art svg { position: relative; width: 46px; height: 39px; stroke-width: 1.25; fill: none; }
-.command-plaque.settings .more-icon > svg {
-  width: 40px; height: 40px; transform: rotate(-8deg);
-  color: #42555a; fill: #94a1a1; stroke-width: 2; filter: drop-shadow(1px 2px 0 #463b2d);
+.command-other summary::-webkit-details-marker { display: none; }
+.command-other[open] summary > svg { transform: rotate(180deg); }
+.game-shell .command-stations { grid-template-columns: repeat(2, minmax(0, 1fr)); margin: 0 4px 5px; }
+.game-shell .command-stations > button { --rack-face: var(--rack-paper); color: var(--rack-ink); text-shadow: none; }
+.command-stations svg { flex-shrink: 0; color: #72502a; }
+.command-event-badge { color: #953625; font-size: 9px; }
+.game-shell :is(.command-titleplate, .news-head) {
+  --rack-face: var(--rack-blue);
+  --rack-trim: 12px 16px 13px;
+  display: flex; align-items: center; gap: 7px; min-height: 53px; width: 100%; margin: 0; padding: 3px 7px;
+  text-shadow: 0 2px #172735;
 }
-.game-shell .workshop-menu-grid > .command-station, .game-shell .command-utilities > button {
-  display: flex; align-items: center; justify-content: center; flex-direction: row; gap: 5px;
-  margin: 0; padding: 6px 4px; min-height: 44px;
-  border: 1px solid #ad8754; border-radius: 6px;
-  background: #243d40; color: #ffedc3; font-size: 11px;
-  box-shadow: inset 0 1px #5771716b, 0 1px #362717;
+.game-shell .command-titleplate .close-control, .game-shell .news-x { margin-inline-start: auto; }
+.game-shell .quick-guide ol, .game-shell .bulletin-paper, .game-shell .diary-item, .game-shell .diary-empty {
+  --rack-face: var(--rack-paper);
+  --rack-trim: 13px 16px 13px;
+  color: var(--rack-ink);
 }
-.command-station svg, .command-utilities svg { flex-shrink: 0; color: #e0b875; }
-.game-shell .command-utilities { gap: 5px; margin: 6px 0 0; }
-.game-shell .command-utilities > button { background: #4e3829; color: #f7e3ba; }
-.game-shell .command-utilities button > svg:last-child { margin: 0; color: #e0b875; }
-.command-event-badge { color: #ffe199; font-size: 9px; }
-.game-shell .command-titleplate, .game-shell .news-head { display: flex; align-items: center; gap: 8px; width: 100%; padding-inline: 11px 0; margin: 0; min-height: 44px; }
-.command-titleplate > button, .game-shell .news-x { margin-inline-start: auto; }
-.game-shell .quick-guide ol, .bulletin-paper, .game-shell .diary-item, .game-shell .diary-empty { background: var(--command-paper); border-radius: 7px; color: #443325; }
-.game-shell .quick-guide ol { margin: 7px 0; padding-inline: 12px; }
-.game-shell .quick-guide li { padding-block: 10px; border-color: #a6845360; }
-.game-shell .quick-guide li:last-child { border-bottom: 0; }
-.game-shell .quick-guide li > span { width: 32px; height: 34px; border-radius: 7px; border: 1px solid #98703f; background: var(--command-enamel); color: #ffe5a5; }
-.game-shell .quick-guide li strong { color: #4c3520; font-size: 13px; font-weight: 800; }
-.game-shell .quick-guide li p { color: #584537; font-size: 11px; }
-.game-shell .quick-guide .keyboard-hint { color: #f6ddb0; font-size: 10px; margin-top: 6px; }
+.game-shell .quick-guide ol { padding: 6px 16px; margin: 5px 0; }
+.game-shell .quick-guide li { padding: 8px 0; gap: 9px; border-color: #956c3455; }
+.game-shell .quick-guide li:last-child { border: 0; }
+.game-shell .quick-guide .guide-art { width: 47px; height: 48px; background-color: transparent; }
+.game-shell .quick-guide .guide-art.guide-tower { background-image: url('/assets/workshop/command/tower.webp'); }
+.game-shell .quick-guide .guide-art.guide-chart { background-image: url('/assets/workshop/command/chart.webp'); }
+.game-shell .quick-guide .guide-art.guide-ammo { background-image: url('/assets/workshop/ammo.webp'); }
+.game-shell .quick-guide li strong { color: #4a2b13; font-size: 15px; font-weight: 800; }
+.game-shell .quick-guide li p { color: #553b24; font-size: 12px; line-height: 1.7; }
+.game-shell .quick-guide .keyboard-hint { margin: 6px 0 0; color: #f8ddb3; font-size: 10px; }
 @media (pointer: coarse) { .game-shell .quick-guide .keyboard-hint { display: none; } }
-.game-shell .command-pause { display: grid; gap: 6px; padding: 9px; text-align: center; }
-.game-shell .pause-indicator.command-pause { z-index: 16; top: auto; bottom: 26%; min-width: 0; width: min(210px, 52%); backdrop-filter: none; }
-.game-shell .command-backdrop .exit-dialog { width: min(270px, 88%); margin-bottom: min(16dvh, 130px); }
-.game-shell .command-pause h2 { display: flex; align-items: center; justify-content: center; gap: 8px; min-height: 42px; margin: 0; font-size: 17px; }
-.game-shell .command-pause button, .game-shell .quick-guide .command-resume, .game-shell .news-actions > button {
-  pointer-events: auto; display: flex; align-items: center; justify-content: center; gap: 8px;
-  width: 100%; min-height: 44px; margin: 0; padding: 6px 10px;
-  border: 1px solid #b48a50; border-radius: 9px;
-  font-family: inherit; font-size: 13px; font-weight: 800;
-  box-shadow: inset 0 1px 0 #fff0ac9c, inset 0 -2px 0 #301f1155, 0 2px #32291c;
+.game-shell .command-backdrop .exit-dialog.command-pause, .game-shell .pause-indicator.command-pause {
+  --rack-face: var(--rack-blue);
+  --rack-trim: 22px 24px 22px;
+  display: grid;
+  gap: 4px;
+  width: min(87%, 359px);
+  min-width: 0;
+  padding: 10px 13px 12px;
+  color: var(--rack-cream);
+  text-align: center;
+  overflow: visible;
+  filter: drop-shadow(0 4px 2px #1f1c19b3);
+  backdrop-filter: none;
 }
-.game-shell .command-resume, .game-shell .quick-guide .command-resume { background: var(--command-green); color: #fff7d3; }
-.game-shell .command-save, .game-shell .news-actions > button:first-child { background: var(--command-yellow); color: #4d331b; }
-.game-shell .command-exit { background: var(--command-red); color: #fff0ce; }
-.game-shell .news-bulletin { width: min(420px, calc(100% - 24px)); bottom: max(12px, env(safe-area-inset-bottom, 0px)); max-height: calc(100% - 84px - env(safe-area-inset-top, 0px)); padding: 9px; }
-.game-shell .news-live { color: #ffe6ad; font-size: 12px; }
-.game-shell .news-op { color: #f6e7ca; font-size: 10px; opacity: 1; }
-.bulletin-paper { margin-top: 6px; padding: 10px 13px; }
-.bulletin-paper > small, .game-shell .diary-item small { font-size: 10px; font-weight: 700; color: #805b30; }
-.bulletin-paper h2 { font-size: 16px; font-weight: 800; margin: 2px 0; }
-.bulletin-paper p, .game-shell .diary-item p { font-size: 12px; line-height: 1.85; color: #504033; }
-.bulletin-paper .news-brief { border-top-color: #a5885b7d; margin-top: 5px; }
+.game-shell .pause-indicator.command-pause { z-index: 16; top: auto; bottom: calc(var(--wk-dock-bottom, 70px) + 13px); }
+.game-shell .command-backdrop .exit-dialog.command-pause { margin-bottom: min(7dvh, 54px); }
+.game-shell .command-pause h2 {
+  --rack-face: var(--rack-paper);
+  --rack-trim: 13px 15px 14px;
+  position: relative; display: grid; align-content: end; justify-items: center;
+  margin: 0 13% 2px; padding: 17px 8px 8px; min-height: 56px;
+  color: #3b2817; text-shadow: 0 1px #ffebba; font-size: clamp(19px, 5.8vw, 24px); font-weight: 800;
+}
+.command-pause h2 > svg { display: none; }
+.command-pause h2::before {
+  content: ''; position: absolute; top: -56px; left: 50%; transform: translateX(-50%);
+  width: 79px; height: 79px; background: url('/assets/workshop/command/helm.webp') center / contain no-repeat;
+  filter: drop-shadow(0 3px 1px #432c26b0); pointer-events: none;
+}
+.game-shell .command-pause button, .game-shell .quick-guide .command-resume, .game-shell .news-actions > button {
+  --rack-face: var(--rack-green);
+  --rack-trim: 14px 21px 15px;
+  pointer-events: auto;
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  width: 100%; min-height: clamp(49px, 7.3vh, 62px); margin: 0; padding: 8px 15px;
+  color: #fff4d4; text-shadow: 0 2px #233327;
+  font-size: clamp(17px, 5.3vw, 22px); font-weight: 800;
+  filter: drop-shadow(0 2px 1px #38291cb3);
+}
+.game-shell .command-pause button { flex-direction: row-reverse; justify-content: space-evenly; }
+.command-pause button > svg { width: 25px; height: 25px; stroke-width: 2.6; }
+.game-shell .command-pause .command-save, .game-shell .news-actions > button:first-child { --rack-face: var(--rack-gold); color: #3c2817; text-shadow: 0 1px #ffe4a2; }
+.game-shell .command-pause .command-exit { --rack-face: var(--rack-red); text-shadow: 0 2px #68281b; }
+.game-shell .news-bulletin { bottom: max(7px, env(safe-area-inset-bottom, 0px)); max-height: calc(100% - var(--wk-header-bottom, 60px) - 10px); width: min(430px, calc(100% - 12px)); }
+.game-shell .news-live { display: flex; align-items: center; gap: 7px; flex-shrink: 0; color: var(--rack-cream); font-size: clamp(14px, 3.7vw, 18px); font-weight: 800; }
+.game-shell .news-op { color: #ffedc6; font-size: 10px; line-height: 1.5; opacity: 1; }
+.game-shell .bulletin-paper { margin-top: 4px; padding: 13px 16px; }
+.bulletin-paper > small, .game-shell .diary-item small { font-size: 11px; font-weight: 700; color: #80562a; }
+.bulletin-paper h2 { font-size: 18px; font-weight: 800; margin: 2px 0; line-height: 1.55; }
+.bulletin-paper p, .game-shell .diary-item p { font-size: 12px; line-height: 1.85; color: #4a3523; }
+.bulletin-paper .news-brief { border-color: #a5885b7d; margin-top: 5px; }
 .game-shell .news-chips { gap: 4px; }
-.game-shell .news-chips span { border: 1px solid #957b514a; border-radius: 4px; background: #fff0cd8a; color: #614328; }
+.game-shell .news-chips span { border: 1px solid #957b5166; border-radius: 4px; background: #fff0cd8a; color: #614328; }
 .game-shell .news-chips .news-warning { border-inline-start: 3px solid #9a5426; }
-.game-shell .news-actions { margin-top: 6px; gap: 6px; }
-.game-shell .news-actions .news-diary-btn { background: var(--command-enamel); color: #ffebc1; }
-.game-shell .diary-overlay { align-items: end; background: linear-gradient(0deg, #101b2473, #102a3326); padding: 12px; }
-.game-shell .diary-card { width: min(420px, 100%); max-height: calc(100% - 62px - env(safe-area-inset-top, 0px)); padding: 9px; margin-bottom: env(safe-area-inset-bottom, 0px); }
-.game-shell .diary-list { gap: 6px; padding-top: 6px; overscroll-behavior: contain; }
-.game-shell .diary-item { border: 0; border-inline-start: 4px solid #c49b52; }
-.game-shell .diary-item.victory { border-inline-start-color: #6a883d; }
-.game-shell .diary-item.defeat { border-inline-start-color: #a75242; }
-.game-shell .diary-empty { margin: 0; }
+.game-shell .news-actions { margin-top: 4px; gap: 4px; }
+.game-shell .news-actions > button { --rack-trim: 11px 14px 12px; min-height: 48px; padding-inline: 9px; font-size: 14px; }
+.game-shell .news-actions .news-diary-btn { --rack-face: var(--rack-blue); }
+.game-shell .diary-overlay { align-items: end; background: linear-gradient(0deg, #101b245f, #102a330f); padding: 7px; }
+.game-shell .diary-card { width: min(430px, 100%); max-height: calc(100% - var(--wk-header-bottom, 60px) - 8px); margin-bottom: env(safe-area-inset-bottom, 0px); }
+.game-shell .diary-list { gap: 4px; padding-top: 4px; overscroll-behavior: contain; }
+.game-shell .diary-item { padding: 11px 16px; }
+.game-shell .diary-item strong { font-size: 15px; color: #48301e; }
+.game-shell .diary-item.victory small { color: #396736; }
+.game-shell .diary-item.defeat small { color: #973729; }
+.game-shell .diary-empty { margin: 0; padding: 17px; }
 @media (hover: hover) {
   .game-shell .command-backdrop button:hover, .game-shell .command-pause button:hover, .game-shell .news-actions button:hover { filter: brightness(1.08); }
 }
-@media (max-height: 540px) {
-  .game-shell .pause-indicator.command-pause { bottom: 23%; width: min(230px, 70%); grid-template-columns: repeat(2, 1fr); }
-  .game-shell .pause-indicator.command-pause h2, .game-shell .pause-indicator .command-exit { grid-column: 1 / -1; }
-  .game-shell .command-backdrop .exit-dialog { margin-bottom: 0; }
-}
-
+.game-shell :is(.command-plaque, .command-fast-links button, .command-pause button):active { transform: translateY(2px); }
 @media (orientation: landscape) and (max-height: 540px) {
+  .game-shell .command-backdrop .more-menu { width: min(100%, 520px); padding: 7px 10px; }
+  .game-shell .workshop-menu-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 3px; }
+  .game-shell .workshop-menu-grid > .command-plaque { grid-column: auto; grid-template-columns: 1fr; grid-template-rows: minmax(0,1fr) auto; justify-items: center; gap: 0; height: clamp(81px, 25.5dvh, 110px); padding: 7px; }
+  .game-shell .command-plaque strong { font-size: 18px; grid-row: 2; }
+  .game-shell .command-plaque .more-icon { grid-row: 1; width: 72%; }
+  .game-shell .command-plaque .plaque-chevron { display: none; }
+  .game-shell .command-backdrop .exit-dialog.command-pause, .workshop.in-battle .pause-indicator.command-pause {
+    width: min(78%, 340px); max-height: calc(100% - var(--wk-header-bottom, 60px) - 115px); overflow-y: auto; overscroll-behavior: contain;
+    grid-template-columns: 1fr 1fr; margin-bottom: 0; padding: 7px 10px; gap: 3px;
+  }
+  .workshop.in-battle .pause-indicator.command-pause { z-index: 32; bottom: calc(env(safe-area-inset-bottom, 0px) + 60px); }
+  .game-shell .command-pause h2 { display: flex; align-items: center; justify-content: center; gap: 4px; grid-column: 1 / -1; margin: 0 12% 1px; min-height: 41px; padding: 3px 8px; font-size: 17px; }
+  .command-pause h2::before { position: static; transform: none; width: 40px; height: 40px; }
+  .game-shell .command-pause button { min-height: 44px; padding: 4px 8px; font-size: 15px; }
+  .game-shell .command-pause .command-exit { grid-column: 1 / -1; }
   .workshop.in-battle :is(.quick-build-button, .view-controls) { bottom: var(--wk-dock-bottom); }
   .workshop.in-battle .game-map:has(.pause-indicator) > .command-bar { visibility: hidden; }
-  .workshop.in-battle .pause-indicator.command-pause {
-    z-index: 32; bottom: calc(env(safe-area-inset-bottom, 0px) + 71px);
-    max-height: calc(100% - var(--wk-header-bottom) - 125px);
-    overflow-y: auto; overscroll-behavior: contain;
-  }
 }

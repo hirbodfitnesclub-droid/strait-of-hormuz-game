@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowLeft, ArrowUp, Check, Settings, Sparkles, X, Zap } from "lucide-react";
+import { ArrowLeft, Check, ChevronDown, Sparkles, X, Zap } from "lucide-react";
 import Image from "next/image";
 import { BUILDINGS, buildingUpgradeQuote, getStats, type Action, type BuildingId, type GameState } from "@/lib/game";
 import { MANAGERS, type ManagerId, type UpgradeQuantity } from "@/lib/progression";
@@ -28,7 +28,24 @@ const BUILDING_EFFECTS: Record<BuildingId,string> = {
   welfare: "هر سطح +۴ پایداری می‌دهد (تا سقف +۲۰)؛ پایداری بالاتر یعنی ضریب تولید بیشتر برای همهٔ ساختمان‌ها.",
   optical: "هر سطح +۳٪ به برد همهٔ برجک‌ها اضافه می‌کند و از همان سطح ۱، کشتی‌های قاچاق را روی نقشه آشکار می‌کند.",
 };
-function outputFor(game:GameState,id:BuildingId){const stats=getStats(game);return id==="tank"?stats.oilCapacity:id==="power"?stats.powerProduced:id==="water"?stats.waterProduced:id==="city"?game.buildings.city*50:stats.output(id);}
+const outputArt: Partial<Record<BuildingId, string>> = {
+  oil: "/assets/workshop/oil.webp", tank: "/assets/workshop/oil.webp", dock: "/assets/workshop/oil.webp",
+  refinery: "/assets/workshop/fuel.webp", steel: "/assets/workshop/steel.webp", arms: "/assets/workshop/ammo.webp",
+  optical: "/assets/workshop/instruments/radar.webp",
+};
+function outputFor(game: GameState, id: BuildingId) {
+  const stats = getStats(game);
+  switch (id) {
+    case "tank": return stats.oilCapacity;
+    case "dock": return stats.output("dock") * (game.research.includes("dockauto") ? 1.25 : 1) * (game.research.includes("pipe") ? 1.5 : 1);
+    case "power": return stats.powerProduced;
+    case "water": return stats.waterProduced;
+    case "city": return game.buildings.city * 50;
+    case "welfare": return Math.min(20, game.buildings.welfare * 4);
+    case "optical": return game.buildings.optical * 3;
+    default: return stats.output(id);
+  }
+}
 export default function BuildingSheet({id,game,dispatch,close,notify,feedback,onEconomy,onManagers}:Props){
   const ref=useDialog<HTMLElement>(close),[quantity,setQuantity]=useState<UpgradeQuantity>(1);
   const definition=BUILDINGS[id],level=game.buildings[id],stats=getStats(game),tier=buildingTier(level),quote=buildingUpgradeQuote(game,id,quantity);
@@ -37,21 +54,50 @@ export default function BuildingSheet({id,game,dispatch,close,notify,feedback,on
   const manager:ManagerId|null=id==="oil"||id==="refinery"?"energy":id==="dock"?"harbor":id==="arms"?"supply":null;
   const managerLevel=manager?game.idle.managerLevels[manager]:0;
   const milestoneCrossed=[10,25,50,100].some(m=>level<m&&quote.nextLevel>=m);
-  return <div className="tower-sheet-backdrop workshop-sheet-backdrop" onClick={close}><section className="building-sheet idle-building-sheet workshop-sheet" ref={ref} role="dialog" aria-modal="true" aria-labelledby="building-sheet-title" tabIndex={-1} onClick={e=>e.stopPropagation()}>
-    <header className="tower-sheet-header workshop-sheet-header">
-      <div className="workshop-heading"><Settings size={23} aria-hidden="true"/><h2 id="building-sheet-title">ارتقای زیرساخت</h2></div>
-      <button className="close-control" onClick={close} aria-label="بستن پنجره ساختمان"><X size={19}/></button>
-    </header>
-    <div className="workshop-building-body">
-    <div className="building-showcase"><div className="workshop-building-intro"><span>{tiers[tier-1]}</span><h3>{definition.name}</h3><span className="showcase-level">سطح {fa(level)}{quote.levels>0&&<> <ArrowLeft size={13} aria-hidden="true"/> {fa(quote.nextLevel)}</>}</span></div><BuildingModel id={id} level={level}/>{game.idle.boostRemaining>0&&<span className="showcase-boost"><Zap size={12}/> تولید ×۲</span>}</div>
-    <div className="building-sheet-copy"><p>{definition.description}</p><div className="upgrade-comparison"><div><span>{id==="tank"?"ظرفیت فعلی":"تولید فعلی"}</span><strong>{compact(output)}<small>{definition.unit}</small></strong></div><ArrowLeft size={19}/><div><span>بعد از ارتقا {gain>0&&<b>+{fa(gain)}٪</b>}</span><strong className="green-text">{compact(next)}<small>{definition.unit}</small></strong></div></div>
-      <div className="building-effect"><span className="building-effect-label"><Sparkles size={12}/>اثر روی بندر</span><p>{BUILDING_EFFECTS[id]}</p></div>
-      <div className="evolution-heading"><span>تکامل بعدی</span><strong>{level>=100?"بالاترین سطح":`سطح ${fa(nextMilestone)}`}</strong></div><div className="evolution-meter"><i style={{width:`${level>=100?100:Math.max(4,level/nextMilestone*100)}%`}}/></div><div className="evolution-reward-note"><GiftIcon/><span>{milestoneCrossed?"این ارتقا ظاهر تازه و یک صندوقچه باز می‌کند!":`در سطح ${fa(nextMilestone)}: مدل تکامل‌یافته + صندوقچه`}</span></div>
-      {manager&&<button className={`building-manager-row ${managerLevel>0?"active":""}`} onClick={onManagers}><Image src={MANAGERS[manager].image} width={33} height={39} alt="" unoptimized/><span><strong>{managerLevel>0?MANAGERS[manager].name:"یک متخصص استخدام کنید"}</strong><small>{managerLevel>0?`${MANAGERS[manager].role} · سطح ${fa(managerLevel)}`:MANAGERS[manager].effect}</small></span>{managerLevel>0?<Check size={16}/>:<ArrowLeft size={16}/>}</button>}
-      {stats.grid<.9&&<div className="upgrade-grid-warning"><Zap size={14}/> راندمان برق {fa(stats.grid*100)}٪ است؛ نیروگاه را تقویت کنید.</div>}
-    </div>
-    </div>
-    <footer className="building-sheet-footer"><div className="bulk-upgrade-selector" aria-label="تعداد ارتقا">{([1,10,"max"] as UpgradeQuantity[]).map(value=><button key={value} className={quantity===value?"selected":""} onClick={()=>setQuantity(value)} aria-pressed={quantity===value}>{value==="max"?"حداکثر":`×${fa(value)}`}</button>)}</div><button className="primary-action" disabled={level>=100||!quote.affordable} onClick={()=>{dispatch({type:"upgrade-building",id,quantity});feedback();notify(`${definition.short} به سطح ${fa(quote.nextLevel)} رسید.`);}}><ArrowUp size={17}/><span>{level>=100?"بالاترین سطح":quote.levels?`ارتقا به سطح ${fa(quote.nextLevel)}`:"منابع کافی نیست"}</span><span className="building-upgrade-cost"><i className="workshop-icon wk-cash" aria-hidden="true"/>{compact(quote.cost)} دلار</span></button>{!quote.affordable&&level<100&&<small>درآمد بندر را جمع کنید یا تعداد ارتقا را کاهش دهید.</small>}<button className="building-economy-link" onClick={onEconomy}>مدیریت همهٔ سازه‌ها <ArrowLeft size={14}/></button></footer>
-  </section></div>;
+  const minimumOnly = quantity === "max" && quote.levels === 0 && level < 100;
+  const price = minimumOnly ? buildingUpgradeQuote(game, id, 1).cost : quote.cost;
+  const unit = id === "optical" ? "٪ برد" : definition.unit;
+  const meterLabel = id === "tank" ? "ظرفیت ذخیره" : id === "dock" ? "سرعت بارگیری" : id === "city" ? "جمعیت" : id === "welfare" ? "سهم پایداری" : id === "optical" ? "افزایش برد" : "توان تولید";
+  return <div className="tower-sheet-backdrop workshop-sheet-backdrop" onClick={close}>
+    <section className="building-sheet idle-building-sheet workshop-sheet" ref={ref} role="dialog" aria-modal="true" aria-labelledby="building-sheet-title" tabIndex={-1} onClick={e=>e.stopPropagation()}>
+      <header className="tower-sheet-header workshop-sheet-header">
+        <div className="workshop-heading"><Image src="/assets/workshop/instruments/gear.webp" width={38} height={38} alt="" unoptimized/><h2 id="building-sheet-title">ارتقای زیرساخت</h2></div>
+        <button className="close-control" onClick={close} aria-label="بستن پنجره ساختمان"><X size={19}/></button>
+      </header>
+      <div className="workshop-building-body">
+        <div className="building-showcase">
+          <BuildingModel id={id} level={level}/>
+          <div className="workshop-building-intro"><small>{tiers[tier-1]}</small><h3>{definition.name}</h3><span className="showcase-level">سطح {fa(level)}{quote.levels>0 && <><ArrowLeft size={14} aria-hidden="true"/> {fa(quote.nextLevel)}</>}</span></div>
+          {game.idle.boostRemaining>0 && <span className="showcase-boost"><Zap size={12}/> تولید ×۲</span>}
+        </div>
+        <div className="building-sheet-copy">
+          <div className="upgrade-comparison">
+            <Image src={outputArt[id] ?? `/assets/buildings/${id}.png`} alt="" width={48} height={48} unoptimized />
+            <div><span>{meterLabel}</span><p><strong>{compact(output)}</strong>{quote.levels > 0 && <><ArrowLeft size={19}/><strong className="green-text">{compact(next)}</strong></>} <small>{unit}</small></p></div>
+            {gain>0 && <b className="gain-ticket">+{fa(gain)}٪</b>}
+          </div>
+          <details className="building-blueprint">
+            <summary>اثر ساختمان و تکامل <ChevronDown size={17} /></summary>
+            <p>{definition.description}</p><p>{BUILDING_EFFECTS[id]}</p>
+            <div className="evolution-heading"><span>تکامل بعدی</span><strong>{level>=100?"بالاترین سطح":`سطح ${fa(nextMilestone)}`}</strong></div>
+            <div className="evolution-meter"><i style={{width:`${level>=100?100:Math.max(4,level/nextMilestone*100)}%`}}/></div>
+            {level < 100 && <div className="evolution-reward-note"><Sparkles size={15}/>{milestoneCrossed?"این ارتقا ظاهر تازه و یک صندوقچه باز می‌کند!":`در سطح ${fa(nextMilestone)} مدل تکامل‌یافته و صندوقچه باز می‌شوند.`}</div>}
+            {manager && <button className={`building-manager-row ${managerLevel>0?"active":""}`} onClick={onManagers}><Image src={MANAGERS[manager].image} width={33} height={39} alt="" unoptimized/><span><strong>{managerLevel>0?MANAGERS[manager].name:"یک متخصص استخدام کنید"}</strong><small>{managerLevel>0?`${MANAGERS[manager].role} · سطح ${fa(managerLevel)}`:MANAGERS[manager].effect}</small></span>{managerLevel>0?<Check size={16}/>:<ArrowLeft size={16}/>}</button>}
+            <button className="building-economy-link" onClick={onEconomy}>مدیریت همهٔ سازه‌ها <ArrowLeft size={14}/></button>
+          </details>
+          {stats.grid<.9 && <div className="upgrade-grid-warning"><Zap size={15}/> راندمان برق {fa(stats.grid*100)}٪ است.</div>}
+        </div>
+      </div>
+      <footer className="building-sheet-footer">
+        {level < 100 && <>
+          <div className="building-order-quantity"><span>تعداد ارتقا</span><div className="bulk-upgrade-selector" aria-label="تعداد ارتقا">{([1,10,"max"] as UpgradeQuantity[]).map(value=><button key={value} className={quantity===value?"selected":""} onClick={()=>setQuantity(value)} aria-pressed={quantity===value}>{value==="max"?"حداکثر":`×${fa(value)}`}</button>)}</div></div>
+          <div className="build-cost"><b>{minimumOnly ? "هزینهٔ یک سطح" : "هزینهٔ ارتقا"}</b><span className={!quote.affordable ? "missing-cost" : ""}><i className="workshop-icon wk-cash" aria-hidden="true"/> {compact(price)} دلار</span></div>
+        </>}
+        <button className="primary-action" disabled={level>=100||!quote.affordable} onClick={()=>{dispatch({type:"upgrade-building",id,quantity});feedback();notify(`${definition.short} به سطح ${fa(quote.nextLevel)} رسید.`);}}>
+          <Image src="/assets/workshop/instruments/upgrade.webp" width={31} height={31} alt="" unoptimized/><span>{level>=100?"بالاترین سطح":quote.levels?`ارتقا به سطح ${fa(quote.nextLevel)}`:"منابع کافی نیست"}</span>
+        </button>
+        {!quote.affordable && level<100 && <small>درآمد بندر را جمع کنید یا تعداد ارتقا را کاهش دهید.</small>}
+      </footer>
+    </section>
+  </div>;
 }
-function GiftIcon(){return <Sparkles size={13}/>;}

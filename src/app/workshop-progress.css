@@ -1,531 +1,467 @@
-/* The mission clipboard, calendar and receipts share printed tickets and enamel labels. */
+/* Printed harbor logs use photographed materials with live text, amounts and controls. */
 .progression-drawer,
 .workshop-receipt {
-  --ticket-ink: #362615;
-  --ticket-detail: #67472c;
-  --ticket-border: #a07442;
-  --ticket-paper: radial-gradient(ellipse at 22% 0%, #fff4d4b0, transparent 64%), linear-gradient(165deg, #f4dfaf, #f6dba6 55%, #dfbc87);
-  --ticket-edge: inset 0 1px 0 #fff0c9, inset 0 -2px 0 #bc955d, 0 2px 0 #4b2d1d;
-  --ticket-enamel: linear-gradient(115deg, #1d5060 0%, #173c4b 37%, #102c3a 80%, #234652);
-  --ticket-wood: repeating-linear-gradient(2deg, transparent 0 7px, #39170c19 8px, transparent 10px 17px), linear-gradient(100deg, #79442f, #a05b3e 24%, #874931 67%, #653523);
-  --ticket-brass: linear-gradient(#ffdf67, #ffbf28 54%, #ed9c0d);
-  --ticket-gold-edge: inset 0 1px 1px #fff2aa, inset 0 -3px 0 #c38114, 0 2px 0 #683a16;
+  --log-ink: #302011;
+  --log-text: #60401f;
+  --log-light: #ffedbc;
+  --log-cut: 40 44 44 fill;
+  --log-edge: 10px 12px 11px;
+  color: var(--log-ink);
 }
-
-.workshop-progress-overlay .progression-drawer {
-  background: var(--ticket-wood);
-  border: 2px solid #573521;
-  border-radius: 19px 19px 12px 12px;
-  box-shadow: inset 0 0 0 2px #d59961, inset 0 0 0 5px #713b27, 0 6px 18px #1e110b66;
-  color: var(--ticket-ink);
+.workshop-progress-overlay,
+.workshop .reward-backdrop {
+  backdrop-filter: none;
+  background: linear-gradient(to top, #25160836, transparent 69%);
+}
+.workshop .drawer-overlay .progression-drawer,
+.workshop .reward-backdrop .workshop-receipt {
+  isolation: isolate;
+  border: 1px solid transparent;
+  border-radius: 0;
+  background: none;
+  border-image: var(--skin-wood, url('/assets/workshop/skin/wood-board.webp')) var(--log-cut) / 22px 20px 23px / 0 stretch;
+  box-shadow: none;
+  filter: drop-shadow(0 5px 3px #28160e88);
+  padding: 7px 9px 10px;
+  width: min(100%, 456px);
+  height: auto;
+  max-height: min(72dvh, 100%);
+  min-height: 0;
+  overflow: hidden;
+  color: var(--log-ink);
+}
+.workshop .reward-backdrop {
+  align-items: flex-end;
+  justify-content: center;
+  padding: var(--wk-header-bottom,60px) 8px max(8px,env(safe-area-inset-bottom,0px));
+}
+.workshop .reward-backdrop .workshop-receipt {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  max-height: 100%;
+  padding: 9px 16px 14px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: #a77c4b #68412d;
+}
+.workshop-receipt > * { flex: none; }
+.workshop .progression-drawer .drawer-body {
+  flex: 0 1 auto;
+  min-height: 0;
+  padding: 3px 6px 9px;
+  overscroll-behavior: contain;
+  scrollbar-color: #ba8c58 #66422b;
 }
 
 .progression-drawer .drawer-header,
 .workshop-receipt .receipt-header {
   position: relative;
   width: 100%;
-  flex: none;
+  flex: 0 0 auto;
   display: flex;
   justify-content: center;
   align-items: center;
-  min-height: 55px;
-  padding: 9px 40px 5px;
+  min-height: 60px;
+  padding: 2px 27px 5px;
   border: 0;
-  background: transparent;
+  background: none;
 }
-
 .progression-drawer .drawer-header h2,
 .workshop-receipt .receipt-plaque,
 .workshop-receipt .receipt-subplaque {
-  position: relative;
+  min-width: 86%;
+  max-width: 100%;
+  min-height: 51px;
+  margin: 0;
+  padding: 4px 19px 5px;
   display: inline-flex;
   justify-content: center;
   align-items: center;
-  min-width: 55%;
-  max-width: 100%;
-  min-height: 41px;
-  gap: 9px;
-  margin: 0;
-  padding: 4px 18px 5px;
-  border: 2px solid #e1ae49;
-  outline: 1px solid #613810;
-  border-radius: 10px;
-  background: var(--ticket-enamel);
-  color: #fff1d4;
-  font-size: clamp(18px, 4.6vw, 24px);
-  line-height: 1.55;
-  font-weight: 800;
+  flex-direction: row-reverse;
+  gap: 8px;
+  border: 1px solid transparent;
+  border-image: var(--skin-blue, url('/assets/workshop/skin/blue-plaque.webp')) var(--log-cut) / 14px 18px 15px / 0 stretch;
+  border-radius: 0;
+  color: #fff2ca;
   text-align: center;
-  text-shadow: 0 2px 1px #13222a;
-  box-shadow: inset 0 0 0 1px #514632, inset 0 2px 2px #7d9fa580, 0 3px 1px #512e1b;
+  text-shadow: 0 2px 1px #1c1c1c, 0 0 3px #1a2630;
+  font-size: clamp(22px, 6.1vw, 29px);
+  font-weight: 800;
+  line-height: 1.38;
+  filter: drop-shadow(0 2px 1px #462c1b);
 }
-
-.progression-drawer .drawer-header h2::before,
-.progression-drawer .drawer-header h2::after,
-.workshop-receipt .receipt-plaque::before,
-.workshop-receipt .receipt-plaque::after {
-  content: "";
-  position: absolute;
-  width: 4px;
-  height: 4px;
-  top: calc(50% - 2px);
-  border-radius: 50%;
-  background: radial-gradient(circle at 35% 28%, #fff5bc, #d59a37 44%, #67401c 90%);
-  box-shadow: 0 1px 1px #041e2b;
+.progress-heading-icon,
+.receipt-heading-art {
+  flex: none;
+  object-fit: contain;
+  width: clamp(35px,9vw,45px);
+  height: 37px;
+  filter: drop-shadow(0 2px 1px #16222c);
 }
-.progression-drawer .drawer-header h2::before,
-.workshop-receipt .receipt-plaque::before { left: 6px; }
-.progression-drawer .drawer-header h2::after,
-.workshop-receipt .receipt-plaque::after { right: 6px; }
-.progression-drawer .drawer-header h2 svg,
-.workshop-receipt .receipt-plaque svg { color: #ffca52; stroke-width: 2.4; filter: drop-shadow(0 1px 0 #643c13); }
-
 .progression-drawer .drawer-header .icon-close,
 .workshop-receipt .reward-close {
   position: absolute;
-  top: 50%;
-  inset-inline-end: 1px;
-  transform: translateY(-50%);
-  width: 35px;
-  height: 35px;
+  inset: 50% auto auto 0;
+  translate: 0 -50%;
+  width: 42px;
+  height: 44px;
+  min-width: 0;
+  border: 1px solid transparent;
+  border-radius: 0;
+  border-image: var(--skin-red, url('/assets/workshop/skin/red-button.webp')) var(--log-cut) / 9px / 0 stretch;
+  background: none;
+  color: #fbe4aa;
   display: grid;
   place-items: center;
-  border: 1px solid #e1b16c;
-  border-radius: 9px;
-  background: linear-gradient(#784936, #562f21);
-  box-shadow: inset 0 1px #a97753, 0 2px 0 #4b2818;
-  color: #ffe6b6;
+  z-index: 2;
 }
-.progression-drawer .drawer-header .icon-close { inset-inline-end: 9px; }
-.workshop-progress-overlay .drawer-body { padding: 12px 13px 18px; }
+.progression-drawer .drawer-header .icon-close { inset-inline-end: 0; }
+.progression-drawer.panel-missions .drawer-header { padding-top: 27px; }
+.progression-drawer .journal-clamp {
+  position: absolute;
+  left: 50%;
+  top: -8px;
+  width: 84px;
+  height: 44px;
+  transform: translateX(-50%);
+  object-fit: fill;
+}
+.progression-drawer .drawer-header h2 { position: relative; }
 
-.workshop-ticket,
-.progression-drawer .daily-calendar,
-.workshop-receipt .receipt-message,
-.workshop-receipt .workshop-prize,
-.workshop-receipt .result-stats > span,
-.workshop-receipt .defeat-tip {
-  border: 1px solid var(--ticket-border);
-  border-radius: 8px;
-  background: var(--ticket-paper);
-  box-shadow: var(--ticket-edge);
-  color: var(--ticket-ink);
-}
-.progression-drawer .manager-card,
-.progression-drawer .journey-mission,
-.progression-drawer .trade-contract,
-.progression-drawer .active-contract {
-  background: var(--ticket-paper);
-  border-color: var(--ticket-border);
-  border-radius: 8px;
-  box-shadow: var(--ticket-edge);
-}
-.progression-drawer :is(.drawer-body button, select, summary):focus-visible,
-.workshop-receipt :is(button, input):focus-visible { outline: 3px solid #2088ac; outline-offset: 2px; }
-
-.chapter-selector {
-  position: relative;
-  min-height: 38px;
-  margin-bottom: 9px;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  border-radius: 6px;
-  background: #412b20a8;
-  color: #ffe0a0;
-  padding-inline: 11px;
-}
-.chapter-selector select {
-  appearance: none;
-  cursor: pointer;
-  width: 100%;
-  min-height: 38px;
-  padding-inline: 1px 21px;
-  color: #ffe8bb;
-  font: inherit;
-  font-size: 12px;
-  font-weight: 700;
-  background: transparent;
-  border: none;
-}
-.chapter-selector option { color: #382c1e; background: #f3dcad; }
-.chapter-selector > svg:last-child { pointer-events: none; position: absolute; inset-inline-end: 13px; }
-.progression-drawer .journey-missions,
-.progression-drawer .manager-list,
-.progression-drawer .contract-catalog { gap: 8px; }
-.progression-drawer .journey-mission {
-  display: grid;
-  grid-template-columns: 40px minmax(0,1fr) 35px;
-  gap: 10px;
-  align-items: center;
-  padding: 9px 11px;
-  opacity: 1;
-}
-.progression-drawer .journey-mission.locked:not(.done) { opacity: 1; }
-.progression-drawer .journey-mission.current { border-color: #f5c75b; box-shadow: inset 0 0 0 2px #fff0bd, var(--ticket-edge); }
-.progression-drawer .mission-node {
-  width: 40px;
-  height: 43px;
-  border: 0;
+.progression-drawer :is(.workshop-ticket, .daily-calendar),
+.workshop-receipt :is(.receipt-message,.workshop-prize,.defeat-tip),
+.workshop-receipt .result-stats > span {
+  border: 1px solid transparent;
+  border-image: var(--skin-paper, url('/assets/workshop/skin/paper-plaque.webp')) var(--log-cut) / var(--log-edge) / 0 stretch;
+  border-radius: 0;
   background: none;
-  color: #b67c19;
-  filter: drop-shadow(0 2px 0 #fff0c6);
+  color: var(--log-ink);
   box-shadow: none;
 }
-.mission-node img { width: 100%; height: 100%; object-fit: contain; filter: drop-shadow(0 2px 1px #5c3d2455); }
-.mission-node svg { stroke-width: 2.1; }
-.mission-art-collect svg { fill: #ffc63d; stroke: #a76c10; }
-.progression-drawer .mission-detail > strong { color: #312413; font-size: 13px; font-weight: 800; }
-.progression-drawer .mission-detail p { color: var(--ticket-detail); margin: 2px 0 4px; line-height: 1.55; font-size: 11px; }
+.progression-drawer :is(button,select,summary):focus-visible,
+.workshop-receipt :is(button,input):focus-visible { outline: 3px solid #107ca8; outline-offset: -3px; }
+.progression-drawer :is(.journey-missions,.manager-list,.contract-catalog) { display: grid; gap: 6px; }
+.progression-drawer .chapter-selector {
+  display: flex; position: relative; align-items: center; gap: 8px;
+  min-height: 35px; padding: 1px 11px; margin: 0 2px 7px;
+  color: #ffe2a4; text-shadow: 0 1px #3f2413;
+}
+.chapter-selector select {
+  flex: 1; min-width: 0; padding: 4px 0 4px 12px;
+  appearance: none; border: 0; background: transparent;
+  color: #ffe6b7; font: inherit; font-size: 13px; font-weight: 700; cursor: pointer;
+}
+.chapter-selector option { background: #f2d9aa; color: #362613; }
+.chapter-selector > svg:last-child { pointer-events: none; }
+.progression-drawer .journey-mission {
+  display: grid; grid-template-columns: 44px minmax(0,1fr) clamp(45px,15vw,68px);
+  grid-template-areas: "stamp summary illustration";
+  align-items: center; gap: 7px; min-height: 77px; padding: 9px 11px;
+}
+.progression-drawer .journey-mission.locked:not(.done) { opacity: 1; }
+.progression-drawer .journey-mission .mission-node {
+  grid-area: illustration; width: 100%; height: 56px; flex: none;
+  border: 0; background: transparent; box-shadow: none; color: #946021;
+}
+.mission-node img { width: 100%; height: 100%; object-fit: contain; filter: drop-shadow(0 2px 1px #78553562); }
+.progression-drawer .mission-detail { grid-area: summary; }
+.mission-brief summary,
+.manager-profile summary {
+  display: flex; align-items: center; justify-content: space-between; gap: 4px;
+  cursor: pointer; list-style: none; color: var(--log-ink); line-height: 1.5;
+}
+.mission-brief summary { font-size: clamp(13px,3.65vw,17px); font-weight: 800; min-height: 26px; }
+.mission-brief summary::marker,
+.manager-profile summary::marker { content: ""; }
+.mission-brief summary::-webkit-details-marker,
+.manager-profile summary::-webkit-details-marker { display: none; }
+.mission-brief summary svg,
+.manager-profile summary svg { color: #8c6b42; flex: none; }
+.mission-brief[open] summary svg,
+.manager-profile[open] summary svg { transform: rotate(180deg); }
+.progression-drawer .mission-detail p,
+.manager-profile p { display: block; color: var(--log-text); font-size: 12px; line-height: 1.75; margin: 3px 0 5px; }
+.progression-drawer .mission-detail .mission-prizes { display: flex; flex-wrap: wrap; gap: 8px; margin: 4px 0 6px; }
+.progression-drawer .mission-prizes span { display: inline-flex; align-items: center; gap: 3px; color: #75471c; font-size: 10px; }
 .progression-drawer .mission-detail .mission-meter {
-  position: relative;
-  display: block;
-  height: 18px;
-  width: 100%;
-  max-width: 215px;
-  margin-top: 4px;
-  overflow: hidden;
-  background: #81694a;
-  border: 1px solid #735835;
-  box-shadow: inset 0 1px 2px #54371888, 0 1px #fff1cc;
-  border-radius: 6px;
+  position: relative; max-width: 250px; width: 100%; height: 20px;
+  margin: 3px 0 0; overflow: hidden; border: 1px solid #795a36; border-radius: 7px;
+  background: linear-gradient(#816647,#a18a64);
+  box-shadow: inset 0 2px 2px #4e3929a8, 0 1px 0 #fff1ca;
 }
 .progression-drawer .mission-meter i,
 .progression-drawer .journey-xp i,
-.progression-drawer .contract-track i { display: block; height: 100%; background: linear-gradient(#9cbe5b,#598435); }
-.mission-meter b { position: absolute; inset: 0; text-align: center; font-size: 10px; line-height: 16px; color: #fff6df; text-shadow: 0 1px 2px #422e18; direction: ltr; }
-.progression-drawer .mission-detail .mission-prizes { display: flex; gap: 8px; margin: 5px 0 0; }
-.progression-drawer .mission-prizes span { color: #735024; font-size: 10px; }
-.progression-drawer .mission-prizes svg { color: #99691b; }
-.progression-drawer .mission-go,
-.mission-stamp {
-  width: 33px;
-  min-width: 0;
-  height: 34px;
-  padding: 0;
-  display: grid;
-  place-items: center;
-  border: 1px solid #b97913;
-  border-radius: 7px;
-  background: var(--ticket-brass);
-  box-shadow: var(--ticket-gold-edge);
-  color: #5b3511;
+.progression-drawer .contract-track i { display: block; height: 100%; background: linear-gradient(#86aa43,#628d34 46%,#457326); box-shadow: inset 0 1px #bbe577; }
+.mission-meter b { position: absolute; inset: 0; text-align: center; font-size: 12px; line-height: 18px; color: #fff5dd; text-shadow: 0 1px 2px #372510; direction: ltr; }
+.progression-drawer .journey-mission > .mission-go,
+.progression-drawer .mission-stamp {
+  grid-area: stamp;
+  display: grid; place-items: center;
+  width: 44px; height: 44px; padding: 0; min-width: 0;
+  border: 1px solid transparent; border-radius: 0; background: none; box-shadow: none;
+  border-image: var(--skin-gold, url('/assets/workshop/skin/brass-button.webp')) var(--log-cut) / 10px / 0 stretch; color: #623708;
 }
-.mission-stamp { color: #795e3d; background: #dbbd89; border-color: #b69564; box-shadow: inset 0 1px #f6dfb0; }
-.mission-stamp.complete { color: #fff2bb; border-color: #5c722e; background: linear-gradient(#8caf51,#597c32); }
-.progression-drawer .journey-rank,
-.progression-drawer .manager-summary,
-.progression-drawer .drawer-note,
-.progression-drawer .journey-finished {
-  display: flex;
-  align-items: center;
-  margin: 12px 0 0;
-  padding: 8px 10px;
-  gap: 10px;
-  border-radius: 7px;
-  border: 1px solid #b67d48;
-  background: #4d3024;
-  color: #f1cb85;
+.progression-drawer .mission-stamp { color: #785d37; border-image-source: var(--skin-paper, url('/assets/workshop/skin/paper-plaque.webp')); }
+.progression-drawer .mission-stamp.complete { border-image-source: var(--skin-green, url('/assets/workshop/skin/green-button.webp')); color: #fff5cc; }
+.progression-drawer :is(.journey-rank,.manager-summary,.drawer-note,.journey-finished) {
+  display: flex; align-items: center; gap: 9px; margin: 8px 1px 0; padding: 6px 9px;
+  background: #432b1d99; border: none; border-radius: 5px; color: #ffe7be; font-size: 11px;
 }
-.progression-drawer .journey-rank > span:first-child { width: 35px; height: 37px; border: 1px solid #a0773c; background: #735231; border-radius: 8px; }
-.progression-drawer .journey-rank > span:first-child b { font-size: 18px; color: #ffdb82; }
-.progression-drawer .journey-rank strong,
-.progression-drawer .manager-summary strong { color: #ffe5b6; }
+.progression-drawer .journey-rank > span:first-child { width: 37px; height: 41px; background: #80541d; border-color: #cda756; }
+.progression-drawer .journey-rank :is(strong,b),
+.progression-drawer .manager-summary strong { color: #fff0c7; }
 .progression-drawer .journey-rank small,
-.progression-drawer .manager-summary p,
-.progression-drawer .daily-server-note { color: #f7d6a6; font-size: 10px; }
-.progression-drawer .journey-total { font-size: 18px; color: #ffd589; }
-.progression-drawer .journey-xp { background: #2e2119; }
-.progression-drawer .journey-finished strong { color: #ffe2ad; }
+.progression-drawer .manager-summary p { color: #f1d4a9; font-size: 10px; margin: 0; }
+.progression-drawer .journey-total { color: #ffda81; font-size: 18px; }
+.progression-drawer .journey-xp { background: #372319; }
 
 .progression-drawer .manager-card {
-  display: grid;
-  grid-template-columns: 59px minmax(0, 1fr) minmax(66px, auto);
-  padding: 8px;
-  gap: 5px 9px;
-  align-items: center;
+  display: grid; grid-template-columns: minmax(63px,auto) minmax(0,1fr) clamp(66px,22vw,99px);
+  grid-template-areas: "action name portrait" "action perk portrait";
+  align-items: center; gap: 0 7px; min-height: 88px;
+  padding: 6px 9px 6px 4px; overflow: visible;
 }
 .progression-drawer .manager-portrait {
-  grid-row: span 2;
-  width: 59px;
-  height: 76px;
-  border: 2px solid #d29939;
-  border-radius: 13px 6px 13px 6px;
-  box-shadow: 0 0 0 1px #835521, 0 2px 2px #724c3373;
-  background: #325464;
+  grid-area: portrait; width: 100%; height: clamp(73px,21vw,99px); overflow: visible;
+  border: 0; border-radius: 0; box-shadow: none; background: transparent;
 }
-.progression-drawer .manager-portrait img { object-position: center 15%; }
-.progression-drawer .manager-portrait span { background: linear-gradient(0deg,#183642 65%,#17344080); padding: 4px 2px 2px; color: #ffe5a5; font-size: 9px; }
-.progression-drawer .manager-details { padding: 0; }
-.progression-drawer .manager-role { color: #72502b; font-size: 10px; }
-.progression-drawer .manager-details h3 { font-size: 15px; color: var(--ticket-ink); margin: 0; }
-.progression-drawer .manager-action { grid-column: 3; margin: 0; }
+.progression-drawer .manager-portrait > img {
+  width: 100%; height: 100%; object-fit: contain; object-position: center;
+  transform: scale(1.08); filter: drop-shadow(0 2px 1px #59351770);
+}
+.progression-drawer .manager-details { grid-area: name; padding: 0; align-self: end; }
+.progression-drawer .manager-details h3 { margin: 0; line-height: 1.45; font-size: clamp(14px,4vw,18px); color: var(--log-ink); }
+.progression-drawer .manager-role { color: #6a4a2c; font-size: 11px; font-weight: 700; }
+.progression-drawer .manager-action { grid-area: action; margin: 0; }
 .progression-drawer .manager-action > button,
 .progression-drawer .trade-contract > button {
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  align-items: center;
-  gap: 0;
-  padding: 4px 8px;
-  min-height: 40px;
-  border-radius: 7px;
-  border: 1px solid #536524;
-  background: linear-gradient(#85a94d,#527a32);
-  color: #fff3d0;
-  box-shadow: inset 0 1px #c9db8c, inset 0 -2px #476326, 0 1px 1px #6b4226;
-  line-height: 1.5;
-  font-size: 11px;
-  font-weight: 800;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0;
+  width: 100%; min-height: 44px; min-width: 60px; margin: 0; padding: 4px 10px 6px;
+  border: 1px solid transparent; border-radius: 0; box-shadow: none; background: none;
+  border-image: var(--skin-green, url('/assets/workshop/skin/green-button.webp')) var(--log-cut) / 11px 12px 12px / 0 stretch;
+  color: #fff0be; text-shadow: 0 1px 1px #304017; font-size: 13px; font-weight: 800; line-height: 1.45;
 }
 .progression-drawer .manager-action > button > span { margin: 0; }
 .progression-drawer .manager-action strong,
-.progression-drawer .trade-contract > button strong { font-size: 10px; color: inherit; }
-.progression-drawer .manager-action > button:disabled,
-.progression-drawer .manager-action .manager-unlock,
-.progression-drawer .trade-contract > button:disabled {
-  opacity: 1;
-  color: #5a452c;
-  border-color: #a8895b;
-  background: linear-gradient(#e7d3a9,#cbb486);
-  box-shadow: inset 0 1px #fcf0d1, 0 1px 0 #9a7b54;
+.progression-drawer .trade-contract > button strong { color: inherit; font-size: 10px; }
+.progression-drawer .manager-action :is(button:disabled,.manager-unlock),
+.progression-drawer .trade-contract button:disabled { background: transparent; border-color: transparent; border-image-source: var(--skin-paper, url('/assets/workshop/skin/paper-plaque.webp')); color: #6a5131; text-shadow: 0 1px #f5dcaf; opacity: 1; }
+.progression-drawer .manager-action small { color: #93542a; padding: 0; margin: 1px; font-size: 9px; }
+.manager-profile { grid-area: perk; align-self: start; }
+.manager-profile summary { min-height: 24px; line-height: 1.45; }
+.manager-profile .manager-perk { margin: 0; font-size: 10px; line-height: 1.55; color: #52652c; }
+.manager-profile .manager-training { margin: 4px 0 5px; }
+.manager-profile .manager-training i { background: #b8a47e; }
+.manager-profile .manager-training i.filled { background: #789141; }
+.progression-drawer .manager-summary p { display: inline; margin-inline-start: 5px; }
+.progression-drawer .manager-summary strong { font-size: 12px; }
+
+.progression-drawer .trade-contract {
+  display: grid; grid-template-columns: 64px minmax(0,1fr) 58px;
+  grid-template-areas: "send cargo ship"; gap: 8px; align-items: center;
+  min-height: 83px; padding: 9px 11px; opacity: 1;
 }
-.progression-drawer .manager-action small { color: #854626; }
-.manager-profile { grid-column: 2 / -1; min-width: 0; border-top: 1px solid #b48a5159; }
-.manager-profile summary { display: flex; align-items: center; justify-content: space-between; cursor: pointer; color: #6d552f; padding: 4px 0; }
-.manager-profile summary::marker { content: ""; }
-.manager-profile summary::-webkit-details-marker { display: none; }
-.manager-profile[open] summary > svg { transform: rotate(180deg); }
-.manager-profile .manager-perk { font-size: 10px; margin: 0; color: #455d28; }
-.manager-profile p { color: var(--ticket-detail); font-size: 11px; line-height: 1.7; }
-.progression-drawer .manager-training { margin: 5px 0 3px; }
-.progression-drawer .manager-training i { background: #b59d76; }
-.progression-drawer .manager-training i.filled { background: #5d803c; }
-.progression-drawer .manager-summary p { margin-top: 0; }
+.progression-drawer .trade-contract-icon { grid-area: ship; width: 100%; height: 56px; background: none; border: 0; }
+.trade-contract-icon img { width: 100%; height: 100%; object-fit: contain; }
+.trade-contract > div { grid-area: cargo; }
+.progression-drawer .trade-contract > button { grid-area: send; }
+.progression-drawer :is(.trade-contract,.active-contract) h3 { font-size: 15px; font-weight: 800; color: var(--log-ink); }
+.progression-drawer :is(.trade-contract p,.active-contract p,.trade-contract-meta,.contract-countdown > span) { color: var(--log-text); font-size: 11px; }
+.progression-drawer .trade-contract-meta { display: flex; flex-wrap: wrap; align-items: center; }
+.progression-drawer :is(.contract-live,.trade-contract-meta b) { color: #42662e; }
+.progression-drawer .contract-live i { background: #5b8a3f; }
+.progression-drawer .active-contract { padding: 13px 16px; margin-bottom: 9px; }
+.progression-drawer .contract-track { background: #a58b61; height: 6px; margin-top: 37px; }
+.contract-track img { position: absolute; bottom: 5px; width: 39px; height: 30px; object-fit: contain; transition: right .5s linear; }
+.progression-drawer .contract-countdown strong { color: #784518; }
 
-.progression-drawer .trade-contract { opacity: 1; }
-.progression-drawer .trade-contract-icon { border: 0; background: transparent; width: 45px; }
-.trade-contract-icon img { width: 44px; height: 39px; object-fit: contain; filter: drop-shadow(0 2px 1px #673b2a55); }
-.progression-drawer .trade-contract h3,
-.progression-drawer .active-contract h3 { color: var(--ticket-ink); }
-.progression-drawer .trade-contract p,
-.progression-drawer .trade-contract-meta,
-.progression-drawer .active-contract > p,
-.progression-drawer .contract-countdown > span { color: var(--ticket-detail); }
-.progression-drawer .trade-contract-meta { flex-wrap: wrap; }
-.progression-drawer .trade-contract-meta b,
-.progression-drawer .contract-live { color: #456329; }
-.progression-drawer .contract-live i { background: #719345; }
-.progression-drawer .contract-countdown strong,
-.progression-drawer .contract-track > svg { color: #795421; }
-.progression-drawer .contract-track { background: #b7a077; }
-
+/* A printed seven-day desk calendar hangs from five darkened metal loops. */
 .progression-drawer .daily-calendar {
-  grid-template-columns: repeat(3, minmax(0,1fr));
-  gap: 5px;
-  padding: 0 7px 8px;
-  background: linear-gradient(120deg,#e3c595,#f7dfb3,#dabb8a);
-  border: 1px solid #946335;
-  border-radius: 9px;
-}
-.calendar-rings { display: flex; grid-column: 1 / -1; justify-content: space-around; height: 13px; margin: -5px 0 1px; }
-.calendar-rings i { width: 8px; height: 17px; border: 1px solid #604937; border-radius: 5px; background: linear-gradient(90deg,#4c4034,#d1c9b7 37%,#8b8171 65%,#574b3c); box-shadow: 0 2px 1px #6b452d; }
-.progression-drawer .daily-day {
   position: relative;
-  min-height: 94px;
-  padding: 7px 2px;
+  display: grid;
+  grid-template-columns: repeat(3,minmax(0,1fr));
+  align-items: stretch;
   gap: 3px;
-  border: 1px solid #c5a173;
-  background: var(--ticket-paper);
-  border-radius: 7px;
-  box-shadow: inset 0 1px #fff2d2;
+  margin-top: 5px;
+  padding: 15px 8px 8px;
+  border-image-width: 13px 14px 14px;
 }
-.progression-drawer .daily-day span { font-weight: 700; color: #684326; font-size: 11px; }
-.progression-drawer .daily-day strong { font-weight: 800; color: var(--ticket-ink); font-size: 14px; }
-.progression-drawer .daily-day small { color: var(--ticket-detail); font-size: 9px; }
-.progression-drawer .daily-day .day-symbol { display: grid; place-items: center; }
-.progression-drawer .daily-day .day-symbol svg,
-.workshop-receipt .prize-symbol svg { stroke: #946020; stroke-width: 1.8; fill: #f5be4f; filter: drop-shadow(0 1px 0 #fff7d5); }
-.progression-drawer .daily-day:nth-of-type(odd):not(.grand) .day-symbol svg { stroke: #a34e28; fill: #e9a45a; }
-.progression-drawer .daily-day.today { border-color: #aa6e24; box-shadow: inset 0 0 0 2px #e9b74b; }
+.calendar-rings { position: absolute; top: -12px; left: 6%; right: 6%; height: 29px; display: flex; justify-content: space-between; pointer-events: none; }
+.calendar-rings i {
+  position: relative; width: 9px; height: 24px;
+  border: 1px solid #5c412a; border-radius: 50% 48% 40% 43% / 38% 44% 28% 33%;
+  transform: rotate(-4deg);
+  background: linear-gradient(88deg,#3c332a,#67564a 18%,#f3e6c9 43%,#b8aa96 58%,#514437 79%,#715840);
+  box-shadow: inset 0 2px #fff2cfb5, 0 2px 1px 2px #6d4b2d, 0 3px 0 3px #f6dbaa;
+}
+.calendar-rings i:nth-child(even) { transform: rotate(4deg); }
+.progression-drawer .daily-day {
+  position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  min-height: clamp(83px,11.5dvh,112px); padding: 5px 3px;
+  gap: 1px; text-align: center;
+  border: 1px solid #c2965a; border-radius: 6px;
+  background: radial-gradient(ellipse at 42% 0%,#fff0ca7a,transparent 80%),linear-gradient(130deg,#f1d9ac,#edcd98);
+  box-shadow: inset 0 1px 2px #fff6dd, inset 0 -1px 2px #b99a70;
+}
+.progression-drawer .daily-day .calendar-day-label { color: #523419; font-size: 13px; line-height: 1.4; font-weight: 800; }
+.progression-drawer .daily-day .day-symbol {
+  display: grid; place-items: center;
+  width: 100%; min-height: 30px; margin-block: 2px;
+}
+.progression-drawer .daily-day .day-symbol :is(img,.workshop-icon) {
+  width: clamp(32px,9vw,43px); height: clamp(32px,9vw,43px); object-fit: contain;
+  filter: drop-shadow(0 1px 1px #64401c77);
+}
+.progression-drawer .daily-day strong { color: #302112; font-size: clamp(14px,4vw,18px); font-weight: 800; line-height: 1.28; }
+.progression-drawer .daily-day small { color: #674b2d; font-size: 9px; line-height: 1.45; }
+.progression-drawer .daily-day.today { border-color: #aa711d; background: radial-gradient(ellipse at 40% 30%,#fff0c9,#f4d38c); box-shadow: inset 0 0 0 2px #ecb74f; }
 .progression-drawer .daily-day.claimed { opacity: 1; }
-.progression-drawer .daily-day .day-check {
-  position: absolute; inset-inline-end: 4px; top: 4px;
-  display: grid; place-items: center; width: 15px; height: 15px;
-  border-radius: 50%; background: #638536; border: 1px solid #4a672c;
+.progression-drawer .day-check {
+  position: absolute; left: 3px; bottom: 3px; width: 17px; height: 18px; display: grid; place-items: center;
+  color: #fff2c8; border: 1px solid #60742f; border-radius: 50%; background: linear-gradient(#91ae4a,#658635);
 }
-.progression-drawer .daily-day .day-check svg { color: #fff4cf; width: 12px; height: 12px; stroke-width: 3; }
+.progression-drawer .day-check svg { color: inherit; width: 13px; height: 13px; stroke-width: 3; }
 .progression-drawer .daily-day.grand {
-  min-height: 68px; grid-column: 1 / -1; display: grid;
-  grid-template-columns: auto auto; grid-template-rows: auto auto auto;
-  column-gap: 16px; row-gap: 0; align-items: center; justify-content: center;
-  background: radial-gradient(ellipse at 28% 45%,#ffeaa6,transparent 52%),linear-gradient(115deg,#d79324,#ffd875 54%,#d58d1c);
-  border-color: #b07420; box-shadow: inset 0 0 0 2px #ffe19a;
+  grid-column: 1 / -1; display: grid;
+  grid-template-columns: minmax(78px,1.15fr) minmax(50px,.7fr) minmax(0,1fr);
+  grid-template-areas: "day icon harbor" "amount icon harbor" "items icon harbor";
+  gap: 0 3px; align-content: center; align-items: center; justify-items: center;
+  min-height: 78px; margin-top: 1px; padding: 5px 14px 5px 9px;
+  border: 1px solid transparent; border-radius: 0;
+  border-image: var(--skin-gold, url('/assets/workshop/skin/brass-button.webp')) var(--log-cut) / 14px 15px 15px / 0 stretch;
+  background: none; box-shadow: none;
 }
-.progression-drawer .daily-day.grand .day-symbol { grid-column: 1; grid-row: 1 / 4; }
-.progression-drawer .daily-day.grand .day-symbol svg { width: 41px; height: 41px; }
-.progression-drawer .daily-day.grand :is(strong,small,span:first-child) { grid-column: 2; }
-.progression-drawer .daily-claim { margin-top: 11px; }
-.progression-drawer .daily-error { padding: 10px; margin-top: 9px; border: 1px solid #b98d60; background: #4c3123; }
-.progression-drawer .daily-error p { color: #ffe2ae; margin: 0; }
-.progression-drawer .daily-server-note { line-height: 1.65; text-align: center; }
+.grand-harbor { grid-area: harbor; width: 100%; height: 70px; object-fit: contain; filter: drop-shadow(0 2px 1px #976413); }
+.progression-drawer .daily-day.grand .calendar-day-label {
+  grid-area: day; padding: 1px 9px; color: #fff2c8; line-height: 1.5;
+  background: #774624; border: 1px solid #a36b32; border-radius: 8px; font-size: 12px;
+}
+.progression-drawer .daily-day.grand .day-symbol {
+  grid-area: icon; width: 100%; height: 63px;
+  background: radial-gradient(ellipse,#fff5ae 7%,#ffe17377 44%,transparent 71%);
+}
+.progression-drawer .daily-day.grand .day-symbol .workshop-icon { width: 54px; height: 54px; }
+.progression-drawer .daily-day.grand strong { grid-area: amount; font-size: 19px; }
+.progression-drawer .daily-day.grand small { grid-area: items; color: #5f411f; }
+.progression-drawer .daily-claim { margin-top: 8px; }
+.day-gift-icon { flex: none; width: 38px; height: 36px; object-fit: contain; }
+.progression-drawer .daily-error { padding: 8px 12px; margin-top: 8px; border-color: #a8784b; background: #4e3022; }
+.progression-drawer .daily-error p,
+.progression-drawer .daily-server-note { font-size: 10px; color: #ffe4ae; margin: 5px 3px 0; line-height: 1.5; }
+.progression-drawer .daily-server-note { text-align: center; }
+.progression-drawer .daily-error .primary-action { margin-top: 5px; }
 
-.reward-backdrop {
-  padding: max(12px, env(safe-area-inset-top,0px)) max(12px, env(safe-area-inset-right,0px)) max(12px, env(safe-area-inset-bottom,0px)) max(12px, env(safe-area-inset-left,0px));
-  background: #16282d38;
-  backdrop-filter: none;
-}
-.reward-backdrop .workshop-receipt {
-  width: min(100%,415px);
-  padding: 12px 14px 14px;
-  max-height: calc(100dvh - 32px - env(safe-area-inset-top,0px) - env(safe-area-inset-bottom,0px));
-  gap: 0;
-  background: var(--ticket-wood);
-  border: 2px solid #563624;
-  border-radius: 19px 19px 13px 13px;
-  box-shadow: inset 0 0 0 2px #cf8f61, inset 0 0 0 5px #7b412b, 0 7px 20px #18110c66;
-  color: #ffe7b9;
-  scrollbar-color: #b98a54 #6c432d;
-}
-.workshop-receipt > * { flex: none; }
-.workshop-receipt .receipt-header { padding: 0 24px 5px; min-height: 48px; }
+/* Reward quantities and report text stay on their own printed ticket cells. */
+.workshop-receipt .receipt-header { padding: 0 27px 3px; min-height: 54px; }
+.workshop-receipt .receipt-plaque { font-size: clamp(18px,5.3vw,25px); min-width: 82%; }
 .workshop-receipt .receipt-message {
-  width: 100%; padding: 8px 10px; margin: 7px 0;
-  font-size: 12px; text-align: center; font-weight: 500; color: #56391e;
+  width: 100%; margin: 5px 0; padding: 10px 12px 12px; text-align: center;
+  color: #472e17; font-size: 13px; font-weight: 600; line-height: 1.6;
 }
-.workshop-receipt .receipt-message strong { color: #3a2918; font-weight: 800; }
 .workshop-receipt .reward-art,
 .workshop-receipt .offline-crate {
-  width: 100%;
-  height: 119px;
-  margin: 0;
-  display: grid;
-  place-items: center;
-  background: radial-gradient(ellipse at center, #fbd38050, transparent 62%);
+  width: 100%; height: clamp(110px,16dvh,150px); margin: 1px 0 0;
+  display: grid; place-items: center; position: relative;
+  background: radial-gradient(ellipse,#ffeb8d70 0,#dbad4b2b 36%,transparent 66%);
 }
 .workshop-receipt .reward-art > img,
-.workshop-receipt .offline-crate > img { width: 95%; height: 100%; max-width: 145px; object-fit: contain; filter: drop-shadow(0 3px 2px #54351d70); }
-.workshop-receipt .reward-art-badge { width: 28px; height: 28px; bottom: 11%; right: calc(50% - 57px); color: #fff2c7; background: #668736; border: 1px solid #c4c974; }
+.workshop-receipt .offline-crate > img { position: absolute; left: 50%; top: 0; transform: translateX(-50%); height: 100%; width: min(76%,225px); object-fit: contain; filter: drop-shadow(0 4px 2px #362318aa); }
+.workshop-receipt .reward-art-badge { width: 28px; height: 29px; right: calc(50% - 66px); bottom: 4px; color: #f9ebbc; border-color: #a7a05d; background: #678842; }
 .workshop-receipt .reward-values,
 .workshop-receipt .result-prizes,
 .workshop-receipt .offline-ledger {
-  display: grid;
-  grid-auto-flow: column;
-  grid-auto-columns: minmax(0,1fr);
-  align-items: stretch;
-  gap: 6px;
-  width: 100%;
-  margin: 9px 0 12px;
+  display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0,1fr);
+  width: 100%; gap: 5px; align-items: stretch; margin: 6px 0 9px;
 }
+.workshop-receipt .reward-values { grid-auto-flow: row; grid-template-columns: repeat(auto-fit,minmax(66px,1fr)); }
 .workshop-receipt .workshop-prize {
   display: flex; flex-direction: column; justify-content: center; align-items: center;
-  min-height: 69px; padding: 6px 2px; gap: 2px;
-  border: 1px solid var(--ticket-border); border-radius: 7px; background: var(--ticket-paper);
+  min-height: 78px; gap: 1px; padding: 7px 4px; text-align: center;
+  border-image-width: 9px 10px 10px;
 }
-.workshop-receipt .workshop-prize strong { color: #3c2816; font-size: 16px; line-height: 1.45; font-weight: 800; }
-.workshop-receipt .workshop-prize small { color: #654726; font-size: 9px; text-align: center; }
-.workshop-receipt .prize-symbol { display: grid; place-items: center; flex: none; }
-.workshop-receipt .prize-symbol svg { width: 25px; height: 25px; }
-.workshop-receipt .workshop-prize:nth-child(2) .prize-symbol svg { fill: #aec7bd; stroke: #496b6a; }
-.workshop-receipt .workshop-prize:nth-child(3) .prize-symbol svg { fill: #ffb666; stroke: #97532a; }
-.workshop-receipt .receipt-subplaque { min-height: 28px; min-width: auto; border-radius: 7px; margin: 8px 0 -7px; padding: 1px 16px; font-size: 13px; z-index: 1; }
+.workshop-receipt .prize-symbol .wk-ammo { --wk-icon: url('/assets/workshop/ammo.webp'); }
+.workshop-receipt .prize-symbol { flex: none; display: grid; place-items: center; }
+.workshop-receipt .prize-symbol :is(.workshop-icon,img,svg) { width: 34px; height: 32px; object-fit: contain; }
+.workshop-receipt .prize-symbol svg { stroke-width: 2; stroke: #995f18; fill: #ffd16c; filter: drop-shadow(0 2px #cf9c53); }
+.workshop-receipt .workshop-prize strong { font-size: 17px; color: #32200d; font-weight: 800; line-height: 1.5; }
+.workshop-receipt .workshop-prize small { color: #674a29; font-size: 10px; }
+.workshop-receipt .receipt-subplaque { min-width: 115px; min-height: 34px; font-size: 15px; margin: 4px 0 -9px; z-index: 1; padding: 3px 15px; border-image-width: 9px 12px; }
+.workshop-receipt .result-prizes { border-radius: 7px; background: #4c2d1d76; padding: 11px 6px 5px; }
 .workshop-receipt .loot-cards { margin-top: 5px; }
-.workshop-receipt .loot-card { min-height: 118px; max-width: 140px; border: 2px solid #c49746; background: var(--ticket-enamel); border-radius: 8px; padding: 6px; box-shadow: 0 2px 1px #50321c; }
-.workshop-receipt .loot-card .tower-asset { width: 76px; height: 72px; }
-.workshop-receipt .loot-card strong { color: #ffe5ab; }
-.workshop-receipt .loot-card small { color: #d7dfd5; }
-.workshop-receipt .loot-card-count { color: #fff0bd; border-color: #bd954f; background: #5f461c; }
-.workshop-receipt .reward-saved { font-size: 10px; margin-top: 7px; color: #ffe2af; }
-.workshop-receipt .battle-crest {
-  flex-direction: column;
-  position: relative;
-  padding-bottom: 0;
+.workshop-receipt .loot-card {
+  --log-edge: 11px; min-height: 104px; padding: 9px 5px; max-width: 138px;
+  border: 1px solid transparent; border-image: var(--skin-blue, url('/assets/workshop/skin/blue-plaque.webp')) var(--log-cut) / var(--log-edge) / 0 stretch;
+  background: transparent; box-shadow: none; border-radius: 0;
 }
-.battle-crest .crest-emblem {
-  z-index: 1;
-  display: grid; place-items: center;
-  width: 43px; height: 39px; margin-bottom: -4px;
-  border: 2px solid #c18b38; border-radius: 50% 50% 35% 35%;
-  color: #ffe4a2; background: linear-gradient(#eac056,#ac751a);
-  box-shadow: inset 0 1px 0 #fff2b5, 0 1px 2px #50321c;
+.workshop-receipt .loot-card .tower-asset { width: 70px; height: 59px; }
+.workshop-receipt .loot-card strong { color: #ffe3a4; }
+.workshop-receipt .loot-card small { color: #e2e4cf; }
+.workshop-receipt .loot-card-count { color: #ffecb7; background: #755018; border-color: #cda660; }
+.workshop-receipt .reward-saved { font-size: 10px; margin: 5px 0 0; color: #ffe1a8; }
+
+.workshop-receipt .battle-crest { min-height: 0; padding: 0; }
+.workshop-receipt .victory-medallion {
+  position: relative; display: grid; place-items: center;
+  width: min(240px,75%); height: clamp(106px,15.7dvh,155px);
+  margin: -4px 0 -2px;
 }
-.crest-emblem svg { stroke: #70471a; fill: #fcd871; padding: 3px; filter: drop-shadow(0 1px #fff0b1); }
-.lost .crest-emblem { background: linear-gradient(#a1694c,#734735); }
-.lost .crest-emblem svg { fill: #ffcb91; }
-.workshop-receipt .battle-crest .receipt-plaque { min-width: 60%; border-radius: 17px 17px 35% 35% / 14px 14px 10px 10px; }
-.workshop-receipt .result-stars { margin: 6px 0 0; gap: 6px; height: 27px; }
-.workshop-receipt .result-stars svg { width: 22px; height: 22px; color: #ce9963; }
-.workshop-receipt .result-stars svg:nth-child(2) { width: 26px; height: 26px; margin-top: -4px; }
-.workshop-receipt .result-stars .earned { color: #ffc644; filter: drop-shadow(0 2px #855016); }
-.workshop-receipt .result-stats { flex-direction: column; gap: 3px; margin: 2px 0 8px; padding: 0; border: none; }
-.workshop-receipt .result-stats > span { justify-content: flex-start; gap: 7px; padding: 4px 9px; color: #654627; font-size: 11px; }
-.workshop-receipt .result-stats svg { color: #766135; }
-.workshop-receipt .result-stats b { margin-inline-start: auto; color: #392817; font-weight: 800; font-size: 11px; }
-.workshop-receipt .auto-battle-control { min-height: 33px; margin: 0 0 6px; color: #ffe5bb; font-size: 11px; }
-.workshop-receipt .auto-battle-control input { accent-color: #69823a; width: 19px; height: 19px; }
-.workshop-receipt .result-next { min-height: 38px; margin-top: 5px; color: #ffe1a8; font-size: 11px; }
-.workshop-receipt .defeat-tip { width: 100%; padding: 10px; margin: 5px 0 9px; border-color: var(--ticket-border); background: var(--ticket-paper); border-radius: 7px; color: #914c2c; }
-.workshop-receipt .defeat-tip strong { color: #643b24; }
-.workshop-receipt .defeat-tip p { color: var(--ticket-detail); }
-.workshop-receipt .offline-ledger { margin: 4px 0 2px; }
-.workshop-receipt .offline-note { color: #ffe0ad; font-size: 11px; line-height: 1.7; margin: 1px 8px 10px; text-align: center; }
+.victory-medallion img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: fill; filter: drop-shadow(0 3px 1px #432c1c); }
+.victory-medallion span {
+  position: absolute; left: 19%; right: 19%; top: 66%;
+  color: #fff0c6; font-size: clamp(22px,6vw,30px); font-weight: 800; text-align: center;
+  line-height: 1.1; text-shadow: 0 2px #132b45,0 0 4px #0b2038;
+}
+.workshop-receipt .result-stars { min-height: 22px; height: 22px; margin: 1px 0; gap: 5px; }
+.workshop-receipt .result-stars svg { width: 20px; height: 20px; color: #ddb47b; }
+.workshop-receipt .result-stars svg:nth-child(2) { width: 24px; height: 24px; margin-top: -3px; }
+.workshop-receipt .result-stars .earned { color: #ffce4b; filter: drop-shadow(0 2px 0 #82501a); }
+.workshop-receipt .result-stats { display: grid; grid-template-columns: minmax(0,1fr); justify-content: stretch; gap: 2px; width: 100%; padding: 0; margin: 1px 0 6px; border: 0; }
+.workshop-receipt .result-stats > span { display: flex; gap: 8px; align-items: center; padding: 4px 12px; font-size: 12px; color: #5d3c1e; border-image-width: 6px 11px; }
+.workshop-receipt .result-stats svg { color: #6a592c; }
+.workshop-receipt .result-stats b { margin-inline-start: auto; color: #3c2814; font-size: 12px; font-weight: 800; }
+.workshop-receipt .auto-battle-control { width: auto; align-self: start; min-height: 30px; margin: 0 0 4px; font-size: 11px; color: #ffe1af; }
+.workshop-receipt .auto-battle-control input { width: 18px; height: 18px; accent-color: #729641; }
+.workshop-receipt .result-next { width: auto; min-height: 34px; margin: 4px 0 0; padding-inline: 7px; color: #ffe4ae; font-size: 11px; }
+.workshop-receipt .defeat-tip { width: 100%; padding: 13px; margin: 2px 0 6px; }
+.workshop-receipt .defeat-tip strong { color: #713d24; }
+.workshop-receipt .defeat-tip p { color: var(--log-text); }
+.workshop-receipt .offline-ledger { margin: 3px 0 1px; }
+.workshop-receipt .offline-duration strong { display: block; color: #38220d; font-size: 19px; }
+.workshop-receipt .offline-note { color: #ffe0ae; margin: 2px 5px 8px; font-size: 11px; line-height: 1.6; text-align: center; }
 .progression-drawer .primary-action,
 .workshop-receipt .primary-action {
-  display: flex; align-items: center; justify-content: center;
-  width: 100%; min-height: 46px; gap: 9px;
-  background: var(--ticket-brass); color: #432a11;
-  border: 2px solid #9c6316; border-radius: 19px;
-  box-shadow: var(--ticket-gold-edge); font-size: 16px; font-weight: 800; text-shadow: 0 1px #ffe790;
+  position: relative; display: flex; flex-direction: row-reverse; justify-content: center; align-items: center;
+  width: 99%; min-height: 54px; gap: 9px; padding: 6px 16px 9px; margin-inline: auto;
+  border: 1px solid transparent; border-radius: 0; border-image: var(--skin-gold, url('/assets/workshop/skin/brass-button.webp')) var(--log-cut) / 17px 21px 18px / 0 stretch;
+  background: none; color: #37210d; font-size: clamp(16px,4.6vw,20px); font-weight: 800; text-shadow: 0 1px #ffe691;
+  box-shadow: none; filter: drop-shadow(0 2px 1px #492813b8);
 }
-.progression-drawer .primary-action:disabled { background: linear-gradient(#d6c09c,#baa483); color: #604f39; border-color: #917456; text-shadow: none; box-shadow: inset 0 1px #eee0c6; opacity: 1; }
+.workshop-receipt .primary-action .workshop-icon { width: 38px; height: 34px; }
+.progression-drawer .primary-action:disabled { opacity: 1; color: #715938; text-shadow: 0 1px #fae7c3; border-image-source: var(--skin-paper, url('/assets/workshop/skin/paper-plaque.webp')); background: none; box-shadow: none; }
+.progression-drawer .mission-payout { margin-top: 8px; }
 .progression-drawer button:enabled:active,
-.workshop-receipt button:enabled:active { translate: 0 1px; }
-@media (max-width: 700px) {
-  .workshop-progress-overlay,
-  .reward-backdrop {
-    align-items: flex-end;
-    justify-content: center;
-    background: linear-gradient(0deg,#33271b24,transparent 62%);
-    backdrop-filter: none;
-  }
-  .workshop-progress-overlay .progression-drawer {
-    height: auto;
-    max-height: min(68dvh, calc(100dvh - 85px - env(safe-area-inset-top,0px)));
-    width: min(100%,440px);
-    padding-bottom: env(safe-area-inset-bottom,0px);
-  }
-  .workshop-progress-overlay .drawer-body { padding: 6px 10px 12px; }
-  .reward-backdrop { padding-bottom: max(5px,env(safe-area-inset-bottom,0px)); }
-  .reward-backdrop .workshop-receipt {
-    max-height: min(82dvh,calc(100dvh - 65px - env(safe-area-inset-top,0px) - env(safe-area-inset-bottom,0px)));
-    padding: 9px 11px 12px;
-  }
+.workshop-receipt button:enabled:active { transform: translateY(1px); }
+
+@media (max-width:360px) {
+  .workshop .drawer-overlay .progression-drawer { padding-inline: 5px; }
+  .workshop .progression-drawer .drawer-body { padding-inline: 4px; }
+  .progression-drawer .manager-card { grid-template-columns: 62px minmax(0,1fr) 65px; gap: 0 4px; }
+  .progression-drawer .manager-portrait { height: 75px; }
+  .progression-drawer .journey-mission { grid-template-columns: 44px minmax(0,1fr) 47px; gap: 5px; }
+  .progression-drawer .trade-contract { grid-template-columns: 56px minmax(0,1fr) 45px; gap: 4px; }
+  .progression-drawer .trade-contract > button { min-width: 52px; }
+  .progression-drawer .daily-day.grand { padding-inline: 9px; min-height: 71px; }
+  .grand-harbor { height: 58px; }
+  .progression-drawer .daily-day.grand .day-symbol .workshop-icon { width: 43px; height: 43px; }
 }
-@media (max-width: 360px) {
-  .progression-drawer .journey-mission { grid-template-columns: 30px minmax(0,1fr) 31px; gap: 6px; }
-  .progression-drawer .mission-node { width: 30px; }
-  .progression-drawer .manager-card { grid-template-columns: 48px minmax(0,1fr) auto; gap: 3px 7px; }
-  .progression-drawer .manager-portrait { width: 48px; height: 65px; }
-  .workshop-receipt .receipt-header { padding-inline: 29px; }
-  .workshop-receipt .receipt-plaque { font-size: 16px; }
+@media (max-height:600px) {
+  .workshop .drawer-overlay .progression-drawer { max-height: 100%; }
+  .workshop-receipt .victory-medallion { width: 160px; height: 91px; }
+  .workshop-receipt .victory-medallion span { font-size: 19px; }
 }
 @media (prefers-reduced-motion: reduce) {
   .reward-backdrop .workshop-receipt,
   .workshop-progress-overlay .progression-drawer { animation: none; }
 }
-
-.workshop .drawer-overlay .progression-drawer { height: auto; max-height: min(71dvh,100%); }
-.workshop-receipt .battle-crest .crest-laurel {
-  width: 30px; height: 30px; stroke: #fac452; fill: #de9e31;
-  transform: scaleX(-1) rotate(-12deg);
-}
-.workshop-receipt .battle-crest .crest-laurel:last-child { transform: rotate(-12deg); }
-.workshop .daily-day .day-symbol .workshop-icon { width: 27px; height: 27px; }
-.workshop .daily-day.grand .workshop-icon { width: 43px; height: 43px; }
-.workshop .workshop-prize .workshop-icon { width: 29px; height: 26px; }
-@media (max-height: 520px) {
-  .workshop .drawer-overlay .progression-drawer { max-height: 100%; }
-}
-.progression-drawer .mission-payout { margin-top: 10px; }
-.workshop-receipt .reward-values { grid-auto-flow: row; grid-template-columns: repeat(auto-fit, minmax(62px,1fr)); }
-.workshop .workshop-prize .wk-ammo { --wk-icon: url('/assets/workshop/ammo.webp'); }
