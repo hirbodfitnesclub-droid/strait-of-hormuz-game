@@ -9,6 +9,11 @@ import "@fontsource/vazirmatn/700.css";
 import "@fontsource/vazirmatn/800.css";
 import "./globals.css";
 import "./mobile-game.css";
+import "./workshop.css";
+import "./workshop-command.css";
+import "./workshop-progress.css";
+import "./workshop-panels.css";
+import "./workshop-build.css";
 
 export const metadata: Metadata = {
   title: "تنگه هرمز | فرمانروایی آب‌های آزاد",

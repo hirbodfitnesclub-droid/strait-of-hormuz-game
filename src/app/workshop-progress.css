@@ -1,0 +1,531 @@
+/* The mission clipboard, calendar and receipts share printed tickets and enamel labels. */
+.progression-drawer,
+.workshop-receipt {
+  --ticket-ink: #362615;
+  --ticket-detail: #67472c;
+  --ticket-border: #a07442;
+  --ticket-paper: radial-gradient(ellipse at 22% 0%, #fff4d4b0, transparent 64%), linear-gradient(165deg, #f4dfaf, #f6dba6 55%, #dfbc87);
+  --ticket-edge: inset 0 1px 0 #fff0c9, inset 0 -2px 0 #bc955d, 0 2px 0 #4b2d1d;
+  --ticket-enamel: linear-gradient(115deg, #1d5060 0%, #173c4b 37%, #102c3a 80%, #234652);
+  --ticket-wood: repeating-linear-gradient(2deg, transparent 0 7px, #39170c19 8px, transparent 10px 17px), linear-gradient(100deg, #79442f, #a05b3e 24%, #874931 67%, #653523);
+  --ticket-brass: linear-gradient(#ffdf67, #ffbf28 54%, #ed9c0d);
+  --ticket-gold-edge: inset 0 1px 1px #fff2aa, inset 0 -3px 0 #c38114, 0 2px 0 #683a16;
+}
+
+.workshop-progress-overlay .progression-drawer {
+  background: var(--ticket-wood);
+  border: 2px solid #573521;
+  border-radius: 19px 19px 12px 12px;
+  box-shadow: inset 0 0 0 2px #d59961, inset 0 0 0 5px #713b27, 0 6px 18px #1e110b66;
+  color: var(--ticket-ink);
+}
+
+.progression-drawer .drawer-header,
+.workshop-receipt .receipt-header {
+  position: relative;
+  width: 100%;
+  flex: none;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 55px;
+  padding: 9px 40px 5px;
+  border: 0;
+  background: transparent;
+}
+
+.progression-drawer .drawer-header h2,
+.workshop-receipt .receipt-plaque,
+.workshop-receipt .receipt-subplaque {
+  position: relative;
+  display: inline-flex;
+  justify-content: center;
+  align-items: center;
+  min-width: 55%;
+  max-width: 100%;
+  min-height: 41px;
+  gap: 9px;
+  margin: 0;
+  padding: 4px 18px 5px;
+  border: 2px solid #e1ae49;
+  outline: 1px solid #613810;
+  border-radius: 10px;
+  background: var(--ticket-enamel);
+  color: #fff1d4;
+  font-size: clamp(18px, 4.6vw, 24px);
+  line-height: 1.55;
+  font-weight: 800;
+  text-align: center;
+  text-shadow: 0 2px 1px #13222a;
+  box-shadow: inset 0 0 0 1px #514632, inset 0 2px 2px #7d9fa580, 0 3px 1px #512e1b;
+}
+
+.progression-drawer .drawer-header h2::before,
+.progression-drawer .drawer-header h2::after,
+.workshop-receipt .receipt-plaque::before,
+.workshop-receipt .receipt-plaque::after {
+  content: "";
+  position: absolute;
+  width: 4px;
+  height: 4px;
+  top: calc(50% - 2px);
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 28%, #fff5bc, #d59a37 44%, #67401c 90%);
+  box-shadow: 0 1px 1px #041e2b;
+}
+.progression-drawer .drawer-header h2::before,
+.workshop-receipt .receipt-plaque::before { left: 6px; }
+.progression-drawer .drawer-header h2::after,
+.workshop-receipt .receipt-plaque::after { right: 6px; }
+.progression-drawer .drawer-header h2 svg,
+.workshop-receipt .receipt-plaque svg { color: #ffca52; stroke-width: 2.4; filter: drop-shadow(0 1px 0 #643c13); }
+
+.progression-drawer .drawer-header .icon-close,
+.workshop-receipt .reward-close {
+  position: absolute;
+  top: 50%;
+  inset-inline-end: 1px;
+  transform: translateY(-50%);
+  width: 35px;
+  height: 35px;
+  display: grid;
+  place-items: center;
+  border: 1px solid #e1b16c;
+  border-radius: 9px;
+  background: linear-gradient(#784936, #562f21);
+  box-shadow: inset 0 1px #a97753, 0 2px 0 #4b2818;
+  color: #ffe6b6;
+}
+.progression-drawer .drawer-header .icon-close { inset-inline-end: 9px; }
+.workshop-progress-overlay .drawer-body { padding: 12px 13px 18px; }
+
+.workshop-ticket,
+.progression-drawer .daily-calendar,
+.workshop-receipt .receipt-message,
+.workshop-receipt .workshop-prize,
+.workshop-receipt .result-stats > span,
+.workshop-receipt .defeat-tip {
+  border: 1px solid var(--ticket-border);
+  border-radius: 8px;
+  background: var(--ticket-paper);
+  box-shadow: var(--ticket-edge);
+  color: var(--ticket-ink);
+}
+.progression-drawer .manager-card,
+.progression-drawer .journey-mission,
+.progression-drawer .trade-contract,
+.progression-drawer .active-contract {
+  background: var(--ticket-paper);
+  border-color: var(--ticket-border);
+  border-radius: 8px;
+  box-shadow: var(--ticket-edge);
+}
+.progression-drawer :is(.drawer-body button, select, summary):focus-visible,
+.workshop-receipt :is(button, input):focus-visible { outline: 3px solid #2088ac; outline-offset: 2px; }
+
+.chapter-selector {
+  position: relative;
+  min-height: 38px;
+  margin-bottom: 9px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  border-radius: 6px;
+  background: #412b20a8;
+  color: #ffe0a0;
+  padding-inline: 11px;
+}
+.chapter-selector select {
+  appearance: none;
+  cursor: pointer;
+  width: 100%;
+  min-height: 38px;
+  padding-inline: 1px 21px;
+  color: #ffe8bb;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  background: transparent;
+  border: none;
+}
+.chapter-selector option { color: #382c1e; background: #f3dcad; }
+.chapter-selector > svg:last-child { pointer-events: none; position: absolute; inset-inline-end: 13px; }
+.progression-drawer .journey-missions,
+.progression-drawer .manager-list,
+.progression-drawer .contract-catalog { gap: 8px; }
+.progression-drawer .journey-mission {
+  display: grid;
+  grid-template-columns: 40px minmax(0,1fr) 35px;
+  gap: 10px;
+  align-items: center;
+  padding: 9px 11px;
+  opacity: 1;
+}
+.progression-drawer .journey-mission.locked:not(.done) { opacity: 1; }
+.progression-drawer .journey-mission.current { border-color: #f5c75b; box-shadow: inset 0 0 0 2px #fff0bd, var(--ticket-edge); }
+.progression-drawer .mission-node {
+  width: 40px;
+  height: 43px;
+  border: 0;
+  background: none;
+  color: #b67c19;
+  filter: drop-shadow(0 2px 0 #fff0c6);
+  box-shadow: none;
+}
+.mission-node img { width: 100%; height: 100%; object-fit: contain; filter: drop-shadow(0 2px 1px #5c3d2455); }
+.mission-node svg { stroke-width: 2.1; }
+.mission-art-collect svg { fill: #ffc63d; stroke: #a76c10; }
+.progression-drawer .mission-detail > strong { color: #312413; font-size: 13px; font-weight: 800; }
+.progression-drawer .mission-detail p { color: var(--ticket-detail); margin: 2px 0 4px; line-height: 1.55; font-size: 11px; }
+.progression-drawer .mission-detail .mission-meter {
+  position: relative;
+  display: block;
+  height: 18px;
+  width: 100%;
+  max-width: 215px;
+  margin-top: 4px;
+  overflow: hidden;
+  background: #81694a;
+  border: 1px solid #735835;
+  box-shadow: inset 0 1px 2px #54371888, 0 1px #fff1cc;
+  border-radius: 6px;
+}
+.progression-drawer .mission-meter i,
+.progression-drawer .journey-xp i,
+.progression-drawer .contract-track i { display: block; height: 100%; background: linear-gradient(#9cbe5b,#598435); }
+.mission-meter b { position: absolute; inset: 0; text-align: center; font-size: 10px; line-height: 16px; color: #fff6df; text-shadow: 0 1px 2px #422e18; direction: ltr; }
+.progression-drawer .mission-detail .mission-prizes { display: flex; gap: 8px; margin: 5px 0 0; }
+.progression-drawer .mission-prizes span { color: #735024; font-size: 10px; }
+.progression-drawer .mission-prizes svg { color: #99691b; }
+.progression-drawer .mission-go,
+.mission-stamp {
+  width: 33px;
+  min-width: 0;
+  height: 34px;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  border: 1px solid #b97913;
+  border-radius: 7px;
+  background: var(--ticket-brass);
+  box-shadow: var(--ticket-gold-edge);
+  color: #5b3511;
+}
+.mission-stamp { color: #795e3d; background: #dbbd89; border-color: #b69564; box-shadow: inset 0 1px #f6dfb0; }
+.mission-stamp.complete { color: #fff2bb; border-color: #5c722e; background: linear-gradient(#8caf51,#597c32); }
+.progression-drawer .journey-rank,
+.progression-drawer .manager-summary,
+.progression-drawer .drawer-note,
+.progression-drawer .journey-finished {
+  display: flex;
+  align-items: center;
+  margin: 12px 0 0;
+  padding: 8px 10px;
+  gap: 10px;
+  border-radius: 7px;
+  border: 1px solid #b67d48;
+  background: #4d3024;
+  color: #f1cb85;
+}
+.progression-drawer .journey-rank > span:first-child { width: 35px; height: 37px; border: 1px solid #a0773c; background: #735231; border-radius: 8px; }
+.progression-drawer .journey-rank > span:first-child b { font-size: 18px; color: #ffdb82; }
+.progression-drawer .journey-rank strong,
+.progression-drawer .manager-summary strong { color: #ffe5b6; }
+.progression-drawer .journey-rank small,
+.progression-drawer .manager-summary p,
+.progression-drawer .daily-server-note { color: #f7d6a6; font-size: 10px; }
+.progression-drawer .journey-total { font-size: 18px; color: #ffd589; }
+.progression-drawer .journey-xp { background: #2e2119; }
+.progression-drawer .journey-finished strong { color: #ffe2ad; }
+
+.progression-drawer .manager-card {
+  display: grid;
+  grid-template-columns: 59px minmax(0, 1fr) minmax(66px, auto);
+  padding: 8px;
+  gap: 5px 9px;
+  align-items: center;
+}
+.progression-drawer .manager-portrait {
+  grid-row: span 2;
+  width: 59px;
+  height: 76px;
+  border: 2px solid #d29939;
+  border-radius: 13px 6px 13px 6px;
+  box-shadow: 0 0 0 1px #835521, 0 2px 2px #724c3373;
+  background: #325464;
+}
+.progression-drawer .manager-portrait img { object-position: center 15%; }
+.progression-drawer .manager-portrait span { background: linear-gradient(0deg,#183642 65%,#17344080); padding: 4px 2px 2px; color: #ffe5a5; font-size: 9px; }
+.progression-drawer .manager-details { padding: 0; }
+.progression-drawer .manager-role { color: #72502b; font-size: 10px; }
+.progression-drawer .manager-details h3 { font-size: 15px; color: var(--ticket-ink); margin: 0; }
+.progression-drawer .manager-action { grid-column: 3; margin: 0; }
+.progression-drawer .manager-action > button,
+.progression-drawer .trade-contract > button {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  gap: 0;
+  padding: 4px 8px;
+  min-height: 40px;
+  border-radius: 7px;
+  border: 1px solid #536524;
+  background: linear-gradient(#85a94d,#527a32);
+  color: #fff3d0;
+  box-shadow: inset 0 1px #c9db8c, inset 0 -2px #476326, 0 1px 1px #6b4226;
+  line-height: 1.5;
+  font-size: 11px;
+  font-weight: 800;
+}
+.progression-drawer .manager-action > button > span { margin: 0; }
+.progression-drawer .manager-action strong,
+.progression-drawer .trade-contract > button strong { font-size: 10px; color: inherit; }
+.progression-drawer .manager-action > button:disabled,
+.progression-drawer .manager-action .manager-unlock,
+.progression-drawer .trade-contract > button:disabled {
+  opacity: 1;
+  color: #5a452c;
+  border-color: #a8895b;
+  background: linear-gradient(#e7d3a9,#cbb486);
+  box-shadow: inset 0 1px #fcf0d1, 0 1px 0 #9a7b54;
+}
+.progression-drawer .manager-action small { color: #854626; }
+.manager-profile { grid-column: 2 / -1; min-width: 0; border-top: 1px solid #b48a5159; }
+.manager-profile summary { display: flex; align-items: center; justify-content: space-between; cursor: pointer; color: #6d552f; padding: 4px 0; }
+.manager-profile summary::marker { content: ""; }
+.manager-profile summary::-webkit-details-marker { display: none; }
+.manager-profile[open] summary > svg { transform: rotate(180deg); }
+.manager-profile .manager-perk { font-size: 10px; margin: 0; color: #455d28; }
+.manager-profile p { color: var(--ticket-detail); font-size: 11px; line-height: 1.7; }
+.progression-drawer .manager-training { margin: 5px 0 3px; }
+.progression-drawer .manager-training i { background: #b59d76; }
+.progression-drawer .manager-training i.filled { background: #5d803c; }
+.progression-drawer .manager-summary p { margin-top: 0; }
+
+.progression-drawer .trade-contract { opacity: 1; }
+.progression-drawer .trade-contract-icon { border: 0; background: transparent; width: 45px; }
+.trade-contract-icon img { width: 44px; height: 39px; object-fit: contain; filter: drop-shadow(0 2px 1px #673b2a55); }
+.progression-drawer .trade-contract h3,
+.progression-drawer .active-contract h3 { color: var(--ticket-ink); }
+.progression-drawer .trade-contract p,
+.progression-drawer .trade-contract-meta,
+.progression-drawer .active-contract > p,
+.progression-drawer .contract-countdown > span { color: var(--ticket-detail); }
+.progression-drawer .trade-contract-meta { flex-wrap: wrap; }
+.progression-drawer .trade-contract-meta b,
+.progression-drawer .contract-live { color: #456329; }
+.progression-drawer .contract-live i { background: #719345; }
+.progression-drawer .contract-countdown strong,
+.progression-drawer .contract-track > svg { color: #795421; }
+.progression-drawer .contract-track { background: #b7a077; }
+
+.progression-drawer .daily-calendar {
+  grid-template-columns: repeat(3, minmax(0,1fr));
+  gap: 5px;
+  padding: 0 7px 8px;
+  background: linear-gradient(120deg,#e3c595,#f7dfb3,#dabb8a);
+  border: 1px solid #946335;
+  border-radius: 9px;
+}
+.calendar-rings { display: flex; grid-column: 1 / -1; justify-content: space-around; height: 13px; margin: -5px 0 1px; }
+.calendar-rings i { width: 8px; height: 17px; border: 1px solid #604937; border-radius: 5px; background: linear-gradient(90deg,#4c4034,#d1c9b7 37%,#8b8171 65%,#574b3c); box-shadow: 0 2px 1px #6b452d; }
+.progression-drawer .daily-day {
+  position: relative;
+  min-height: 94px;
+  padding: 7px 2px;
+  gap: 3px;
+  border: 1px solid #c5a173;
+  background: var(--ticket-paper);
+  border-radius: 7px;
+  box-shadow: inset 0 1px #fff2d2;
+}
+.progression-drawer .daily-day span { font-weight: 700; color: #684326; font-size: 11px; }
+.progression-drawer .daily-day strong { font-weight: 800; color: var(--ticket-ink); font-size: 14px; }
+.progression-drawer .daily-day small { color: var(--ticket-detail); font-size: 9px; }
+.progression-drawer .daily-day .day-symbol { display: grid; place-items: center; }
+.progression-drawer .daily-day .day-symbol svg,
+.workshop-receipt .prize-symbol svg { stroke: #946020; stroke-width: 1.8; fill: #f5be4f; filter: drop-shadow(0 1px 0 #fff7d5); }
+.progression-drawer .daily-day:nth-of-type(odd):not(.grand) .day-symbol svg { stroke: #a34e28; fill: #e9a45a; }
+.progression-drawer .daily-day.today { border-color: #aa6e24; box-shadow: inset 0 0 0 2px #e9b74b; }
+.progression-drawer .daily-day.claimed { opacity: 1; }
+.progression-drawer .daily-day .day-check {
+  position: absolute; inset-inline-end: 4px; top: 4px;
+  display: grid; place-items: center; width: 15px; height: 15px;
+  border-radius: 50%; background: #638536; border: 1px solid #4a672c;
+}
+.progression-drawer .daily-day .day-check svg { color: #fff4cf; width: 12px; height: 12px; stroke-width: 3; }
+.progression-drawer .daily-day.grand {
+  min-height: 68px; grid-column: 1 / -1; display: grid;
+  grid-template-columns: auto auto; grid-template-rows: auto auto auto;
+  column-gap: 16px; row-gap: 0; align-items: center; justify-content: center;
+  background: radial-gradient(ellipse at 28% 45%,#ffeaa6,transparent 52%),linear-gradient(115deg,#d79324,#ffd875 54%,#d58d1c);
+  border-color: #b07420; box-shadow: inset 0 0 0 2px #ffe19a;
+}
+.progression-drawer .daily-day.grand .day-symbol { grid-column: 1; grid-row: 1 / 4; }
+.progression-drawer .daily-day.grand .day-symbol svg { width: 41px; height: 41px; }
+.progression-drawer .daily-day.grand :is(strong,small,span:first-child) { grid-column: 2; }
+.progression-drawer .daily-claim { margin-top: 11px; }
+.progression-drawer .daily-error { padding: 10px; margin-top: 9px; border: 1px solid #b98d60; background: #4c3123; }
+.progression-drawer .daily-error p { color: #ffe2ae; margin: 0; }
+.progression-drawer .daily-server-note { line-height: 1.65; text-align: center; }
+
+.reward-backdrop {
+  padding: max(12px, env(safe-area-inset-top,0px)) max(12px, env(safe-area-inset-right,0px)) max(12px, env(safe-area-inset-bottom,0px)) max(12px, env(safe-area-inset-left,0px));
+  background: #16282d38;
+  backdrop-filter: none;
+}
+.reward-backdrop .workshop-receipt {
+  width: min(100%,415px);
+  padding: 12px 14px 14px;
+  max-height: calc(100dvh - 32px - env(safe-area-inset-top,0px) - env(safe-area-inset-bottom,0px));
+  gap: 0;
+  background: var(--ticket-wood);
+  border: 2px solid #563624;
+  border-radius: 19px 19px 13px 13px;
+  box-shadow: inset 0 0 0 2px #cf8f61, inset 0 0 0 5px #7b412b, 0 7px 20px #18110c66;
+  color: #ffe7b9;
+  scrollbar-color: #b98a54 #6c432d;
+}
+.workshop-receipt > * { flex: none; }
+.workshop-receipt .receipt-header { padding: 0 24px 5px; min-height: 48px; }
+.workshop-receipt .receipt-message {
+  width: 100%; padding: 8px 10px; margin: 7px 0;
+  font-size: 12px; text-align: center; font-weight: 500; color: #56391e;
+}
+.workshop-receipt .receipt-message strong { color: #3a2918; font-weight: 800; }
+.workshop-receipt .reward-art,
+.workshop-receipt .offline-crate {
+  width: 100%;
+  height: 119px;
+  margin: 0;
+  display: grid;
+  place-items: center;
+  background: radial-gradient(ellipse at center, #fbd38050, transparent 62%);
+}
+.workshop-receipt .reward-art > img,
+.workshop-receipt .offline-crate > img { width: 95%; height: 100%; max-width: 145px; object-fit: contain; filter: drop-shadow(0 3px 2px #54351d70); }
+.workshop-receipt .reward-art-badge { width: 28px; height: 28px; bottom: 11%; right: calc(50% - 57px); color: #fff2c7; background: #668736; border: 1px solid #c4c974; }
+.workshop-receipt .reward-values,
+.workshop-receipt .result-prizes,
+.workshop-receipt .offline-ledger {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0,1fr);
+  align-items: stretch;
+  gap: 6px;
+  width: 100%;
+  margin: 9px 0 12px;
+}
+.workshop-receipt .workshop-prize {
+  display: flex; flex-direction: column; justify-content: center; align-items: center;
+  min-height: 69px; padding: 6px 2px; gap: 2px;
+  border: 1px solid var(--ticket-border); border-radius: 7px; background: var(--ticket-paper);
+}
+.workshop-receipt .workshop-prize strong { color: #3c2816; font-size: 16px; line-height: 1.45; font-weight: 800; }
+.workshop-receipt .workshop-prize small { color: #654726; font-size: 9px; text-align: center; }
+.workshop-receipt .prize-symbol { display: grid; place-items: center; flex: none; }
+.workshop-receipt .prize-symbol svg { width: 25px; height: 25px; }
+.workshop-receipt .workshop-prize:nth-child(2) .prize-symbol svg { fill: #aec7bd; stroke: #496b6a; }
+.workshop-receipt .workshop-prize:nth-child(3) .prize-symbol svg { fill: #ffb666; stroke: #97532a; }
+.workshop-receipt .receipt-subplaque { min-height: 28px; min-width: auto; border-radius: 7px; margin: 8px 0 -7px; padding: 1px 16px; font-size: 13px; z-index: 1; }
+.workshop-receipt .loot-cards { margin-top: 5px; }
+.workshop-receipt .loot-card { min-height: 118px; max-width: 140px; border: 2px solid #c49746; background: var(--ticket-enamel); border-radius: 8px; padding: 6px; box-shadow: 0 2px 1px #50321c; }
+.workshop-receipt .loot-card .tower-asset { width: 76px; height: 72px; }
+.workshop-receipt .loot-card strong { color: #ffe5ab; }
+.workshop-receipt .loot-card small { color: #d7dfd5; }
+.workshop-receipt .loot-card-count { color: #fff0bd; border-color: #bd954f; background: #5f461c; }
+.workshop-receipt .reward-saved { font-size: 10px; margin-top: 7px; color: #ffe2af; }
+.workshop-receipt .battle-crest {
+  flex-direction: column;
+  position: relative;
+  padding-bottom: 0;
+}
+.battle-crest .crest-emblem {
+  z-index: 1;
+  display: grid; place-items: center;
+  width: 43px; height: 39px; margin-bottom: -4px;
+  border: 2px solid #c18b38; border-radius: 50% 50% 35% 35%;
+  color: #ffe4a2; background: linear-gradient(#eac056,#ac751a);
+  box-shadow: inset 0 1px 0 #fff2b5, 0 1px 2px #50321c;
+}
+.crest-emblem svg { stroke: #70471a; fill: #fcd871; padding: 3px; filter: drop-shadow(0 1px #fff0b1); }
+.lost .crest-emblem { background: linear-gradient(#a1694c,#734735); }
+.lost .crest-emblem svg { fill: #ffcb91; }
+.workshop-receipt .battle-crest .receipt-plaque { min-width: 60%; border-radius: 17px 17px 35% 35% / 14px 14px 10px 10px; }
+.workshop-receipt .result-stars { margin: 6px 0 0; gap: 6px; height: 27px; }
+.workshop-receipt .result-stars svg { width: 22px; height: 22px; color: #ce9963; }
+.workshop-receipt .result-stars svg:nth-child(2) { width: 26px; height: 26px; margin-top: -4px; }
+.workshop-receipt .result-stars .earned { color: #ffc644; filter: drop-shadow(0 2px #855016); }
+.workshop-receipt .result-stats { flex-direction: column; gap: 3px; margin: 2px 0 8px; padding: 0; border: none; }
+.workshop-receipt .result-stats > span { justify-content: flex-start; gap: 7px; padding: 4px 9px; color: #654627; font-size: 11px; }
+.workshop-receipt .result-stats svg { color: #766135; }
+.workshop-receipt .result-stats b { margin-inline-start: auto; color: #392817; font-weight: 800; font-size: 11px; }
+.workshop-receipt .auto-battle-control { min-height: 33px; margin: 0 0 6px; color: #ffe5bb; font-size: 11px; }
+.workshop-receipt .auto-battle-control input { accent-color: #69823a; width: 19px; height: 19px; }
+.workshop-receipt .result-next { min-height: 38px; margin-top: 5px; color: #ffe1a8; font-size: 11px; }
+.workshop-receipt .defeat-tip { width: 100%; padding: 10px; margin: 5px 0 9px; border-color: var(--ticket-border); background: var(--ticket-paper); border-radius: 7px; color: #914c2c; }
+.workshop-receipt .defeat-tip strong { color: #643b24; }
+.workshop-receipt .defeat-tip p { color: var(--ticket-detail); }
+.workshop-receipt .offline-ledger { margin: 4px 0 2px; }
+.workshop-receipt .offline-note { color: #ffe0ad; font-size: 11px; line-height: 1.7; margin: 1px 8px 10px; text-align: center; }
+.progression-drawer .primary-action,
+.workshop-receipt .primary-action {
+  display: flex; align-items: center; justify-content: center;
+  width: 100%; min-height: 46px; gap: 9px;
+  background: var(--ticket-brass); color: #432a11;
+  border: 2px solid #9c6316; border-radius: 19px;
+  box-shadow: var(--ticket-gold-edge); font-size: 16px; font-weight: 800; text-shadow: 0 1px #ffe790;
+}
+.progression-drawer .primary-action:disabled { background: linear-gradient(#d6c09c,#baa483); color: #604f39; border-color: #917456; text-shadow: none; box-shadow: inset 0 1px #eee0c6; opacity: 1; }
+.progression-drawer button:enabled:active,
+.workshop-receipt button:enabled:active { translate: 0 1px; }
+@media (max-width: 700px) {
+  .workshop-progress-overlay,
+  .reward-backdrop {
+    align-items: flex-end;
+    justify-content: center;
+    background: linear-gradient(0deg,#33271b24,transparent 62%);
+    backdrop-filter: none;
+  }
+  .workshop-progress-overlay .progression-drawer {
+    height: auto;
+    max-height: min(68dvh, calc(100dvh - 85px - env(safe-area-inset-top,0px)));
+    width: min(100%,440px);
+    padding-bottom: env(safe-area-inset-bottom,0px);
+  }
+  .workshop-progress-overlay .drawer-body { padding: 6px 10px 12px; }
+  .reward-backdrop { padding-bottom: max(5px,env(safe-area-inset-bottom,0px)); }
+  .reward-backdrop .workshop-receipt {
+    max-height: min(82dvh,calc(100dvh - 65px - env(safe-area-inset-top,0px) - env(safe-area-inset-bottom,0px)));
+    padding: 9px 11px 12px;
+  }
+}
+@media (max-width: 360px) {
+  .progression-drawer .journey-mission { grid-template-columns: 30px minmax(0,1fr) 31px; gap: 6px; }
+  .progression-drawer .mission-node { width: 30px; }
+  .progression-drawer .manager-card { grid-template-columns: 48px minmax(0,1fr) auto; gap: 3px 7px; }
+  .progression-drawer .manager-portrait { width: 48px; height: 65px; }
+  .workshop-receipt .receipt-header { padding-inline: 29px; }
+  .workshop-receipt .receipt-plaque { font-size: 16px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .reward-backdrop .workshop-receipt,
+  .workshop-progress-overlay .progression-drawer { animation: none; }
+}
+
+.workshop .drawer-overlay .progression-drawer { height: auto; max-height: min(71dvh,100%); }
+.workshop-receipt .battle-crest .crest-laurel {
+  width: 30px; height: 30px; stroke: #fac452; fill: #de9e31;
+  transform: scaleX(-1) rotate(-12deg);
+}
+.workshop-receipt .battle-crest .crest-laurel:last-child { transform: rotate(-12deg); }
+.workshop .daily-day .day-symbol .workshop-icon { width: 27px; height: 27px; }
+.workshop .daily-day.grand .workshop-icon { width: 43px; height: 43px; }
+.workshop .workshop-prize .workshop-icon { width: 29px; height: 26px; }
+@media (max-height: 520px) {
+  .workshop .drawer-overlay .progression-drawer { max-height: 100%; }
+}
+.progression-drawer .mission-payout { margin-top: 10px; }
+.workshop-receipt .reward-values { grid-auto-flow: row; grid-template-columns: repeat(auto-fit, minmax(62px,1fr)); }
+.workshop .workshop-prize .wk-ammo { --wk-icon: url('/assets/workshop/ammo.webp'); }

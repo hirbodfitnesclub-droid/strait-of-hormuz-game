@@ -1,0 +1,187 @@
+/* Harbor Workshop. These materials belong to the HUD; the landscape is rendered independently. */
+.game-shell.workshop {
+  --wk-ink: #392416;
+  --wk-cream: #fff1c9;
+  --wk-brass: #dca84d;
+  --wk-enamel: linear-gradient(165deg, #32647a 0%, #194557 43%, #0b2e3c 77%, #173f49 100%);
+  --wk-paper: linear-gradient(115deg, #f6e2b6, #f6dcaa 45%, #e9c38c);
+  --wk-wood: repeating-linear-gradient(2deg, transparent 0 7px, #4d281329 8px, transparent 10px 17px), linear-gradient(165deg, #ad7041, #7c462a 55%, #5e331c);
+  --wk-gold: linear-gradient(175deg, #ffe994, #ffc33b 40%, #f4a51d 84%, #d68516);
+  --wk-edge: inset 0 1px 1px #fff2b8, inset 0 -2px 2px #48270ba1, 0 0 0 1px #48301d, 0 3px 1px #3c241bcf, 0 5px 8px #0c172b4d;
+  --wk-header-bottom: calc(env(safe-area-inset-top, 0px) + 59px);
+  --wk-dock-bottom: calc(env(safe-area-inset-bottom, 0px) + 74px);
+  --wk-stud: radial-gradient(circle, #fff1b8 0.5px, #dfb263 1.6px, #7e572c 2.4px, #1d2a2a 3px, transparent 3.4px);
+}
+.workshop .workshop-icon {
+  display: inline-block; flex: 0 0 auto; height: 31px; width: 31px;
+  background: var(--wk-icon) center / contain no-repeat; pointer-events: none;
+}
+.wk-oil { --wk-icon: url('/assets/workshop/oil.webp'); }
+.wk-fuel { --wk-icon: url('/assets/workshop/fuel.webp'); }
+.wk-steel { --wk-icon: url('/assets/workshop/steel.webp'); }
+.wk-anchor { --wk-icon: url('/assets/workshop/anchor.webp'); }
+.wk-cash { --wk-icon: url('/assets/workshop/cash.webp'); }
+.workshop button:focus-visible { outline: 3px solid #fff3a4; outline-offset: 2px; }
+.game-shell.workshop .app-header {
+  z-index: 205; inset-inline: 8px; padding: 5px 0 0; height: auto;
+}
+.workshop .essential-resources {
+  position: relative; display: grid; grid-template-columns: 1.06fr repeat(3, 1fr); gap: 0;
+  height: 48px; border: 2px solid #d6a24e; border-radius: 13px;
+  background: var(--wk-enamel); box-shadow: var(--wk-edge); isolation: isolate;
+}
+.workshop .essential-resources::after {
+  content: ''; position: absolute; pointer-events: none; inset: 0; border-radius: 11px;
+  background: var(--wk-stud) left 0 top 0 / 7px 7px no-repeat,
+    var(--wk-stud) right 0 top 0 / 7px 7px no-repeat,
+    var(--wk-stud) left 0 bottom 0 / 7px 7px no-repeat,
+    var(--wk-stud) right 0 bottom 0 / 7px 7px no-repeat;
+}
+.workshop .essential-resources .resource-pill {
+  position: relative; display: flex; flex-direction: row-reverse; justify-content: center;
+  height: 44px; min-height: 44px; min-width: 0; gap: clamp(2px, .8vw, 7px); border: 0;
+  border-radius: 0; padding: 1px 4px; color: var(--wk-cream); background: transparent; box-shadow: none;
+}
+.workshop .resource-pill.resource-port { flex-direction: row; }
+.workshop .resource-pill + .resource-pill { border-inline-start: 2px solid #c69a52; box-shadow: 1px 0 #5a3c23; }
+.workshop .resource-pill + .resource-pill::after {
+  content: ''; position: absolute; inset-inline-start: -4px; top: 0; bottom: 0; width: 6px;
+  background: var(--wk-stud) center top / 6px 6px no-repeat, var(--wk-stud) center bottom / 6px 6px no-repeat;
+}
+.workshop .resource-pill strong { font-size: clamp(14px, 3.7vw, 19px); font-weight: 800; color: var(--wk-cream); text-shadow: 0 2px 0 #10252a; white-space: nowrap; direction: ltr; }
+.workshop .resource-pill:disabled { opacity: 1; cursor: default; }
+.workshop .resource-pill:not(:disabled):active { background-color: #ffda8922; }
+.workshop .resource-pill.low-resource strong { color: #ffce88; }
+.workshop .resource-pill:focus-visible { outline-offset: -4px; border-radius: 6px; }
+
+.workshop .hud-controls { top: var(--wk-header-bottom); left: 9px; gap: 6px; }
+.game-shell.workshop :is(.hud-control-btn,.map-view-toggle,.quick-build-button,.view-options,.context-alert,.targeting-prompt) {
+  color: var(--wk-cream); background: var(--wk-enamel); border: 1.5px solid var(--wk-brass); border-radius: 10px;
+  box-shadow: var(--wk-edge); backdrop-filter: none;
+}
+.workshop .hud-control-btn, .workshop .map-view-toggle { width: 44px; height: 44px; min-height: 44px; }
+.workshop .hud-control-btn > svg, .workshop .map-view-toggle svg { color: #ffe1a2; }
+.workshop .view-controls { bottom: calc(var(--wk-dock-bottom) + 89px); left: 9px; }
+.workshop .quick-build-button { position: absolute; right: 9px; bottom: calc(var(--wk-dock-bottom) + 89px); }
+.workshop .context-alert { top: var(--wk-header-bottom); right: 9px; transform: none; max-width: calc(100% - 72px); }
+.workshop .commander-progress { top: calc(var(--wk-header-bottom) + 42px); right: 9px; max-width: calc(100% - 80px); border-radius: 9px; padding: 5px 9px; background: var(--wk-enamel); border: 1px solid #cb9d5b; }
+.workshop .commander-progress > div { min-width: 0; }
+.workshop .peace-preview { top: calc(var(--wk-header-bottom) + 122px); right: 9px; }
+.workshop .bottom-navigation {
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 7px); height: 57px; width: calc(100% - 18px); min-width: 0; max-width: none;
+  padding: 3px; gap: 3px; border: 2px solid #996a39; border-radius: 13px; background: var(--wk-wood); box-shadow: var(--wk-edge);
+}
+.workshop .nav-item {
+  flex: 1; display: flex; flex-direction: row; align-items: center; justify-content: center; min-height: 45px;
+  gap: 4px; padding: 2px; border: 1px solid #e1b76b; border-bottom-color: #8d622f;
+  border-radius: 8px; background: var(--wk-enamel); color: var(--wk-cream); box-shadow: inset 0 1px #8caca74d, 0 1px 1px #3a261e;
+}
+.workshop .nav-item span { font-size: clamp(10px, 2.65vw, 13px); font-weight: 800; }
+.workshop .nav-item svg { width: 19px; color: #edc27a; flex-shrink: 0; }
+.workshop .nav-item:is(:active,.active) { color: var(--wk-ink); background: var(--wk-gold); }
+.workshop .idle-command-bar {
+  align-items: flex-end; bottom: var(--wk-dock-bottom); width: calc(100% - 18px);
+  min-height: 0; gap: 8px; padding: 5px 6px 6px; background: var(--wk-wood); border: 2px solid #ac793e;
+  border-radius: 13px; box-shadow: var(--wk-edge);
+}
+.workshop .idle-income-heading { display: flex; min-width: 0; gap: 3px; margin: 0 3px 3px; line-height: 1.4; color: #ffebcc; font-size: 9px; }
+.workshop .idle-income-heading > span { min-width: 0; }
+.workshop .idle-income-heading svg, .workshop .idle-income-heading strong { flex-shrink: 0; }
+.workshop .idle-income-heading strong { color: #fff1ad; }
+.workshop .collect-income, .workshop .collect-income:disabled {
+  min-height: 48px; height: auto; padding: 3px 9px; gap: 7px; background: var(--wk-gold); color: var(--wk-ink);
+  border: 2px solid #a26a27; border-radius: 22px; box-shadow: var(--wk-edge); text-shadow: 0 1px #ffeca1;
+}
+.workshop .collect-income:disabled { filter: saturate(.58); }
+.workshop .collect-income::after, .workshop .main-battle-action::after { content: none; }
+.workshop .collect-coin { height: 36px; width: 36px; background: var(--wk-icon) center / contain no-repeat; border: none; box-shadow: none; }
+.workshop .collect-income strong { font-size: clamp(14px, 4vw, 19px); line-height: 1.3; }
+.workshop .collect-income small { font-size: 11px; font-weight: 700; color: #5b3612; }
+.workshop .collect-income .bank-cap-bar { background: #997027; }
+.workshop .idle-battle-start {
+  align-self: end; min-width: 93px; min-height: 48px; padding: 4px 6px; border: 1.5px solid #ddbd79; border-radius: 13px;
+  color: var(--wk-cream); background: linear-gradient(160deg,#53866c,#32634d 50%,#244c3c); box-shadow: var(--wk-edge);
+}
+.workshop .idle-battle-start :is(strong,small,svg), .workshop .idle-battle-start > span { color: #fff3ce; }
+.workshop .production-boost { min-width: 39px; height: 48px; padding: 0 2px; justify-content: center; gap: 0; }
+.workshop .production-boost > span { height: 24px; width: 28px; }
+.workshop .production-boost small, .workshop .production-boost strong { line-height: 1.15; color: #fff2bc; }
+.workshop .idle-control-divider { display: none; }
+.workshop .quick-coach {
+  bottom: calc(var(--wk-dock-bottom) + 88px); width: max-content; max-width: calc(100% - 120px); gap: 4px;
+  color: var(--wk-ink); border: 1.5px solid #ac8045; border-radius: 11px; background: var(--wk-paper); box-shadow: var(--wk-edge);
+}
+.workshop .quick-coach p, .workshop .quick-coach p b, .workshop .quick-coach .coach-step-label { color: var(--wk-ink); }
+.workshop .quick-coach button { flex-shrink: 0; }
+.workshop .quick-coach p { min-width: 0; white-space: normal; }
+.workshop .war-essentials { z-index: 18; top: var(--wk-header-bottom); left: 9px; right: 9px; gap: 4px; pointer-events: none; }
+.workshop .war-strip { direction: ltr; display: grid; grid-template-columns: minmax(56px, 1fr) minmax(84px, 1.5fr) 46px minmax(55px, .7fr); gap: 5px; border: 0; background: none; min-height: 0; padding: 0; box-shadow: none; }
+.workshop .war-strip > * { display: flex; flex-direction: row; justify-content: center; align-items: center; height: 44px; min-height: 44px; min-width: 0; gap: 4px; border: 1.5px solid #c28e44; border-radius: 10px; box-shadow: var(--wk-edge); }
+.workshop .war-hearts { background: linear-gradient(160deg, #a04535, #602e2a); color: #ff7650; }
+.workshop .war-hearts strong, .workshop .war-wave { color: #fff1c8; font-weight: 800; font-size: 16px; }
+.workshop .war-wave { direction: rtl; color: var(--wk-ink); background: var(--wk-paper); }
+.workshop .war-strip .main-battle-action { pointer-events: auto; padding: 2px; color: #fff0c0; background: var(--wk-enamel); }
+.workshop .war-strip .battle-speed { pointer-events: auto; color: #4e330f; background: var(--wk-gold); }
+.workshop .war-status, .workshop .objective-bar { direction: rtl; display: flex; flex-wrap: wrap; align-items: center; gap: 7px; padding: 4px 9px; background: var(--wk-enamel); border: 1px solid #ba9758; border-radius: 8px; box-shadow: 0 2px 2px #14222580; }
+.workshop .war-remaining, .workshop .objective-bar span { color: var(--wk-cream); }
+.workshop .war-progress { min-width: 18px; height: 6px; background: #091f26; }
+.workshop .war-progress > i { background: linear-gradient(#eac478,#cc9038); }
+.workshop.in-battle .hud-controls { top: calc(var(--wk-header-bottom) + 119px); }
+.workshop.in-battle .context-alert { top: calc(var(--wk-header-bottom) + 148px); }
+.workshop.in-battle .commander-progress { top: calc(var(--wk-header-bottom) + 189px); }
+.workshop.in-battle .boss-bar { top: calc(var(--wk-header-bottom) + 111px); width: calc(100% - 84px); left: auto; right: 10px; transform: none; }
+.workshop.in-battle .combo-badge { top: 42%; left: 12px; transform: none; }
+.workshop .command-bar { width: fit-content; max-width: calc(100% - 18px); min-height: 0; bottom: var(--wk-dock-bottom); border: 0; padding: 0; background: none; box-shadow: none; }
+.workshop .support-actions { display: flex; justify-content: center; gap: clamp(7px, 3.5vw, 18px); }
+.workshop .support-button { color: #fff1c7; font-weight: 800; width: clamp(54px, 15vw, 70px); gap: 0; }
+.workshop .support-button .support-icon { width: clamp(47px, 13vw, 57px); height: clamp(47px, 13vw, 57px); border: 3px solid #e3b45f; border-radius: 50%; color: #ffde89; background: radial-gradient(ellipse at 35% 27%,#44768a,#155169 52%,#072e43 89%); box-shadow: var(--wk-edge); animation: none; }
+.workshop .support-icon > svg:first-child { height: 26px; width: 26px; filter: drop-shadow(0 2px 1px #0c243c); }
+.workshop .support-button.spell-emp .support-icon { color: #b4edff; }
+.workshop .support-button.spell-overdrive .support-icon { color: #ffb270; }
+.workshop .support-button > span:last-child { position: relative; margin-top: -3px; padding: 1px 7px; border-radius: 7px; border: 1px solid #c3a26d; color: #fff1cf; background: #133749; line-height: 1.45; text-align: center; font-size: 10px; }
+.workshop .support-button.cooling .cooldown-count { color: #fff9dc; }
+.workshop .toast { z-index: 209; background: var(--wk-enamel); border-color: var(--wk-brass); color: var(--wk-cream); }
+@media (max-width: 370px) {
+  .workshop .resource-pill .workshop-icon { width: 26px; height: 26px; }
+  .workshop .nav-item { gap: 2px; }
+  .workshop .nav-item svg { width: 16px; }
+  .workshop .idle-command-bar { gap: 4px; }
+  .workshop .collect-coin { width: 28px; height: 28px; }
+  .workshop .idle-battle-start { min-width: 83px; }
+  .workshop .quick-coach { max-width: calc(100% - 85px); }
+}
+
+/* Mount every sheet inside the same portrait viewport as the canvas. The
+   header stays in place even when a short screen needs a scrolling sheet. */
+.game-shell.workshop :is(.drawer-overlay,.tower-sheet-backdrop,.radial-backdrop,.reward-backdrop,.compact-dialog-backdrop) { position: absolute; }
+.workshop .drawer-overlay {
+  inset: 0; display: flex; align-items: flex-end; justify-content: center; padding: var(--wk-header-bottom) 8px max(8px, env(safe-area-inset-bottom, 0px));
+  background: linear-gradient(0deg,#13202ba6, #11263238 65%,transparent 94%); backdrop-filter: none;
+}
+.workshop .drawer-overlay .drawer {
+  width: min(100%, 488px); height: min(71dvh, 720px); max-height: 100%; min-height: 0; border: 2px solid #714b2a;
+  border-radius: 16px; color: var(--wk-ink); background: var(--wk-wood); box-shadow: inset 0 0 0 2px #c68c58, 0 4px 0 #432d22, 0 8px 15px #111a204d;
+  overflow: hidden; display: flex; flex-direction: column; padding: 4px;
+}
+.workshop .drawer-body { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
+.workshop .workshop-panel .drawer-header {
+  position: relative; flex: none; min-height: 54px; margin: 3px 4px 0; padding: 4px 11px; gap: 6px;
+  border: 1.5px solid #dbb573; border-radius: 9px; background: var(--wk-enamel); box-shadow: var(--wk-edge);
+}
+.workshop .workshop-title { flex: 1; min-width: 0; }
+.workshop .workshop-title h2 { margin: 0; font-size: clamp(16px,4vw,20px); color: #fff1c4; text-shadow: 0 2px #152e36; }
+.workshop .workshop-title span { color: #e8d6b3; font-size: 10px; }
+.workshop .workshop-panel .drawer-header .icon-close {
+  flex: none; width: 44px; height: 44px; border: 1.5px solid #cea563; border-radius: 10px;
+  background: linear-gradient(165deg, #a45e44, #793d2f); color: #fff1cc; box-shadow: var(--wk-edge);
+}
+.workshop .reward-backdrop { padding-top: var(--wk-header-bottom); }
+.workshop .reward-backdrop > section { max-height: calc(100% - 3px); }
+@media (max-height: 560px) {
+  .workshop .drawer-overlay .drawer { height: 100%; }
+  .workshop .workshop-panel .drawer-header { min-height: 46px; padding-block: 0; }
+  .workshop .idle-income-heading { display: none; }
+}
+.workshop-modal-open .game-map > :is(.bottom-navigation, .hud-controls, .view-controls, .quick-build-button, .context-alert, .quick-coach, .commander-progress, .command-bar, .idle-command-bar, .peace-preview, .war-essentials, .battle-announcement, .combo-badge, .boss-bar) {
+  visibility: hidden; pointer-events: none;
+}

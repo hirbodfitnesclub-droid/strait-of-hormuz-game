@@ -9,7 +9,7 @@
 
 ## مستندات
 
-مرجع کامل نسخهٔ 0.7.0: [فهرست مستندات](strait-of-hormuz-game-docs/README.md)، [وضعیت واقعی و تست‌ها](strait-of-hormuz-game-docs/status.md)، [ساخت و انتشار](strait-of-hormuz-game-docs/release.md).
+مستندات نسخهٔ آزمایشی ۰٫۷٫۲ و رابط «کارگاه بندر» در این پوشه است. [فهرست مستندات](strait-of-hormuz-game-docs/README.md)، [وضعیت واقعی و تست‌ها](strait-of-hormuz-game-docs/status.md)، [ساخت و انتشار](strait-of-hormuz-game-docs/release.md).
 
 ## فناوری
 Next.js 16 + React 19 + TypeScript + Three.js — بسته‌بندی اندروید با Capacitor (پکیج `ir.hormuz.sovereign`).
@@ -23,4 +23,4 @@ bash android/gradlew -p android assembleDebug
 ```
 
 ## نسخه‌ها
-ساخت محلی در `android/app/build/outputs/` قرار می‌گیرد؛ خروجی‌ها داخل گیت نیستند. این مأموریت چیزی در GitHub Releases، فروشگاه یا محیط منتشر نکرده است. APK آزمایشی امضای debug دارد؛ انتشار با کلید مالک و پذیرش دستگاه واقعی انجام می‌شود.
+ساخت محلی در `android/app/build/outputs/` قرار می‌گیرد؛ خروجی‌ها داخل گیت نیستند. نسخه‌های آزمایشی را گردش‌کار android-test-release.yml از کامیت تعیین‌شده می‌سازد و پس از تأیید فایل و هش در GitHub Releases قرار می‌دهد. APK آزمایشی امضای debug دارد؛ انتشار با کلید مالک و پذیرش دستگاه واقعی انجام می‌شود.

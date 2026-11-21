@@ -1,10 +1,12 @@
 "use client";
 
-import { useEffect, useRef, useState, type Dispatch } from "react";
-import { ArrowUp, Blocks, Coins, Crosshair, Info, LockKeyhole, Trash2, X } from "lucide-react";
+import { useEffect, useRef, useState, type CSSProperties, type Dispatch } from "react";
+import Image from "next/image";
+import { ArrowUp, Castle, Crosshair, Info, LockKeyhole, Trash2, X } from "lucide-react";
 import { PRIORITY_LABELS, SLOTS, TOWERS, TOWER_KINDS, towerUpgradeCost, type Action, type GameState, type TowerKind } from "@/lib/game";
 import { compact, fa, sellRefund, TargetEmojis } from "./game-ui";
-import TowerModel from "./TowerModel";
+import TowerModel, { towerModelUrl } from "./TowerModel";
+import { useDialog } from "./useDialog";
 
 /* Radial slot menu (PRD §10.2): opens ON the tapped slot — upgrade top, priority
    left, sell bottom, details right; empty slots offer direct build in an arc. */
@@ -20,6 +22,7 @@ type Projector = { projectSlot: (id: number) => { x: number; y: number } | null 
 export default function SlotRadial({ game, slot, dispatch, close, openSheet, onBuild, feedback, notify }: Props) {
   const [pos, setPos] = useState<{ x: number; y: number } | null>(null);
   const [confirmSell, setConfirmSell] = useState(false);
+  const dialog = useDialog<HTMLDivElement>(close);
   const posRef = useRef<{ x: number; y: number } | null>(null);
 
   useEffect(() => {
@@ -39,7 +42,7 @@ export default function SlotRadial({ game, slot, dispatch, close, openSheet, onB
   const slotDef = SLOTS[slot];
   const tower = game.towers.find(t => t.slot === slot);
   const locked = !game.islands.includes(slotDef.island);
-  const style = pos ? { left: pos.x, top: pos.y } : { left: "50%", top: "46%" };
+  const style = pos ? { "--slot-x": `${pos.x}px`, "--slot-y": `${pos.y}px` } as CSSProperties : undefined;
 
   const upgradeCost = tower ? towerUpgradeCost(tower) : null;
   const canAffordUpgrade = !!upgradeCost && game.cash >= upgradeCost.cash && game.steel >= upgradeCost.steel;
@@ -60,11 +63,10 @@ export default function SlotRadial({ game, slot, dispatch, close, openSheet, onB
     close();
   };
 
-  const arc: [number, number][] = [[-92, -44], [0, -96], [92, -44], [-92, 44], [0, 96], [92, 44]];
-
   return <>
-    <div className="radial-backdrop" onPointerDown={close} />
-    <div className="slot-radial" style={style} role="dialog" aria-label={`منوی جایگاه ${slotDef.label}`} onPointerDown={e => e.stopPropagation()}>
+    <div className="radial-backdrop workshop-wheel-backdrop" onPointerDown={close} />
+    <div className={`slot-radial workshop-wheel ${locked ? "wheel-locked" : tower ? "wheel-equipped" : "wheel-empty"}`} ref={dialog} style={style} role="dialog" aria-modal="true" tabIndex={-1} aria-label={`منوی جایگاه ${slotDef.label}`} onPointerDown={e => e.stopPropagation()}>
+      <div className="workshop-wheel-pivot">
       {locked ? <>
         <div className="radial-center locked"><LockKeyhole size={20} /><strong>{slotDef.label}</strong><small>این جزیره هنوز آزاد نشده است</small></div>
         <button className="radial-btn radial-close" onClick={close} aria-label="بستن"><X size={16} /></button>
@@ -89,21 +91,24 @@ export default function SlotRadial({ game, slot, dispatch, close, openSheet, onB
         </div>
         <button className="radial-btn radial-close" onClick={close} aria-label="بستن"><X size={16} /></button>
       </> : <>
-        {TOWER_KINDS.map((kind, i) => {
+        {TOWER_KINDS.map(kind => {
           const def = TOWERS[kind];
           const afford = game.cash >= def.cost && game.steel >= def.steel;
-          return <button key={kind} className={`radial-kind ${afford ? "" : "unaffordable"}`} style={{ transform: `translate(calc(-50% + ${arc[i][0]}px), calc(-50% + ${arc[i][1]}px))` }}
-            onClick={() => { if (afford) { onBuild(kind); } else { notify("منابع کافی نیست — درآمد جمع کن یا فولاد بساز."); openSheet(); } }} aria-label={`ساخت ${def.short}`}>
-            <span className={`radial-kind-model tower-color-${kind}`}><TowerModel kind={kind} tier={1} preview /></span>
-            <strong>{def.short}</strong><TargetEmojis targets={def.targets} /><small><Coins size={10} /> {compact(def.cost)} · <Blocks size={10} /> {fa(def.steel)}</small>
+          return <button key={kind} className={`radial-kind ${afford ? "" : "unaffordable"}`}
+            onClick={() => { if (afford) { onBuild(kind); } else { notify("منابع کافی نیست — درآمد جمع کن یا فولاد بساز."); openSheet(); } }}
+            aria-label={`ساخت ${def.short}`} aria-describedby={`build-price-${kind}`}>
+            <span className="radial-kind-model"><Image src={towerModelUrl(kind, 1)} width={72} height={72} alt="" unoptimized draggable={false} /></span>
+            <strong>{def.short}</strong><TargetEmojis targets={def.targets} /><small><i className="workshop-icon wk-cash" aria-hidden="true" /> {compact(def.cost)} <i className="workshop-icon wk-steel" aria-hidden="true" /> {fa(def.steel)}</small>
+            <span id={`build-price-${kind}`} hidden>{fa(def.cost)} دلار و {fa(def.steel)} فولاد{!afford && "، منابع کافی نیست"}</span>
           </button>;
         })}
         <div className="radial-center empty">
-          <strong>{slotDef.label}</strong><small>جایگاه خالی — برجک انتخاب کنید</small>
-          <button className="radial-details" onClick={openSheet}><Info size={13} /> مقایسه و جزئیات</button>
+          <Castle size={23} aria-hidden="true" /><strong>انتخاب برجک</strong><small>{slotDef.label}</small>
         </div>
+        <button className="radial-details" onClick={openSheet}><Info size={16} /> مقایسه و جزئیات</button>
         <button className="radial-btn radial-close" onClick={close} aria-label="بستن"><X size={16} /></button>
       </>}
+      </div>
     </div>
   </>;
 }

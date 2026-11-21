@@ -1,0 +1,201 @@
+/* Command boards share the wood backing, brass edges and enamel signs of the port HUD. */
+.command-backdrop,
+.command-pause,
+.news-bulletin,
+.diary-card {
+  --command-wood: repeating-linear-gradient(3deg, transparent 0 4px, #b0703314 5px, transparent 7px 11px), linear-gradient(100deg, #4a291d, #795038 45%, #4e3024);
+  --command-enamel: linear-gradient(174deg, #315a68, #194451 40%, #173641 75%, #294650);
+  --command-paper: radial-gradient(ellipse at 62% 14%, #fff0c4, transparent 74%), linear-gradient(121deg, #d9b277, #f4dcab 44%, #e3c18b);
+  --command-green: linear-gradient(#638b40, #3c6c32 52%, #2e562f);
+  --command-yellow: linear-gradient(#ffdc70, #f2b43b 54%, #d99526);
+  --command-red: linear-gradient(#b05b4b, #914334 54%, #793729);
+}
+.game-shell .command-backdrop {
+  position: absolute;
+  align-items: flex-end;
+  inset: 0;
+  padding: calc(env(safe-area-inset-top, 0px) + 58px) 12px max(12px, env(safe-area-inset-bottom, 0px));
+  background: linear-gradient(0deg, #17171565, #09253418 68%, transparent 86%);
+}
+.game-shell .command-backdrop :is(.more-menu, .quick-guide, .exit-dialog),
+.game-shell :is(.command-pause, .news-bulletin, .diary-card) {
+  border: 2px solid #4e3021;
+  border-radius: 13px;
+  box-shadow: inset 0 0 0 1px #e5b46e, inset 0 0 0 4px #89582f, inset 0 0 0 5px #bc8b50, 0 3px 0 #30241f, 0 9px 22px #07131c80;
+  background: var(--command-wood);
+  color: #fff0c8;
+}
+.game-shell .command-backdrop :is(.more-menu, .quick-guide, .exit-dialog) {
+  flex-shrink: 1;
+  width: min(100%, 414px);
+  max-height: 100%;
+  margin: 0;
+  padding: 10px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: #d3aa6e #4e3224;
+  align-self: flex-end;
+}
+.game-shell .workshop-menu-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+.workshop-menu-grid .command-heading, .command-titleplate, .command-pause h2, .game-shell .news-head {
+  background: var(--command-enamel);
+  border: 1px solid #c99b57;
+  border-radius: 6px;
+  box-shadow: inset 0 0 0 1px #112f39, inset 0 3px 0 #8ca9a44a, 0 2px 1px #201910a8;
+  color: #ffe6a8;
+  text-shadow: 0 2px #192b30;
+}
+.workshop-menu-grid .command-heading {
+  display: flex;
+  align-items: center;
+  grid-column: 1 / -1;
+  grid-row: 1;
+  padding-inline: 11px 43px;
+}
+.workshop-menu-grid .command-heading h2, .game-shell .command-titleplate h2 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  color: #fff0c9;
+  font-size: 17px;
+}
+.workshop-menu-grid .command-help, .game-shell .workshop-menu-grid > .command-return, .command-titleplate .close-control, .game-shell .news-x {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  min-height: 44px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #ffe6ab;
+  padding: 0;
+}
+.workshop-menu-grid .command-help { margin-inline-start: auto; }
+.game-shell .workshop-menu-grid > .command-return { grid-column: 3; grid-row: 1; justify-self: end; }
+.game-shell .workshop-menu-grid > .command-plaque {
+  display: grid;
+  grid-template-columns: 35px 1fr 74px;
+  align-items: center;
+  grid-column: 1 / -1;
+  min-height: 63px;
+  padding: 2px 10px;
+  border: 2px solid #9a632c;
+  border-radius: 9px;
+  background: var(--command-paper);
+  box-shadow: inset 0 0 0 1px #ffe2a0, inset 0 -4px #be9257, 0 2px 2px #382116;
+  color: #423024;
+  text-align: center;
+}
+.game-shell .workshop-menu-grid > .command-plaque::before {
+  content: "";
+  position: absolute;
+  inset: 4px;
+  pointer-events: none;
+  background: radial-gradient(circle, #f2cf88 0 0.7px, #977141 1px 1.6px, transparent 2px) left top / 5px 5px no-repeat,
+              radial-gradient(circle, #f2cf88 0 0.7px, #977141 1px 1.6px, transparent 2px) right bottom / 5px 5px no-repeat;
+}
+.game-shell .workshop-menu-grid > .command-plaque.defense { background: var(--command-enamel); color: #ffe7ae; box-shadow: inset 0 0 0 1px #d7b279, inset 0 -4px #122f3b, 0 2px 2px #382116; }
+.command-plaque .plaque-text { display: grid; justify-items: center; padding-block: 5px; line-height: 1.25; }
+.game-shell .command-plaque strong { font-size: 20px; font-weight: 800; color: inherit; text-shadow: 0 1px #fff4d19c; }
+.game-shell .command-plaque.defense strong { text-shadow: 0 2px #12232f; }
+.game-shell .command-plaque small { font-size: 10px; font-weight: 600; margin-top: 4px; color: #715332; }
+.game-shell .command-plaque.defense small { color: #d9d1b2; }
+.plaque-chevron {
+  width: 27px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  justify-self: center;
+  background: var(--command-yellow);
+  color: #69411f;
+  border: 1px solid #a27033;
+  border-radius: 6px;
+  box-shadow: inset 0 1px #fff1ac, 0 2px #6d4a2b;
+}
+.command-plaque .more-icon { width: 68px; height: 48px; margin: 0; justify-self: center; }
+.plaque-tower-art { width: 66px; height: 50px; background: url('/assets/models/towers/cannon-3.png') center 47% / contain no-repeat; filter: drop-shadow(0 2px 1px #142930); }
+.plaque-chart-art {
+  position: relative; display: grid; place-items: center; width: 46px; height: 39px;
+  transform: rotate(-7deg); color: #906d40; filter: drop-shadow(1px 2px 1px #805c36);
+}
+.plaque-chart-art::before {
+  content: ""; position: absolute; inset: 4px 3px;
+  clip-path: polygon(0 12%, 34% 0, 66% 12%, 100% 0, 100% 87%, 66% 100%, 34% 88%, 0 100%);
+  background: radial-gradient(ellipse at 72% 31%, #c7643b 0 2px, transparent 3px),
+    linear-gradient(90deg, transparent 31%, #b78e5380 33%, transparent 36% 62%, #bf925890 66%, transparent 69%),
+    radial-gradient(ellipse at 15% 94%, #7fa5ac 35%, #a4b5a1 37% 40%, transparent 43%),
+    linear-gradient(132deg, #f6e1aa, #e0bf80);
+}
+.plaque-chart-art svg { position: relative; width: 46px; height: 39px; stroke-width: 1.25; fill: none; }
+.command-plaque.settings .more-icon > svg {
+  width: 40px; height: 40px; transform: rotate(-8deg);
+  color: #42555a; fill: #94a1a1; stroke-width: 2; filter: drop-shadow(1px 2px 0 #463b2d);
+}
+.game-shell .workshop-menu-grid > .command-station, .game-shell .command-utilities > button {
+  display: flex; align-items: center; justify-content: center; flex-direction: row; gap: 5px;
+  margin: 0; padding: 6px 4px; min-height: 44px;
+  border: 1px solid #ad8754; border-radius: 6px;
+  background: #243d40; color: #ffedc3; font-size: 11px;
+  box-shadow: inset 0 1px #5771716b, 0 1px #362717;
+}
+.command-station svg, .command-utilities svg { flex-shrink: 0; color: #e0b875; }
+.game-shell .command-utilities { gap: 5px; margin: 6px 0 0; }
+.game-shell .command-utilities > button { background: #4e3829; color: #f7e3ba; }
+.game-shell .command-utilities button > svg:last-child { margin: 0; color: #e0b875; }
+.command-event-badge { color: #ffe199; font-size: 9px; }
+.game-shell .command-titleplate, .game-shell .news-head { display: flex; align-items: center; gap: 8px; width: 100%; padding-inline: 11px 0; margin: 0; min-height: 44px; }
+.command-titleplate > button, .game-shell .news-x { margin-inline-start: auto; }
+.game-shell .quick-guide ol, .bulletin-paper, .game-shell .diary-item, .game-shell .diary-empty { background: var(--command-paper); border-radius: 7px; color: #443325; }
+.game-shell .quick-guide ol { margin: 7px 0; padding-inline: 12px; }
+.game-shell .quick-guide li { padding-block: 10px; border-color: #a6845360; }
+.game-shell .quick-guide li:last-child { border-bottom: 0; }
+.game-shell .quick-guide li > span { width: 32px; height: 34px; border-radius: 7px; border: 1px solid #98703f; background: var(--command-enamel); color: #ffe5a5; }
+.game-shell .quick-guide li strong { color: #4c3520; font-size: 13px; font-weight: 800; }
+.game-shell .quick-guide li p { color: #584537; font-size: 11px; }
+.game-shell .quick-guide .keyboard-hint { color: #f6ddb0; font-size: 10px; margin-top: 6px; }
+@media (pointer: coarse) { .game-shell .quick-guide .keyboard-hint { display: none; } }
+.game-shell .command-pause { display: grid; gap: 6px; padding: 9px; text-align: center; }
+.game-shell .pause-indicator.command-pause { z-index: 16; top: auto; bottom: 26%; min-width: 0; width: min(210px, 52%); backdrop-filter: none; }
+.game-shell .command-backdrop .exit-dialog { width: min(270px, 88%); margin-bottom: min(16dvh, 130px); }
+.game-shell .command-pause h2 { display: flex; align-items: center; justify-content: center; gap: 8px; min-height: 42px; margin: 0; font-size: 17px; }
+.game-shell .command-pause button, .game-shell .quick-guide .command-resume, .game-shell .news-actions > button {
+  pointer-events: auto; display: flex; align-items: center; justify-content: center; gap: 8px;
+  width: 100%; min-height: 44px; margin: 0; padding: 6px 10px;
+  border: 1px solid #b48a50; border-radius: 9px;
+  font-family: inherit; font-size: 13px; font-weight: 800;
+  box-shadow: inset 0 1px 0 #fff0ac9c, inset 0 -2px 0 #301f1155, 0 2px #32291c;
+}
+.game-shell .command-resume, .game-shell .quick-guide .command-resume { background: var(--command-green); color: #fff7d3; }
+.game-shell .command-save, .game-shell .news-actions > button:first-child { background: var(--command-yellow); color: #4d331b; }
+.game-shell .command-exit { background: var(--command-red); color: #fff0ce; }
+.game-shell .news-bulletin { width: min(420px, calc(100% - 24px)); bottom: max(12px, env(safe-area-inset-bottom, 0px)); max-height: calc(100% - 84px - env(safe-area-inset-top, 0px)); padding: 9px; }
+.game-shell .news-live { color: #ffe6ad; font-size: 12px; }
+.game-shell .news-op { color: #f6e7ca; font-size: 10px; opacity: 1; }
+.bulletin-paper { margin-top: 6px; padding: 10px 13px; }
+.bulletin-paper > small, .game-shell .diary-item small { font-size: 10px; font-weight: 700; color: #805b30; }
+.bulletin-paper h2 { font-size: 16px; font-weight: 800; margin: 2px 0; }
+.bulletin-paper p, .game-shell .diary-item p { font-size: 12px; line-height: 1.85; color: #504033; }
+.bulletin-paper .news-brief { border-top-color: #a5885b7d; margin-top: 5px; }
+.game-shell .news-chips { gap: 4px; }
+.game-shell .news-chips span { border: 1px solid #957b514a; border-radius: 4px; background: #fff0cd8a; color: #614328; }
+.game-shell .news-chips .news-warning { border-inline-start: 3px solid #9a5426; }
+.game-shell .news-actions { margin-top: 6px; gap: 6px; }
+.game-shell .news-actions .news-diary-btn { background: var(--command-enamel); color: #ffebc1; }
+.game-shell .diary-overlay { align-items: end; background: linear-gradient(0deg, #101b2473, #102a3326); padding: 12px; }
+.game-shell .diary-card { width: min(420px, 100%); max-height: calc(100% - 62px - env(safe-area-inset-top, 0px)); padding: 9px; margin-bottom: env(safe-area-inset-bottom, 0px); }
+.game-shell .diary-list { gap: 6px; padding-top: 6px; overscroll-behavior: contain; }
+.game-shell .diary-item { border: 0; border-inline-start: 4px solid #c49b52; }
+.game-shell .diary-item.victory { border-inline-start-color: #6a883d; }
+.game-shell .diary-item.defeat { border-inline-start-color: #a75242; }
+.game-shell .diary-empty { margin: 0; }
+@media (hover: hover) {
+  .game-shell .command-backdrop button:hover, .game-shell .command-pause button:hover, .game-shell .news-actions button:hover { filter: brightness(1.08); }
+}
+@media (max-height: 540px) {
+  .game-shell .pause-indicator.command-pause { bottom: 23%; width: min(230px, 70%); grid-template-columns: repeat(2, 1fr); }
+  .game-shell .pause-indicator.command-pause h2, .game-shell .pause-indicator .command-exit { grid-column: 1 / -1; }
+  .game-shell .command-backdrop .exit-dialog { margin-bottom: 0; }
+}

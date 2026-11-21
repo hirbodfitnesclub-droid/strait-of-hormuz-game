@@ -2,11 +2,11 @@
 
 import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 import {
-  Anchor, ArrowLeft, Award, Bell, Blocks, Check, ChevronLeft, CircleHelp,
-  Coins, Crosshair, Eye, EyeOff, Factory, FastForward, Flame, FlaskConical, Fuel, Heart, Home, Layers3,
+  Anchor, ArrowLeft, Award, Bell, Check, ChevronLeft, CircleHelp,
+  Coins, Crosshair, Eye, EyeOff, Factory, FastForward, Flame, FlaskConical, Heart, Home, Layers3,
   Map as MapIcon, Minus, Moon, MoreHorizontal, Navigation, Pause, Play, Plane, Plus,
-  Droplets, Rocket, Settings2, Shield, ShieldCheck, Ship, Sparkles, Sun, SunMoon, Swords, Target, Volume2,
-  VolumeX, X, Zap, Star, UsersRound, ClipboardList, Gift,
+  Rocket, Shield, ShieldCheck, Ship, Sparkles, Sun, SunMoon, Swords, Volume2,
+  X, Zap, Star, UsersRound, ClipboardList, Gift, Settings, Save, LogOut, ChevronRight,
 } from "lucide-react";
 import { SLOTS, BUILDINGS, TOWERS, gameReducer, getStats, hydrateGame, initialGame, enemyPosition, waveComposition, bossEnemy, antiAirWarning, interceptWarning, type BuildingId, type Spell, type TowerKind, platformCost, INTERCEPT_LINE } from "@/lib/game";
 import { BattleAudio, type BattleSound } from "@/lib/battle-audio";
@@ -38,6 +38,7 @@ const PLAYER_KEY = "hormuz-player-id", PREFERENCES_KEY = "hormuz-preferences-v2"
 // On a save conflict (409) the server's current state is backed up here
 // (with a timestamp); automatic cloud writes stop instead of overwriting either save.
 const SERVER_BACKUP_KEY = "hormuz-server-backup-v1";
+type Bulletin = { kind: "briefing" | "victory" | "defeat" | "final"; scenario: Scenario; wave: number };
 const spells: { id: Spell; name: string; short: string; icon: typeof Rocket; cooldown: number; key: string }[] = [
   { id: "strike", name: "باران بالستیک", short: "موشکی", icon: Rocket, cooldown: 60, key: "1" },
   { id: "emp", name: "پالس الکترومغناطیسی", short: "پالس EMP", icon: Zap, cooldown: 90, key: "2" },
@@ -98,7 +99,7 @@ export default function Game() {
   const [showMapTools, setShowMapTools] = useState(false);
   const [toast, setToast] = useState("");
   const [announcement, setAnnouncement] = useState<{ title: string; subtitle: string; type: "battle" | "success" | "power" } | null>(null);
-  const [bulletin, setBulletin] = useState<{ kind: "briefing" | "victory" | "defeat" | "final"; scenario: Scenario; wave: number } | null>(null);
+  const [bulletin, setBulletin] = useState<Bulletin | null>(null);
   const [diary, setDiary] = useState<DiaryEntry[]>([]);
   const [diaryOpen, setDiaryOpen] = useState(false);
   const [camera, setCamera] = useState<WorldCamera | null>(null);
@@ -193,10 +194,6 @@ export default function Game() {
     return () => { void listener.then(h => h.remove()).catch(() => {}); };
   }, []);
   const stats = getStats(game);
-  /* Real export $/s from the ECO team's stat (R11). Consumed defensively:
-     until getStats provides it, every "real rate" display stays hidden
-     instead of presenting the theoretical dollarRate as real income. */
-  const realExportRate = (stats as { realExportRate?: number }).realExportRate;
   // A scenario night is FORCED for the whole battle (checklist ۴٫۰) — the
   // manual mode and the ambient cycle resume once the battle ends.
   const scenarioNight = game.phase === "battle" && game.battle?.condition === "شب";
@@ -592,18 +589,38 @@ export default function Game() {
   const moreIsActive = moreOpen || panel === "hero" || panel === "events" || panel === "settings" || progressPanel !== null;
   const goMap = () => { setPanel(null); setProgressPanel(null); setMoreOpen(false); setTargeting(null); setSelectedSlot(null); setSelectedBuilding(null); feedback(); };
 
-  return <div className={`game-shell ${activeBattle ? "in-battle" : ""} ${focus ? "focus-on" : "focus-off"} ${cinematic ? "cinematic" : "effects-light"} ${reducedMotion ? "reduce-motion" : ""} ${coachTarget ? `coach-${coachTarget}` : ""} ${coachStep === 3 ? "coach-spell" : ""} ${game.hearts <= 5 && activeBattle ? "danger-low" : ""}`} dir="rtl">
-    {exitOpen && <div className="compact-dialog-backdrop"><section className="exit-dialog" role="alertdialog" aria-modal="true" aria-label="خروج از بازی"><h2>فرمانده، استراحت می‌کنی؟</h2><p>پیشرفتت ذخیره می‌شود. نبرد تا بازگشتت متوقف می‌ماند.</p><button className="primary-action" autoFocus onClick={() => setExitOpen(false)}>ادامهٔ بازی</button><button onClick={() => {try {writeSnapshot(localStorage, {...gameRef.current,shots:[],popups:[],lastSavedAt:Date.now()});void App.exitApp();}catch{notify("ذخیره انجام نشد؛ بازی را باز نگه دارید.");}}}>ذخیره و خروج</button></section></div>}
+  const saveCommand = () => {
+    try {
+      writeSnapshot(localStorage, { ...gameRef.current, shots: [], popups: [], lastSavedAt: hiddenAt.current ?? Date.now() });
+      notify("پیشرفت بازی روی دستگاه ذخیره شد.");
+      return true;
+    } catch {
+      notify("ذخیره انجام نشد. فضای خالی دستگاه را بررسی کنید.");
+      return false;
+    }
+  };
+
+  const modalOpen = interfacePaused || exitOpen || diaryOpen || !!bulletin;
+  const headerLocked = modalOpen || !!targeting;
+  return <div className={`game-shell workshop ${modalOpen ? "workshop-modal-open" : ""} ${activeBattle ? "in-battle" : ""} ${focus ? "focus-on" : "focus-off"} ${cinematic ? "cinematic" : "effects-light"} ${reducedMotion ? "reduce-motion" : ""} ${coachTarget ? `coach-${coachTarget}` : ""} ${coachStep === 3 ? "coach-spell" : ""} ${game.hearts <= 5 && activeBattle ? "danger-low" : ""}`} dir="rtl">
+    {exitOpen && <ExitDialog close={() => setExitOpen(false)} save={saveCommand} exit={() => {
+      if (saveCommand()) void App.exitApp().catch(() => notify("بازی ذخیره شد. برای خروج از دکمهٔ دستگاه استفاده کنید."));
+    }} />}
     <header className="app-header">
-      <div className="app-brand"><span className="brand-symbol"><Anchor size={22} /></span><div><strong>هرمز</strong><span>فرماندهی آب‌های آزاد</span></div></div>
-      <div className="essential-resources" aria-label="منابع اصلی">
-        <button className="resource-pill money" onClick={() => openPanel("economy")} aria-label={`دلار نفتی ${fa(game.cash)}`}><Coins size={18} /><span><small>دلار نفتی</small><strong>{compact(game.cash)}</strong></span>{typeof realExportRate === "number" && <em>+{fa(realExportRate, 1)}/ث</em>}</button>
-        <button className={`resource-pill ${game.oil >= stats.oilCapacity - 1 ? "low-resource" : ""}`} onClick={() => openPanel("economy")} aria-label={`نفت خام ${fa(game.oil)} از ${fa(stats.oilCapacity)} بشکه`}><Droplets size={17} /><span><small>نفت خام</small><strong>{compact(game.oil)}</strong></span></button>
-        <button className={`resource-pill ${game.fuel < 100 ? "low-resource" : ""}`} onClick={() => openPanel("economy")} aria-label={`سوخت ${fa(game.fuel)}`}><Fuel size={17} /><span><small>سوخت</small><strong>{compact(game.fuel)}</strong></span></button>
-        <button className="resource-pill" onClick={() => openPanel("economy")} aria-label={`فولاد ${fa(game.steel)}`} title={stats.steelRate > 0 ? `تولید فولاد: ${fa(Math.round(stats.steelRate * 10) / 10)} در ثانیه` : "فولاد تولید نمی‌شود — مجتمع فولاد را بسازید"}><Blocks size={17} /><span><small>فولاد{stats.steelRate <= 0 ? " · بدون تولید" : ""}</small><strong>{compact(game.steel)}</strong></span></button>
-        <button className={`resource-pill ${game.ammo < 100 ? "low-resource" : ""}`} onClick={() => openPanel("economy")} aria-label={`مهمات ${fa(game.ammo)}`}><Target size={18} /><span><small>مهمات</small><strong>{compact(game.ammo)}</strong></span></button>
+      <div className="essential-resources" role="group" aria-label="منابع اصلی">
+        <button className="resource-pill resource-port" disabled={headerLocked} onClick={() => { setMoreOpen(true); feedback(); }} aria-label="فرماندهی بندر">
+          <span className="workshop-icon wk-anchor" aria-hidden="true" /><strong>بندر</strong>
+        </button>
+        <button className={`resource-pill ${game.oil >= stats.oilCapacity - 1 ? "low-resource" : ""}`} disabled={headerLocked} onClick={() => openPanel("economy")} aria-label={`نفت خام ${fa(game.oil)} از ${fa(stats.oilCapacity)} بشکه`} title="نفت خام">
+          <span className="workshop-icon wk-oil" aria-hidden="true" /><strong>{compact(game.oil)}</strong>
+        </button>
+        <button className={`resource-pill ${game.fuel < 100 ? "low-resource" : ""}`} disabled={headerLocked} onClick={() => openPanel("economy")} aria-label={`سوخت ${fa(game.fuel)}`} title="سوخت">
+          <span className="workshop-icon wk-fuel" aria-hidden="true" /><strong>{compact(game.fuel)}</strong>
+        </button>
+        <button className="resource-pill" disabled={headerLocked} onClick={() => openPanel("economy")} aria-label={`فولاد ${fa(game.steel)}`} title={stats.steelRate > 0 ? `تولید فولاد ${fa(stats.steelRate, 1)} در ثانیه` : "فولاد"}>
+          <span className="workshop-icon wk-steel" aria-hidden="true" /><strong>{compact(game.steel)}</strong>
+        </button>
       </div>
-      <div className="header-utilities"><button className={`utility-button ${sound ? "sound-on" : ""}`} onClick={() => setSound(!sound)} title={sound ? "بی‌صدا کردن" : "روشن کردن صدا"} aria-label={sound ? "خاموش کردن صدا" : "روشن کردن صدا"}>{sound ? <Volume2 size={19} /> : <VolumeX size={19} />}</button><button className="utility-button help-button" onClick={() => { setHelpOpen(true); feedback(); }} title="راهنمای سریع" aria-label="راهنمای سریع"><CircleHelp size={19} /></button><button className="utility-button notification-button" onClick={() => openPanel("events")} aria-label="رویدادها"><Bell size={18} />{game.event && <i />}</button><button className="commander-button" onClick={() => openPanel("hero")} title="فرماندهان" aria-label="فرماندهان"><Anchor size={18} /><i /></button></div>
     </header>
 
     <main className={`game-map ${targeting ? "aiming" : ""} ${selectedSlot !== null || selectedBuilding !== null ? "choosing-tower" : ""}`}>
@@ -633,8 +650,12 @@ export default function Game() {
           BOTH view states (the card itself is gone for good). */}
       {activeBattle && !interfacePaused && !targeting && <div className="war-essentials">
         <div className="war-strip">
-          <span className="war-hearts"><Heart size={15} fill="currentColor" /><strong>{fa(game.hearts)}</strong><small>/۲۰</small></span>
-          <span className="war-wave">موج {fa(game.wave)}</span>
+          <span className="war-hearts" aria-label={`سلامت بندر ${fa(game.hearts)} از ۲۰`}><Heart size={19} fill="currentColor" /><strong>{fa(game.hearts)}</strong></span>
+          <span className="war-wave"><Ship size={17} /> موج {fa(game.wave)}</span>
+          <button className={`main-battle-action battle-running ${paused ? "is-paused" : ""}`} onClick={mainAction} aria-label={actionLabel} title={actionLabel}>{paused ? <Play size={17} fill="currentColor"/> : <Pause size={17} fill="currentColor"/>}</button>
+          <button className="battle-speed" onClick={() => { dispatch({ type: "speed" }); feedback(); }} aria-label={`تغییر سرعت نبرد؛ ${game.speed} برابر`} title="سرعت نبرد"><FastForward size={15} /><strong>{fa(game.speed)}×</strong></button>
+        </div>
+        <div className="war-status">
           <div className="war-progress"><i style={{ width: `${progress * 100}%` }} /></div>
           <span className="war-remaining">{battlePaused ? <><Pause size={11} /> متوقف</> : `${fa(remaining)} هدف باقی‌مانده`}</span>
           {airAllowed !== null && battleObj && <span className={`war-airleak ${battleObj.airLeaked >= airAllowed ? "danger" : ""}`}><Plane size={13} />نشت هوایی {fa(battleObj.airLeaked)}/{fa(airAllowed)}</span>}
@@ -651,15 +672,22 @@ export default function Game() {
       {(game.event || game.warnings?.fuel || game.warnings?.power || game.ammo < 100 || stats.grid < 0.9 || game.oil >= stats.oilCapacity - 1) && <button className="context-alert" onClick={() => openPanel(game.event ? "events" : game.warnings?.power ? "city" : stats.grid < 0.9 ? "city" : "economy")}><span /><strong>{game.event ? `رویداد فعال در تنگه؛ پایان تا ${fa(Math.max(0, Math.ceil(60 - game.eventClock)))} ثانیه` : game.warnings?.fuel ? "سوخت رو به اتمام است؛ پیش از خفگی شبکه، پالایشگاه و نیروگاه را تقویت کنید" : game.warnings?.power ? "شبکهٔ برق زیر فشار پایدار است؛ نیروگاه را تقویت کنید" : game.ammo < 100 ? "مهمات رو به اتمام است" : stats.grid < 0.9 ? "برق شبکه را تقویت کنید" : "مخزن نفت پر شده است"}</strong><ChevronLeft size={15} /></button>}
 
       {announcement && !targeting && !interfacePaused && <div className={`battle-announcement ${announcement.type}`} key={`${announcement.title}-${announcement.subtitle}`} role="status"><span>{announcement.type === "success" ? <ShieldCheck size={24} /> : announcement.type === "power" ? <Sparkles size={24} /> : <Swords size={24} />}</span><div><strong>{announcement.title}</strong><p>{announcement.subtitle}</p></div></div>}
-      {bulletin && !otherInterface && !rewardInterface && <div className={`news-bulletin ${bulletin.kind}`} role="alertdialog" aria-label="بولتن خبری جنگ"><div className="news-head"><span className="news-live"><Bell size={13} /> خبرگزاری تنگه</span><span className="news-op">عملیات «{bulletin.scenario.operationName}» · {bulletin.scenario.zone}</span><button className="news-x" onClick={() => setBulletin(null)} aria-label="بستن بولتن"><X size={15} /></button></div><strong>{bulletin.kind === "briefing" ? bulletin.scenario.newsBefore.headline : bulletin.kind === "defeat" ? bulletin.scenario.newsDefeat.headline : bulletin.scenario.newsVictory.headline}</strong><p>{bulletin.kind === "briefing" ? bulletin.scenario.newsBefore.body : bulletin.kind === "defeat" ? bulletin.scenario.newsDefeat.body : bulletin.scenario.newsVictory.body}</p>{bulletin.kind === "briefing" && <><p className="news-brief">{bulletin.scenario.briefing}</p><div className="news-chips"><span>هدف: {bulletin.scenario.objective}</span><span>دشمن: {bulletin.scenario.enemyFlavor}</span>{bulletin.scenario.specialCondition && <span>شرایط: {bulletin.scenario.specialCondition}</span>}{airWarn && <span>⚠ هشدار پدافند هوایی: {fa(airWarn.airTotal)} پرندهٔ دشمن در راه است و {airWarn.capable ? "پدافند هوایی اختصاصی نداری" : "هیچ برجک ضدهوایی نداری"} — یک برجک پدافند هوایی بساز؛ نشت هواییِ بیش از حد، عملیات را می‌بازد.</span>}{interceptWarn && <span>هدف رهگیری: نابودی دشمن پیش از نشان نارنجی در {fa(INTERCEPT_LINE * 100)}٪ مسیر. دفاع ساحلی و کندسازی را آماده کن؛ EMP و موشک برای نجات موقعیت‌های دشوارند.</span>}</div></>}<div className="news-actions"><button onClick={() => setBulletin(null)}>{bulletin.kind === "briefing" ? "آغاز نبرد" : "بستن"}</button><button className="news-diary-btn" onClick={() => setDiaryOpen(true)}><ClipboardList size={14} /> دفترچه جنگ ({fa(diary.length)})</button></div></div>}
-      {diaryOpen && !otherInterface && <div className="diary-overlay" role="dialog" aria-label="دفترچه جنگ"><div className="diary-card"><div className="news-head"><span className="news-live"><ClipboardList size={13} /> دفترچه جنگ</span><button className="news-x" onClick={() => setDiaryOpen(false)} aria-label="بستن دفترچه"><X size={15} /></button></div><div className="diary-list">{diary.length === 0 ? <p className="diary-empty">هنوز خبری ثبت نشده است؛ نخستین نبرد، اولین صفحهٔ دفترچه را می‌نویسد.</p> : [...diary].reverse().map((e, i) => <article key={i} className={`diary-item ${e.kind}`}><small>موج {fa(e.wave)} · {e.kind === "before" ? "پیش از نبرد" : e.kind === "victory" ? "پیروزی" : "شکست"}</small><strong>{e.headline}</strong><p>{e.body}</p></article>)}</div></div></div>}
-      {paused && activeBattle && !interfacePaused && !targeting && !announcement && <div className="pause-indicator"><Pause size={20} /><strong>نبرد در مکث است</strong><span>برای ادامه، دکمهٔ پخش را بزنید.</span></div>}
+      {bulletin && !otherInterface && !rewardInterface && !diaryOpen && !exitOpen &&
+        <BattleBulletin bulletin={bulletin} airWarn={airWarn} interceptWarn={!!interceptWarn} diaryCount={diary.length} close={() => setBulletin(null)} openDiary={() => setDiaryOpen(true)} />}
+      {diaryOpen && !otherInterface && !exitOpen && <WarDiary entries={diary} close={() => setDiaryOpen(false)} />}
+      {paused && activeBattle && !interfacePaused && !targeting && !announcement && !exitOpen && !bulletin && !diaryOpen &&
+        <section className="pause-indicator command-pause" aria-label="توقف موقت">
+          <h2><Pause size={20} aria-hidden="true" />توقف موقت</h2>
+          <button className="command-resume" onClick={mainAction}><Play size={17} fill="currentColor" />ادامهٔ نبرد</button>
+          <button className="command-save" onClick={saveCommand}><Save size={17} />ذخیرهٔ بازی</button>
+          {isNativeRuntime() && <button className="command-exit" onClick={() => setExitOpen(true)}><LogOut size={17} />خروج</button>}
+        </section>}
 
-      {!targeting && activeBattle && <div className="command-bar" onPointerDown={e => e.stopPropagation()} onClick={e => e.stopPropagation()}>
+      {!targeting && !interfacePaused && activeBattle && <div className="command-bar" onPointerDown={e => e.stopPropagation()} onClick={e => e.stopPropagation()}>
         <div className="support-actions" aria-label="مهارت‌های پشتیبانی">{spells.map(spell => {
           const cooldown = game.cooldowns[spell.id], ready = activeBattle && cooldown <= 0;
           return <button key={spell.id} className={`support-button spell-${spell.id} ${ready ? "ready" : ""} ${cooldown > 0 ? "cooling" : ""}`} onClick={() => activateSpell(spell.id)} aria-label={`${spell.name}${cooldown > 0 ? `، شارژ ${fa(Math.ceil(cooldown))} ثانیه` : ""}`} aria-disabled={cooldown > 0} title={`${spell.name} · ${spell.key}`}><span className="support-icon"><spell.icon size={21} />{cooldown > 0 && <svg viewBox="0 0 44 44" className="cooldown-ring"><circle cx="22" cy="22" r="20" style={{ strokeDashoffset: `${126 * (1 - cooldown / spell.cooldown)}` }} /></svg>}{cooldown > 0 && <b className="cooldown-count">{fa(Math.ceil(cooldown))}</b>}</span><span>{spell.short}</span></button>;
-        })}{!focus && <button className={`support-button boost-button ${game.idle.boostRemaining > 0 ? "ready" : ""}`} onClick={activateProduction} disabled={game.idle.boostCharges <= 0 && game.idle.boostRemaining <= 0} aria-label="تقویت تولید؛ ۶۰ ثانیه تولید دوبرابر" title="تقویت تولید · ۶۰ ثانیه ×۲"><span className="support-icon"><Zap size={21} /></span><span>{game.idle.boostRemaining > 0 ? `تولید ×۲ · ${fa(Math.ceil(game.idle.boostRemaining))}ث` : `تقویت تولید · ${fa(game.idle.boostCharges)} شارژ`}</span></button>}</div><div className="command-separator" /><button className={`main-battle-action ${activeBattle ? "battle-running" : ""} ${paused ? "is-paused" : ""}`} onClick={mainAction}>{activeBattle && !paused ? <Pause size={19} fill="currentColor" /> : <Play size={19} fill="currentColor" />}<span><strong>{actionLabel}</strong><small>{game.phase === "intermission" ? `+۲۵٪ پاداش · ${fa(Math.ceil(game.countdown))} ثانیه` : activeBattle ? paused ? "آمادهٔ ادامه" : "برجک‌ها خودکار شلیک می‌کنند" : "موج اول را فراخوانی کنید"}</small></span>{!activeBattle && <ArrowLeft size={18} />}</button><button className="battle-speed" onClick={() => { dispatch({ type: "speed" }); feedback(); }} aria-label={`تغییر سرعت نبرد؛ ${game.speed} برابر`} title="سرعت نبرد"><FastForward size={17} /><strong>{fa(game.speed)}×</strong></button>
+        })}{!focus && <button className={`support-button boost-button ${game.idle.boostRemaining > 0 ? "ready" : ""}`} onClick={activateProduction} disabled={game.idle.boostCharges <= 0 && game.idle.boostRemaining <= 0} aria-label="تقویت تولید؛ ۶۰ ثانیه تولید دوبرابر" title="تقویت تولید · ۶۰ ثانیه ×۲"><span className="support-icon"><Zap size={21} /></span><span>{game.idle.boostRemaining > 0 ? `تولید ×۲ · ${fa(Math.ceil(game.idle.boostRemaining))}ث` : `تقویت تولید · ${fa(game.idle.boostCharges)} شارژ`}</span></button>}</div>
       </div>}
       {targeting && <div className="targeting-prompt" role="status"><span className={targeting}><Crosshair size={22} /></span><div><strong>{targeting === "strike" ? "کجا را هدف بگیریم؟" : "ناو به کجا برود؟"}</strong><p>{targeting === "strike" ? "روی محدودهٔ دلخواه در آبراه بزنید." : "یک نقطه روی آب انتخاب کنید."}</p></div><button onClick={() => setTargeting(null)} aria-label="لغو هدف‌گیری"><X size={19} /></button></div>}
       <nav className="bottom-navigation" aria-label="ناوبری اصلی">{navigation.map(item => <button key={item.id} className={`nav-item ${panel === item.id || (item.id === "more" && moreIsActive) ? "active" : ""}`} onClick={() => { if (item.id === "more") { setPanel(null); setProgressPanel(null); setSelectedSlot(null); setSelectedBuilding(null); setMoreOpen(true); feedback(); } else if (panel === item.id) { setPanel(null); feedback(); } else openPanel(item.id); }}><item.icon size={20} strokeWidth={1.7} /><span>{item.label}</span>{item.id === "more" && (game.chests > 0 || game.event) && <i className="nav-notification" />}</button>)}</nav>
@@ -668,9 +696,9 @@ export default function Game() {
     {selectedBuilding !== null && <BuildingSheet key={selectedBuilding} id={selectedBuilding} game={game} dispatch={dispatch} close={() => setSelectedBuilding(null)} notify={notify} feedback={feedback} onEconomy={() => openPanel(BUILDINGS[selectedBuilding].category === "city" ? "city" : "economy")} onManagers={()=>openProgress("managers")} />}
     {selectedSlot !== null && sheetSlot === null && <SlotRadial key={`radial-${selectedSlot}`} game={game} slot={selectedSlot} dispatch={dispatch} close={() => setSelectedSlot(null)} openSheet={() => setSheetSlot(selectedSlot)} onBuild={buildTower} feedback={feedback} notify={notify} />}
     {sheetSlot !== null && <TowerSheet key={sheetSlot} game={game} slot={sheetSlot} kind={previewKind} onKindChange={setPreviewKind} dispatch={dispatch} close={() => setSheetSlot(null)} onResearch={() => openPanel("research")} onBuild={buildTower} feedback={feedback} notify={notify} />}
-    {panel && <Panels panel={panel} game={game} dispatch={dispatch} close={() => setPanel(null)} notify={notify} sound={sound} setSound={setSound} vibration={vibration} setVibration={setVibration} cinematic={cinematic} setCinematic={setCinematic} onSelectTower={chooseSlot} onSelectBuilding={chooseBuilding} />}
+    {panel && <Panels panel={panel} game={game} dispatch={dispatch} close={() => setPanel(null)} notify={notify} sound={sound} setSound={setSound} vibration={vibration} setVibration={setVibration} cinematic={cinematic} setCinematic={setCinematic} onCollect={collectIncome} onSelectTower={chooseSlot} onSelectBuilding={chooseBuilding} />}
     {progressPanel && <ProgressionPanels panel={progressPanel} game={game} dispatch={dispatch} close={()=>setProgressPanel(null)} navigate={navigateMission} feedback={feedback} notify={notify} daily={daily} dailyBusy={dailyBusy} dailyError={dailyError} claimDaily={claimDaily} reloadDaily={()=>void reloadDaily()} dailyWebOnly={dailyWebOnly} />}
-    {moreOpen && <MoreMenu game={game} close={() => setMoreOpen(false)} open={openPanel} openProgress={openProgress} goMap={goMap} />}
+    {moreOpen && <MoreMenu game={game} close={() => setMoreOpen(false)} open={openPanel} openProgress={openProgress} goMap={goMap} openGuide={() => { setMoreOpen(false); setHelpOpen(true); }} />}
     {!otherInterface && (game.idle.offline ? <OfflineView game={game} dispatch={dispatch} feedback={feedback}/> : game.idle.rewards[0] ? <RewardView key={game.idle.rewards[0].id} reward={game.idle.rewards[0]} dispatch={dispatch} feedback={feedback}/> : pendingReport ? <BattleResultView report={pendingReport} dispatch={dispatch} autoBattle={game.idle.autoBattle} feedback={feedback} onDevelop={()=>openPanel("defense")}/> : null)}
     {incomeBurst && !interfacePaused && <div className="income-burst" key={incomeBurst.id} aria-hidden="true"><strong>+${compact(incomeBurst.cash)}</strong>{Array.from({length:9},(_,i)=><span key={i} style={{"--coin-i":i} as React.CSSProperties}><Coins size={19}/></span>)}</div>}
     {helpOpen && <QuickGuide close={() => setHelpOpen(false)} />}
@@ -678,24 +706,128 @@ export default function Game() {
   </div>;
 }
 
-function MoreMenu({ game, close, open, openProgress, goMap }: { game: ReturnType<typeof initialGame>; close: () => void; open: (panel: PanelName) => void; openProgress:(panel:ProgressPanel)=>void; goMap:()=>void }) {
+function MoreMenu({ game, close, open, openProgress, goMap, openGuide }: {
+  game: ReturnType<typeof initialGame>;
+  close: () => void;
+  open: (panel: PanelName) => void;
+  openProgress: (panel: ProgressPanel) => void;
+  goMap: () => void;
+  openGuide: () => void;
+}) {
   const ref = useDialog<HTMLElement>(close);
-  const items: { key: string; icon: typeof Shield; title: string; sub: string; badge?: string; act: () => void }[] = [
-    { key: "map", icon: MapIcon, title: "نقشهٔ تنگه", sub: "بازگشت به نمای زنده", act: goMap },
-    { key: "city", icon: Home, title: "شهر و زیرساخت", sub: "برق، آب و پایداری", act: () => open("city") },
-    { key: "research", icon: FlaskConical, title: "پژوهشگاه", sub: "فناوری و دکترین دفاع", act: () => open("research") },
-    { key: "missions", icon: ClipboardList, title: "مأموریت‌ها", sub: "هدف‌ها و پاداش فصل", act: () => openProgress("missions") },
-    { key: "managers", icon: UsersRound, title: "مدیران", sub: "خودکارسازی بندر و تولید", act: () => openProgress("managers") },
-    { key: "hero", icon: Award, title: "فرماندهان", sub: "انتخاب یگان ویژه", act: () => open("hero") },
-    { key: "events", icon: Bell, title: "گزارش‌های تنگه", sub: "رویدادها و امنیت", badge: game.event ? "جدید" : undefined, act: () => open("events") },
-    { key: "settings", icon: Settings2, title: "تنظیمات", sub: "صدا، جلوه‌ها و ذخیره", act: () => open("settings") },
+  const mainItems = [
+    { key: "defense", icon: Shield, title: "برجک‌ها", sub: "شبکهٔ دفاعی", act: () => open("defense") },
+    { key: "missions", icon: MapIcon, title: "مأموریت‌ها", sub: "هدف‌ها و پاداش فصل", act: () => openProgress("missions") },
+    { key: "settings", icon: Settings, title: "تنظیمات", sub: "صدا، جلوه‌ها و ذخیره", act: () => open("settings") },
   ];
-  return <div className="compact-dialog-backdrop" onClick={close}><section className="more-menu" ref={ref} role="dialog" aria-modal="true" aria-labelledby="more-title" tabIndex={-1} onClick={e => e.stopPropagation()}><div className="sheet-handle" /><header><div><span className="sheet-eyebrow">مرکز فرماندهی</span><h2 id="more-title">فرماندهی تنگه</h2></div><button className="close-control" onClick={close} aria-label="بستن منو"><X size={19} /></button></header><div className="more-grid">{items.map(item => <button key={item.key} onClick={item.act}><span className="more-icon"><item.icon size={22} /></span><strong>{item.title}</strong><small>{item.sub}</small>{item.badge && <span className="more-badge">{item.badge}</span>}<ArrowLeft size={14} className="more-arrow" /></button>)}</div><div className="more-business-links"><button onClick={()=>openProgress("contracts")}><ShipIcon/> قراردادهای تجاری <ArrowLeft size={14}/></button><button onClick={()=>openProgress("daily")}><Gift size={18}/> هدیهٔ روزانه <ArrowLeft size={14}/></button></div><p className="menu-save-note"><Check size={12} /> پیشرفت شما خودکار ذخیره می‌شود.</p></section></div>;
+  const stations = [
+    { title: "شهر و زیرساخت", icon: Home, act: () => open("city") },
+    { title: "پژوهشگاه", icon: FlaskConical, act: () => open("research") },
+    { title: "مدیران", icon: UsersRound, act: () => openProgress("managers") },
+  ];
+  return <div className="compact-dialog-backdrop command-backdrop" onClick={close}>
+    <section className="more-menu" ref={ref} role="dialog" aria-modal="true" aria-labelledby="more-title" tabIndex={-1} onClick={e => e.stopPropagation()}>
+      <div className="more-grid workshop-menu-grid">
+        <div className="command-heading"><h2 id="more-title"><Anchor size={17} aria-hidden="true" />فرماندهی بندر</h2>
+          <button className="command-help" onClick={openGuide} aria-label="راهنمای سریع" title="راهنمای سریع"><CircleHelp size={19} /></button>
+        </div>
+        <button className="command-return" onClick={goMap} aria-label="بستن منو و بازگشت به نقشهٔ تنگه" title="بازگشت به نقشهٔ تنگه"><X size={19} /></button>
+        {mainItems.map(({ key, icon: Icon, title, sub, act }) => <button className={`command-plaque ${key}`} key={key} onClick={act}>
+          <span className="plaque-chevron" aria-hidden="true"><ChevronRight size={19} strokeWidth={3} /></span>
+          <span className="plaque-text"><strong>{title}</strong><small>{sub}</small></span>
+          <span className="more-icon" aria-hidden="true">
+            {key === "defense" ? <span className="plaque-tower-art" /> : key === "missions" ? <span className="plaque-chart-art"><MapIcon /></span> : <Icon strokeWidth={2.6} />}
+          </span>
+        </button>)}
+        {stations.map(({ title, icon: Icon, act }) => <button className="command-station" key={title} onClick={act}><Icon size={18} />{title}</button>)}
+      </div>
+      <div className="more-business-links command-utilities">
+        <button onClick={() => open("hero")}><Award size={16} />فرماندهان</button>
+        <button onClick={() => open("events")}><Bell size={16} />گزارش‌های تنگه{game.event && <span className="command-event-badge">جدید</span>}</button>
+        <button onClick={() => openProgress("contracts")}><Ship size={16} />قراردادهای تجاری</button>
+        <button onClick={() => openProgress("daily")}><Gift size={16} />هدیهٔ روزانه</button>
+      </div>
+    </section>
+  </div>;
 }
 
 function QuickGuide({ close }: { close: () => void }) {
   const ref = useDialog<HTMLElement>(close);
-  return <div className="compact-dialog-backdrop" onClick={close}><section className="quick-guide" ref={ref} role="dialog" aria-modal="true" aria-labelledby="guide-title" tabIndex={-1} onClick={e => e.stopPropagation()}><button className="close-control guide-close" onClick={close} aria-label="بستن راهنما"><X size={19} /></button><span className="guide-emblem"><Anchor size={30} /></span><span className="sheet-eyebrow">کمتر مدیریت کن. بیشتر فرماندهی کن.</span><h2 id="guide-title">فرماندهی در سه قدم</h2><p>اقتصاد و برجک‌ها خودکار کار می‌کنند؛ تصمیم‌های مهم با شماست.</p><ol><li><span><Plus size={20} /></span><div><strong>خط دفاعت را بساز</strong><p>روی + نقشه بزن، برجک انتخاب کن و ساخت را تأیید کن.</p></div><b>۱</b></li><li><span><Play size={18} /></span><div><strong>موج را شروع کن</strong><p>برجک‌ها شلیک می‌کنند. هر زمان خواستی نبرد را مکث کن.</p></div><b>۲</b></li><li><span><Rocket size={20} /></span><div><strong>در لحظهٔ درست کمک کن</strong><p>موشک برای ضربهٔ سنگین، EMP برای توقف و اورکلاک برای آتش بیشتر.</p></div><b>۳</b></li></ol><button className="primary-action" data-autofocus onClick={close}>آماده‌ام، بریم <ArrowLeft size={18} /></button><small className="keyboard-hint">دسکتاپ: Space برای مکث · ۱، ۲، ۳ برای مهارت‌ها</small></section></div>;
+  return <div className="compact-dialog-backdrop command-backdrop" onClick={close}>
+    <section className="quick-guide" ref={ref} role="dialog" aria-modal="true" aria-labelledby="guide-title" tabIndex={-1} onClick={e => e.stopPropagation()}>
+      <header className="command-titleplate">
+        <Anchor size={22} aria-hidden="true" /><h2 id="guide-title">راهنمای سریع</h2>
+        <button className="close-control" onClick={close} aria-label="بستن راهنما"><X size={18} /></button>
+      </header>
+      <ol>
+        <li><span><Plus size={21} /></span><div><strong>خط دفاعت را بساز</strong><p>روی + نقشه بزن، برجک را انتخاب کن و ساختش را تأیید کن.</p></div></li>
+        <li><span><Play size={19} /></span><div><strong>موج را شروع کن</strong><p>با شروع موج، برجک‌ها خودکار شلیک می‌کنند. برای مکث، دکمهٔ توقف را بزن.</p></div></li>
+        <li><span><Rocket size={21} /></span><div><strong>از مهارت‌ها کمک بگیر</strong><p>موشک‌ها به دشمن ضربه می‌زنند، پالس حرکتش را متوقف می‌کند و اورکلاک شلیک برجک‌ها را تقویت می‌کند.</p></div></li>
+      </ol>
+      <button className="primary-action command-resume" data-autofocus onClick={close}>بازگشت به بازی<ArrowLeft size={17} /></button>
+      <small className="keyboard-hint">روی صفحه‌کلید، فاصله برای مکث و ۱، ۲، ۳ برای مهارت‌هاست.</small>
+    </section>
+  </div>;
 }
 
-function ShipIcon(){return <Anchor size={18}/>;}
+function ExitDialog({ close, save, exit }: { close: () => void; save: () => void; exit: () => void }) {
+  const ref = useDialog<HTMLElement>(close);
+  return <div className="compact-dialog-backdrop command-backdrop">
+    <section className="exit-dialog command-pause" ref={ref} role="alertdialog" aria-modal="true" aria-label="خروج از بازی" tabIndex={-1} onKeyDown={e => e.stopPropagation()}>
+      <h2><Pause size={21} aria-hidden="true" />توقف موقت</h2>
+      <button className="command-resume" data-autofocus onClick={close}><Play size={17} fill="currentColor" />ادامهٔ بازی</button>
+      <button className="command-save" onClick={save}><Save size={17} />ذخیرهٔ بازی</button>
+      <button className="command-exit" onClick={exit}><LogOut size={17} />ذخیره و خروج</button>
+    </section>
+  </div>;
+}
+
+function BattleBulletin({ bulletin, airWarn, interceptWarn, diaryCount, close, openDiary }: {
+  bulletin: Bulletin;
+  airWarn: ReturnType<typeof antiAirWarning>;
+  interceptWarn: boolean;
+  diaryCount: number;
+  close: () => void;
+  openDiary: () => void;
+}) {
+  const ref = useDialog<HTMLElement>(close);
+  const { kind, scenario } = bulletin;
+  const news = kind === "briefing" ? scenario.newsBefore : kind === "defeat" ? scenario.newsDefeat : scenario.newsVictory;
+  return <section className={`news-bulletin ${kind}`} ref={ref} role="alertdialog" aria-label="بولتن خبری جنگ" tabIndex={-1} onKeyDown={e => e.stopPropagation()}>
+    <header className="news-head">
+      <span className="news-live"><Bell size={15} />خبرگزاری تنگه</span>
+      <span className="news-op">موج {fa(bulletin.wave)} · {scenario.zone}</span>
+      <button className="news-x" onClick={close} aria-label="بستن بولتن"><X size={17} /></button>
+    </header>
+    <div className="bulletin-paper">
+      <small>عملیات «{scenario.operationName}»</small>
+      <h2>{news.headline}</h2><p>{news.body}</p>
+      {kind === "briefing" && <>
+        <p className="news-brief">{scenario.briefing}</p>
+        <div className="news-chips"><span>هدف: {scenario.objective}</span><span>دشمن: {scenario.enemyFlavor}</span>
+          {scenario.specialCondition && <span>شرایط: {scenario.specialCondition}</span>}
+          {airWarn && <span className="news-warning">هشدار پدافند هوایی: {fa(airWarn.airTotal)} پرندهٔ دشمن در راه است و {airWarn.capable ? "پدافند هوایی اختصاصی نداری" : "هیچ برجک ضدهوایی نداری"}. یک برجک پدافند هوایی بساز. عبور بیش از حد پرنده‌ها باعث شکست عملیات می‌شود.</span>}
+          {interceptWarn && <span className="news-warning">هدف رهگیری: نابودی دشمن پیش از نشان نارنجی در {fa(INTERCEPT_LINE * 100)}٪ مسیر. دفاع ساحلی و کندسازی را آماده کن. پالس و موشک برای موقعیت‌های دشوارند.</span>}
+        </div>
+      </>}
+    </div>
+    <div className="news-actions"><button onClick={close}>{kind === "briefing" ? "آغاز نبرد" : "بستن"}</button>
+      <button className="news-diary-btn" onClick={openDiary}><ClipboardList size={16} />دفترچه جنگ ({fa(diaryCount)})</button>
+    </div>
+  </section>;
+}
+
+function WarDiary({ entries, close }: { entries: DiaryEntry[]; close: () => void }) {
+  const ref = useDialog<HTMLElement>(close);
+  return <div className="diary-overlay" onClick={close}>
+    <section className="diary-card" ref={ref} role="dialog" aria-modal="true" aria-label="دفترچه جنگ" tabIndex={-1} onKeyDown={e => e.stopPropagation()} onClick={e => e.stopPropagation()}>
+      <header className="news-head"><span className="news-live"><ClipboardList size={17} />دفترچه جنگ</span><button className="news-x" onClick={close} aria-label="بستن دفترچه"><X size={17} /></button></header>
+      <div className="diary-list">{entries.length === 0 ? <p className="diary-empty">با شروع نخستین نبرد، گزارش عملیات اینجا ثبت می‌شود.</p> : [...entries].reverse().map((entry, i) =>
+        <article key={`${entry.at}-${i}`} className={`diary-item ${entry.kind}`}>
+          <small>موج {fa(entry.wave)} · {entry.kind === "before" ? "پیش از نبرد" : entry.kind === "victory" ? "پیروزی" : "شکست"}{entry.zone && ` · ${entry.zone}`}</small>
+          <strong>{entry.headline}</strong><p>{entry.body}</p>
+        </article>)}
+      </div>
+    </section>
+  </div>;
+}
