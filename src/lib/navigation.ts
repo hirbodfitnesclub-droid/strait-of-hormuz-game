@@ -2,7 +2,7 @@ import generated from "@/data/navigation.json";
 
 export type MapLayout = "landscape" | "portrait";
 export type Point = { x: number; y: number };
-type NavigationMap = { size: number; blocked: string; land: string; enemy: Point[]; trade: Point[]; pirate: Point[]; port: Point[] };
+type NavigationMap = { size: number; blocked: string; land: string; enemy: Point[]; trade: Point[]; inbound: Point[]; outbound: Point[]; pirate: Point[]; port: Point[] };
 const maps: Record<MapLayout, NavigationMap> = generated;
 const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
 
@@ -64,11 +64,11 @@ function rounded(path: Point[], layout: MapLayout): Point[] {
   result.push(path[path.length - 1]);
   return result;
 }
-const lanes: Record<MapLayout, { enemy: Point[]; trade: Point[]; pirate: Point[]; port: Point[] }> = {
-  landscape: { enemy: rounded(maps.landscape.enemy, "landscape"), trade: rounded(maps.landscape.trade, "landscape"), pirate: rounded(maps.landscape.pirate, "landscape"), port: rounded(maps.landscape.port, "landscape") },
-  portrait: { enemy: rounded(maps.portrait.enemy, "portrait"), trade: rounded(maps.portrait.trade, "portrait"), pirate: rounded(maps.portrait.pirate, "portrait"), port: rounded(maps.portrait.port, "portrait") },
+const lanes: Record<MapLayout, { enemy: Point[]; trade: Point[]; inbound: Point[]; outbound: Point[]; pirate: Point[]; port: Point[] }> = {
+  landscape: { enemy: rounded(maps.landscape.enemy, "landscape"), trade: rounded(maps.landscape.trade, "landscape"), inbound: rounded(maps.landscape.inbound, "landscape"), outbound: rounded(maps.landscape.outbound, "landscape"), pirate: rounded(maps.landscape.pirate, "landscape"), port: rounded(maps.landscape.port, "landscape") },
+  portrait: { enemy: rounded(maps.portrait.enemy, "portrait"), trade: rounded(maps.portrait.trade, "portrait"), inbound: rounded(maps.portrait.inbound, "portrait"), outbound: rounded(maps.portrait.outbound, "portrait"), pirate: rounded(maps.portrait.pirate, "portrait"), port: rounded(maps.portrait.port, "portrait") },
 };
-export function getLane(layout: MapLayout = "landscape", kind: "enemy" | "trade" | "pirate" | "port" = "enemy") { return lanes[layout][kind]; }
+export function getLane(layout: MapLayout = "landscape", kind: "enemy" | "trade" | "inbound" | "outbound" | "pirate" | "port" = "enemy") { return lanes[layout][kind]; }
 
 const pathLengths = new WeakMap<Point[], { parts: number[]; total: number }>();
 export function sampleLane(path: Point[], progress: number): Point {

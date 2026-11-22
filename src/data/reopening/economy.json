@@ -1,0 +1,453 @@
+{
+  "schema": "hormuz.port.economy.5.0.0",
+  "status": "implementation design; deterministic fallback fixtures; confirm on target mobile build",
+  "source_baseline": "c5a55ee2b53de7aeef932e17dddda0015b84e6a3",
+  "opening": {
+    "cash": 1200,
+    "bank": 260,
+    "oil": 400,
+    "fuel": 200,
+    "steel": 150,
+    "ammo": 300,
+    "security": 70,
+    "export_share": 0.4,
+    "tanker_phase": "loading",
+    "tanker_load": 625,
+    "next_commercial_settlement_s": 12,
+    "passages": 0,
+    "historical_cargo_settlement": "prehistory_paid; creates no spendable cash and claims no future revenue or lifetime turnover",
+    "tanker_capacity": 1000,
+    "first_stall_s": 70,
+    "unassisted_restart_s": 138
+  },
+  "facilities": {
+    "oil": {
+      "name_fa": "سکوی نفت",
+      "base_capex": 100,
+      "mw_per_level": 5,
+      "base_output": 10,
+      "units": "crude/s",
+      "opening_level": 1
+    },
+    "tank": {
+      "name_fa": "مخزن نفت",
+      "base_capex": 80,
+      "mw_per_level": 1,
+      "base_output": 500,
+      "units": "crude capacity",
+      "opening_level": 1
+    },
+    "dock": {
+      "name_fa": "اسکلهٔ صادرات",
+      "base_capex": 150,
+      "mw_per_level": 3,
+      "base_output": 15,
+      "units": "crude/s loading",
+      "opening_level": 1
+    },
+    "refinery": {
+      "name_fa": "پالایشگاه",
+      "base_capex": 300,
+      "mw_per_level": 15,
+      "base_output": 10,
+      "units": "crude/s input",
+      "opening_level": 0
+    },
+    "power": {
+      "name_fa": "نیروگاه",
+      "base_capex": 650,
+      "mw_per_level": 0,
+      "base_output": 60,
+      "units": "MW",
+      "opening_level": 1
+    },
+    "water": {
+      "name_fa": "آب‌شیرین‌کن",
+      "base_capex": 450,
+      "mw_per_level": 6,
+      "base_output": 30,
+      "units": "water service",
+      "opening_level": 1
+    },
+    "steel": {
+      "name_fa": "مجتمع فولاد",
+      "base_capex": 500,
+      "mw_per_level": 25,
+      "base_output": 3,
+      "units": "steel/s",
+      "opening_level": 0
+    },
+    "city": {
+      "name_fa": "شهرک ساحلی",
+      "base_capex": 550,
+      "mw_per_level": 4,
+      "base_output": 50,
+      "units": "residents nominal",
+      "opening_level": 1
+    },
+    "welfare": {
+      "name_fa": "خدمات رفاهی",
+      "base_capex": 220,
+      "mw_per_level": 2,
+      "base_output": 4,
+      "units": "stability points",
+      "opening_level": 0
+    },
+    "optical": {
+      "name_fa": "پاسگاه دیده‌بانی",
+      "base_capex": 260,
+      "mw_per_level": 4,
+      "base_output": 1,
+      "units": "inspection capability",
+      "opening_level": 0
+    },
+    "arms": {
+      "name_fa": "صنایع تدارکاتی",
+      "base_capex": 1000,
+      "mw_per_level": 30,
+      "base_output": 5,
+      "units": "supply units/s",
+      "opening_level": 0
+    }
+  },
+  "upgrade": {
+    "cap": 100,
+    "cost": "ceil(base_capex * 1.12**(min(target_level,20)-1) * 1.05**max(0,target_level-20) * 16**(T-1))",
+    "output_equivalent": "L * (1 + 0.12 * number_of_attained_milestones)",
+    "milestones": [
+      10,
+      25,
+      50,
+      100
+    ],
+    "output_bonus_facilities": [
+      "oil",
+      "dock",
+      "refinery",
+      "steel",
+      "arms"
+    ],
+    "step_caps_unchanged": [
+      "tank",
+      "power",
+      "water",
+      "city",
+      "welfare",
+      "optical"
+    ],
+    "indexing": "building L=0 to 1 uses target_level=1; tank 1 to 2 costs ceil(80*1.12)=90",
+    "default_tier": 1,
+    "tier_scope": "the eleven port assets are T1 for all three regions; prestige, geography, and saved level do not change construction tier",
+    "rounding": "ceil once per transition using exact rational integer numerators/denominators; L20 exact basis before rounding for L21",
+    "preprestige_cash_payback_hours": 48,
+    "tank_card": {
+      "title": {
+        "fa": "افزایش ظرفیت مخزن",
+        "en": "Increase oil storage"
+      },
+      "grid_note": {
+        "fa": "مصرف برق با ارتقا بیشتر می‌شود.",
+        "en": "This upgrade draws more power."
+      },
+      "level_cap": 100,
+      "fields": "Use the effective capacity before/after, upgrade price in port credit, added power draw, and whether the action can be taken. Raw cash-rate deltas and payback quotes are diagnostic only on this capacity card, including accessibility output.",
+      "definition": "The oil cap is capacity per level × level × current damage efficiency × current storage modifier. The UI uses the live save, including damage. Existing reservations keep their place. +1 grid unit is extra demand, not a predicted shortage."
+    }
+  },
+  "power": {
+    "fuel_per_s_per_level": 0.5,
+    "emergency_fraction": 0.2,
+    "normal_generator_fuel_guard_s": 60,
+    "grid_formula": "min(1,supply/max(demand,1))",
+    "reserve_handling": "essential reserve budget first to generator; switch to normal split after refilling guard",
+    "water_usage": {
+      "city": 14,
+      "refinery": 5
+    },
+    "water_shortage_floor_refinery": 0.6,
+    "social_formula": "0.8 + 0.2*min(1,(40*water_ratio+15*min(city_effective,2)+min(20,4*welfare_effective)+0.1*security+tech_stability_points)/100)",
+    "water_damage_floor": 0.55
+  },
+  "stock": {
+    "initial_steel_make_to": 150,
+    "initial_ammo_make_to": 300,
+    "fuel_cap": 2500,
+    "steel_cap": 2000,
+    "ammo_cap": 5000,
+    "oil_tank_capacity_per_level": 500,
+    "packages": {
+      "refine": {
+        "oil": 10,
+        "fuel_out": 5
+      },
+      "steel": {
+        "oil": 10,
+        "fuel": 2,
+        "steel_out": 3
+      },
+      "ammo": {
+        "fuel": 5,
+        "steel": 5,
+        "ammo_out": 10
+      }
+    },
+    "active_contract_return_reservations": "Per resource authoritative active order escrow, including while absent. Effective inflow room=max(0,physical capacity - spendable stock - quantity reserved for possible return). Holds affect oil, fuel, steel and ammo, including external deliveries. Production target is a separate bound on free stock; paying out or cancelling releases the reservation atomically. Damage may leave stock plus reservation above capacity, in which case preserve ownership and suppress new inflow until room exists."
+  },
+  "trade": {
+    "oil_unit_price": 0.25,
+    "tanker_capacity": "500+500*dock_level",
+    "arrival_seconds": 25,
+    "departure_seconds": 25,
+    "between_tankers_seconds": 18,
+    "bank_cap": "1600+375*(dock_level-1)",
+    "traffic_interval": "75-.45*security",
+    "duty": {
+      "barge": 12,
+      "bulk": 30,
+      "container": 65,
+      "tanker": 120
+    },
+    "classification": "tanker if security>=80 & ordinal%7==0; else container if security>=50 & ordinal%4==0; else bulk if security>=20 & ordinal%2==0; else barge",
+    "first_receipt_sec": 12,
+    "receipt_progress": 0.82,
+    "standard_crossing_s": {
+      "barge": 65,
+      "bulk": 70,
+      "container": 70,
+      "tanker": 80
+    },
+    "first_ship": "barge pre-positioned to reach 82% in 12 s; subsequent receipts use progress/dedup, travel gate and security-adjusted spawn interval",
+    "reserve_on_zero_dock": "stop loading, hold own cargo, continue production subject to tank cap"
+  },
+  "offline": {
+    "efficiency": 0.2,
+    "clock_wall_per_industry_second": 5,
+    "minimum_wall_seconds": 300,
+    "max_wall_seconds": 28800,
+    "tier_caps_s": {
+      "base": 28800,
+      "tank_level_3": 43200,
+      "harbor_manager_rank_1": 64800
+    },
+    "clock": "only trusted elapsed foreground-background lifecycle absence; high-water mark advances past entire interval including excluded time, cap prefix and grant snapshot committed atomically; 0..4 fractions only across eligible settlements",
+    "industry": "advance own export tanker and preaccepted industry orders; caps, inputs, output reservations, fuel draw, actual boosts by wall deadline, finite bank. Ambient passages (and all tolls), open missions, incidents, and acquisitions pause. Accepted port dispatches mature separately by their snapshotted real-wall deadlines, including during absence, even after the capped industrial interval. Industrial jumps never advance that wall clock.",
+    "manager": "harbor manager rank>=1 moves available integer treasury to wallet at scheduled 10 effective industry-second cadence; same on/off cadence phase persisted",
+    "receipt": "one absence_id per real exit; grants only base industrial ledger once; at authorized ad/VIP grant floor(actual newly accepted oil export cash credited to bank in this interval) once across surfaces, source offline_bonus:<absence_id>. Opening cash and earlier bank excluded.",
+    "bonus_currency": "Rial to wallet, no purchase of stock or new industrial time or prestige turnover"
+  },
+  "operation_rewards": {
+    "repeat_clear_base": 20,
+    "repeat_clear_per_index": 2,
+    "on_failure": 0,
+    "stars_cash_multiplier": 1,
+    "damage_eligible_from": 3,
+    "settlement_once": "attempt id, plus first-clear set and first-terminal-attempt set",
+    "first_clear_ranges": [
+      {
+        "from": 1,
+        "to": 5,
+        "base": 80,
+        "per_index": 10,
+        "per_chapter": 0
+      },
+      {
+        "from": 6,
+        "to": 25,
+        "base": 65,
+        "per_index": 0,
+        "per_chapter": 3
+      }
+    ],
+    "chapter_span": 5
+  },
+  "repair": {
+    "points_cap_per_facility": 3,
+    "efficiency_by_points": [
+      1,
+      0.85,
+      0.7,
+      0.55
+    ],
+    "cash_per_point": "24 + 4*(min(level,10)-1)",
+    "steel_per_point": "4 + (min(level,10)-1)",
+    "damage_begins_at_operation": 3,
+    "max_points_per_first_terminal_attempt": 2,
+    "max_assets_before_op11": 1,
+    "max_assets_from_op11": 2,
+    "priority_owner": "campaign asset lists; skip unbuilt; dock fallback; apply point-by-point, cap; record discarded excess",
+    "cost_effect": "no XP, refund, credit or loot, one point per click with receipt; all tiers, optional pause; no destruction",
+    "authorization": "Revalidate one outstanding work point and spendable cash + collectable integer bank and steel before mutating. A rejected/duplicate command changes no balance, clock, damage or receipts. Use wallet directly if funded; only collect treasury inside confirmed repair if wallet is short and the quote discloses collection. Paid, service and upgrade receipts survive snapshot reload; retry is a no-op."
+  },
+  "recovery": {
+    "work_order_cost_wall_active_seconds": 30,
+    "eligibility": "at least one outstanding damaged owned asset; can afford neither full atomic next-point repair on any affordable target nor fund it by collecting bank (projected cash+bank counts); explicit select target; nonstackable; grant ONLY missing amounts up to one repair, spend atomically, never credit stock/cash to keep",
+    "target_level_price": "same exact cost as paid repair; work supplies only shortfall",
+    "if_no_fuel_no_refinery": "emergency generator, ambient merchant traffic even when security zero, bank collect, free replay; zero required cash or fee to start op1 training",
+    "nonportable_shortage_coverage": "exact shortage up to one selected damage point, after normal collection; deducted on same receipt"
+  },
+  "capability_hooks": {
+    "defaults": {
+      "oil_mult": 1,
+      "refinery_mult": 1,
+      "steel_mult": 1,
+      "ammo_mult": 1,
+      "generator_mult": 1,
+      "burn_mult": 1,
+      "water_mult": 1,
+      "tank_mult": 1,
+      "fuel_cap_mult": 1,
+      "yield_mult": 1,
+      "dock_mult": 1,
+      "export_price_mult": 1,
+      "toll_mult": 1,
+      "stability_points": 0,
+      "additional_platforms": 0,
+      "industry_boost": 1
+    },
+    "extra_platform_raw_per_s": 8,
+    "cost_scope": "external meta catalogue, applied exactly once; base QA excludes external multipliers"
+  },
+  "world_clock": {
+    "fixed_quantum_seconds": 1,
+    "online_industrial_speed": 1,
+    "numerics": "integer microunits plus persistent fractional remainder per transfer in app; approximate float oracle with EPS only inside model; upgrade quote uses exact integer rational"
+  },
+  "qa_policy": {
+    "defense_fixture_only": {
+      "at_operations": [
+        5,
+        10,
+        15,
+        20,
+        25
+      ],
+      "cash": 120,
+      "steel": 20,
+      "nature": "synthetic affordability stress, not a real build or canon battle price"
+    },
+    "stage_time_s": "60+5*index; illustrative elapsed port time independent of battle result",
+    "facility_purchase_before": {
+      "2": [
+        "refinery"
+      ],
+      "3": [
+        "tank"
+      ],
+      "4": [
+        "steel"
+      ],
+      "5": [
+        "power"
+      ],
+      "7": [
+        "dock"
+      ],
+      "8": [
+        "water"
+      ],
+      "9": [
+        "city"
+      ],
+      "10": [
+        "welfare"
+      ],
+      "11": [
+        "optical"
+      ],
+      "12": [
+        "arms"
+      ],
+      "14": [
+        "oil"
+      ],
+      "16": [
+        "power"
+      ],
+      "18": [
+        "refinery"
+      ],
+      "20": [
+        "steel"
+      ],
+      "22": [
+        "dock"
+      ],
+      "24": [
+        "tank"
+      ]
+    },
+    "damage_synthetic": "op>=3 every third stage adds 1; every sixth adds 2. Stressed branch uses max possible every stage including first loss then repeats outcome; not a live wave balance.",
+    "legal_procurement": [
+      {
+        "op": 1,
+        "asset": "A",
+        "kind": "cannon",
+        "tier": 1,
+        "cash": 250,
+        "steel": 30,
+        "grid_mw_after_both_assets": 5
+      },
+      {
+        "op": 5,
+        "asset": "B",
+        "kind": "ew",
+        "tier": 1,
+        "cash": 420,
+        "steel": 40,
+        "grid_mw_after_both_assets": 20
+      },
+      {
+        "op": 10,
+        "asset": "A",
+        "kind": "cannon",
+        "tier": 2,
+        "cash": 388,
+        "steel": 48,
+        "grid_mw_after_both_assets": 23
+      },
+      {
+        "op": 15,
+        "asset": "B",
+        "kind": "ew",
+        "tier": 2,
+        "cash": 651,
+        "steel": 64,
+        "grid_mw_after_both_assets": 34
+      },
+      {
+        "op": 20,
+        "asset": "A",
+        "kind": "cannon",
+        "tier": 3,
+        "cash": 601,
+        "steel": 66,
+        "grid_mw_after_both_assets": 40
+      },
+      {
+        "op": 25,
+        "asset": "B",
+        "kind": "ew",
+        "tier": 3,
+        "cash": 1010,
+        "steel": 88,
+        "grid_mw_after_both_assets": 56
+      }
+    ],
+    "campaign_join": "region 1, 1..25. Financial reference on same Port. Run 120 opening seconds and upgrade tank at active 90 before op1. At t12 the first toll can be claimed; t120 begin handoff for op1. Prices/grants/build and legal gear state included. No prehistory receipt.",
+    "physical_ammo_use": "abstract spending fixture 2 units before each battle (spend up to stock; zero fallback). Campaign abstraction is not a per-shot runtime proof.",
+    "legal_path_variants": {
+      "buy_now_0": "build all desired facilities as soon as affordable; real combat-second join, no management time",
+      "buy_now_30": "same, with 30s port time between operations",
+      "reserve_next": "ringfence cash for next rank; non-critical infrastructure can wait",
+      "grid_first": "refinery at op2 and foundry at op4; auto-fund grid capacity before launching each operation; omit other optional facilities",
+      "grid_delayed_steel": "same grid route with first foundry at op6; no forced extra elapsed time"
+    },
+    "damage_test_note": "The five synthetic trajectories use stress-only per-upgrade 120/20, independent of real legal asset rates. Do not bill both.",
+    "total_unique_first_clear_all_25": 2060
+  },
+  "regional_works": {
+    "catalogue": "economy/capital_works.json",
+    "activation": "personal port after first clear 20; normal permanent-level purchase prices are independent of campaign frontier; stage entry reads completed projects listed in endgame/regional_operations.json",
+    "clock": "natural savings; real industry with free offline accrual. There is no project construction countdown or bond cost."
+  }
+}

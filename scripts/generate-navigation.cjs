@@ -46,7 +46,7 @@ function build() {
     return blocked.join('');
   }
   const heroMask = maskWithClearance(7.6);
-  const map = { size, land: land.join(''), blocked: heroMask, enemy: [], trade: [], pirate: [], port: [] };
+  const map = { size, land: land.join(''), blocked: heroMask, enemy: [], trade: [], inbound: [], outbound: [], pirate: [], port: [] };
   // Construct paths with the same water checks and router the player uses.
   const filename = require.resolve('../src/data/navigation.json');
   require.cache[filename] = {id: filename, filename, loaded: true, exports: {landscape: map, portrait: map}};
@@ -70,8 +70,31 @@ function build() {
       map[kind].push(...(i === 1 ? segment : segment.slice(1)));
     }
   }
+  // Civil TSS (IMO COLREG Rule 10). At game scale the inbound voyage
+  // runs north of the outbound line and follows it in the opposite direction.
+  // Smooth the normal over a ship length so hulls turn through bends.
+  map.blocked = maskWithClearance(21);
+  const corridor = [];
+  for (let i = 1; i < routes.trade.length; i++) {
+    const section = nav.findWaterRoute(toPoint(routes.trade[i-1]), toPoint(routes.trade[i]));
+    if (section.length < 2) throw Error('Civilian corridor is disconnected at ' + i);
+    corridor.push(...(i === 1 ? section : section.slice(1)));
+  }
+  const center = t => {
+    const p = nav.sampleLane(corridor, t);
+    return pctTo3d(p.x, p.y);
+  };
+  for (let i = 0; i <= 400; i++) {
+    const t = i / 400, [x, z] = center(t);
+    const a = center(t - .01), b = center(t + .01);
+    const dx = b[0] - a[0], dz = b[1] - a[1], length = Math.hypot(dx, dz);
+    const offsetX = 4 * dz / length, offsetZ = -4 * dx / length;
+    map.inbound.push(toPoint([x + offsetX, z + offsetZ]));
+    map.outbound.push(toPoint([x - offsetX, z - offsetZ]));
+  }
+  map.inbound.reverse();
   map.blocked = heroMask;
-  for (const kind of Object.keys(waypoints)) {
+  for (const kind of [...Object.keys(waypoints), 'inbound', 'outbound']) {
     for (let i = 1; i < map[kind].length; i++) {
       if (!nav.safeSegment(map[kind][i-1], map[kind][i])) throw Error('Unnavigable '+kind+' at '+i);
     }

@@ -1,0 +1,2137 @@
+{
+  "version": "reopening.golden.r1/5.1",
+  "objectives_key": "explicit enum; localization is display only",
+  "campaign_initial_hp": 20,
+  "authored_beat_count": 103,
+  "group_count_includes_final_signature": true,
+  "chapters": [
+    {
+      "id": 1,
+      "title_fa": "بازگشایی آبراه",
+      "operations": [
+        1,
+        2,
+        3,
+        4,
+        5
+      ]
+    },
+    {
+      "id": 2,
+      "title_fa": "شیفت صادرات",
+      "operations": [
+        6,
+        7,
+        8,
+        9,
+        10
+      ]
+    },
+    {
+      "id": 3,
+      "title_fa": "بندر سه‌شیفته",
+      "operations": [
+        11,
+        12,
+        13,
+        14,
+        15
+      ]
+    },
+    {
+      "id": 4,
+      "title_fa": "شهر و دریا",
+      "operations": [
+        16,
+        17,
+        18,
+        19,
+        20
+      ]
+    },
+    {
+      "id": 5,
+      "title_fa": "تنگه باز است",
+      "operations": [
+        21,
+        22,
+        23,
+        24,
+        25
+      ]
+    }
+  ],
+  "abstract_reference_profiles": {
+    "a": {
+      "label_fa": "پیوسته",
+      "model_work": 8,
+      "deadline_s": 10
+    },
+    "b": {
+      "label_fa": "فشرده",
+      "model_work": 10,
+      "deadline_s": 7
+    },
+    "c": {
+      "label_fa": "ماندگار",
+      "model_work": 13,
+      "deadline_s": 12
+    }
+  },
+  "operations": [
+    {
+      "op": 1,
+      "arc": 1,
+      "title_fa": "اولین عبور",
+      "baseline_operation": "سپر ساحل",
+      "baseline_objective": "دفع حمله",
+      "objective": "repel",
+      "briefing_fa": "مجوز بازگشایی رسید. سه بوق کوتاه از کشتی منتظر شنیده می‌شود. مسئول اسکله می‌پرسد: «ثبت عبور را شروع کنم؟»",
+      "preparation_decision_fa": "گزارش آمادگی را بخوان یا با آرایش اولیه وارد شو.",
+      "encounter_rule_fa": "اولین پیام خطر و اولین شلیک در یک قاب؛ تمرین بدون زمانِ انتخاب.",
+      "first_clear_news_fa": "اولین پرچم روی تابلو بالا می‌رود. عبور، با نام همان کشتی در دفتر ثبت می‌شود.",
+      "failure_news_fa": "چراغ عبور هنوز برای این کاروان روشن نشده است. نمایش علت را باز کن و از آمادگی دوباره شروع کن.",
+      "teach_or_review_fa": "عبور و عوارض در کنار دفاع؛ فقط یک هدف فعال.",
+      "board": "single",
+      "objective_initial": null,
+      "quota_min_pct": null,
+      "damage_eligible_built_facilities": [
+        "dock"
+      ],
+      "work_order_min_op": 3,
+      "allow_cadence_choice": false,
+      "model_pressure_percent": 72,
+      "groups": [
+        {
+          "beat": 1,
+          "start_s": 6,
+          "spacing_s": 4,
+          "count": 2,
+          "pattern": "a",
+          "channel": "A",
+          "objective_live": false,
+          "final_signature": false
+        },
+        {
+          "beat": 2,
+          "start_s": 19,
+          "spacing_s": 4,
+          "count": 2,
+          "pattern": "a",
+          "channel": "A",
+          "objective_live": false,
+          "final_signature": false
+        },
+        {
+          "beat": 3,
+          "start_s": 33,
+          "spacing_s": 3,
+          "count": 2,
+          "pattern": "a",
+          "channel": "A",
+          "objective_live": false,
+          "final_signature": false
+        }
+      ],
+      "title_en": "The First Crossing",
+      "briefing_en": "The reopening order is here. The pier officer asks whether to open the transit register.",
+      "first_clear_news_en": "The first safe crossing appears in the harbor register.",
+      "first_clear_visible_mark": {
+        "id": "01_passage",
+        "label_fa": "نام اولین عبورِ ثبت‌شده در دفتر بندر",
+        "surface": "existing bulletin/history record; map command plaque/light for chapters",
+        "economic_effect": 0,
+        "one_time": true
+      }
+    },
+    {
+      "op": 2,
+      "arc": 1,
+      "title_fa": "دو رسید",
+      "baseline_operation": "گذرگاه امن",
+      "baseline_objective": "اسکورت کاروان",
+      "objective": "escort",
+      "briefing_fa": "اولین کاروان پشت خط است و نفت‌کش خود بندر برای بارگیری وارد می‌شود. حسابدار دو خانه جدا در دفتر باز می‌کند.",
+      "preparation_decision_fa": "اول سلامت کاروان را روی نقشه بخوان یا رسید اولین فروش نفت را مرور کن.",
+      "encounter_rule_fa": "میانهٔ سفر نوار سلامت کاروان برای اولین‌بار باز می‌شود.",
+      "first_clear_news_fa": "دو ردیف دفتر، عبور و فروش نفت را از هم جدا می‌کنند. آمار فقط از رخداد واقعی اقتصادی پر می‌شود.",
+      "failure_news_fa": "نمایش سلامت کاروان و سلامت بندر مشخص می‌کند کدام از دست رفت.",
+      "teach_or_review_fa": "مخزن و اسکله و تفاوت عوارض با درآمد نفت.",
+      "board": "escort",
+      "objective_initial": 10,
+      "quota_min_pct": null,
+      "damage_eligible_built_facilities": [
+        "dock"
+      ],
+      "work_order_min_op": 3,
+      "allow_cadence_choice": false,
+      "model_pressure_percent": 78,
+      "groups": [
+        {
+          "beat": 1,
+          "start_s": 6,
+          "spacing_s": 3,
+          "count": 2,
+          "pattern": "a",
+          "channel": "A",
+          "objective_live": false,
+          "final_signature": false
+        },
+        {
+          "beat": 2,
+          "start_s": 17,
+          "spacing_s": 3,
+          "count": 3,
+          "pattern": "b",
+          "channel": "A",
+          "objective_live": true,
+          "final_signature": false
+        },
+        {
+          "beat": 3,
+          "start_s": 37,
+          "spacing_s": 3,
+          "count": 2,
+          "pattern": "a",
+          "channel": "A",
+          "objective_live": true,
+          "final_signature": false
+        }
+      ],
+      "title_en": "Two Receipts",
+      "briefing_en": "A merchant convoy and the port’s own oil tanker arrive on the same shift.",
+      "first_clear_news_en": "The ledger distinguishes the transit receipt from actual oil loaded.",
+      "first_clear_visible_mark": {
+        "id": "02_receipts",
+        "label_fa": "دو خانهٔ جدا برای عوارض و صادرات روی میز دریافت",
+        "surface": "existing bulletin/history record; map command plaque/light for chapters",
+        "economic_effect": 0,
+        "one_time": true
+      }
+    },
+    {
+      "op": 3,
+      "arc": 1,
+      "title_fa": "برگ تعمیر",
+      "baseline_operation": "چشم بیدار",
+      "baseline_objective": "دفاع هوایی",
+      "objective": "airdef",
+      "briefing_fa": "نوبت دوم کار بندر است. سرکارگر یک برگ تعمیر خالی کنار قبض خروج گذاشته تا اگر آسیبی رسید علتش ثبت شود.",
+      "preparation_decision_fa": "برای نتیجه سالم تلاش کن یا پس از موج اولین تعمیر جزئی را از روی کارت دنبال کن.",
+      "encounter_rule_fa": "دو دستهٔ علامت‌خورده برای هدف سقف عبور ازدست‌رفته دارند.",
+      "first_clear_news_fa": "اگر خرابی هست کارت همان ساختمان باز می‌شود؛ در عبور بی‌آسیب، پیش‌نمایش تعمیر بدون خرج نشان داده می‌شود.",
+      "failure_news_fa": "نخستین هزینه فقط وقتی خسارت ثبت شود ظاهر می‌شود. ذخیره و توانایی تلاش مجدد باقی است.",
+      "teach_or_review_fa": "هزینه یک تعمیر؛ فعلاً از فولاد موجود.",
+      "board": "fan",
+      "objective_initial": null,
+      "quota_min_pct": 65,
+      "damage_eligible_built_facilities": [
+        "dock"
+      ],
+      "work_order_min_op": 3,
+      "allow_cadence_choice": false,
+      "model_pressure_percent": 85,
+      "groups": [
+        {
+          "beat": 1,
+          "start_s": 6,
+          "spacing_s": 3,
+          "count": 3,
+          "pattern": "a",
+          "channel": "A",
+          "objective_live": false,
+          "final_signature": false
+        },
+        {
+          "beat": 2,
+          "start_s": 19,
+          "spacing_s": 2,
+          "count": 2,
+          "pattern": "b",
+          "channel": "A",
+          "objective_live": true,
+          "final_signature": false
+        },
+        {
+          "beat": 3,
+          "start_s": 33,
+          "spacing_s": 2,
+          "count": 3,
+          "pattern": "a",
+          "channel": "A",
+          "objective_live": true,
+          "final_signature": false
+        }
+      ],
+      "title_en": "The Work Order",
+      "briefing_en": "A blank work order waits beside the harbor log in case this shift causes damage.",
+      "first_clear_news_en": "Inspect any actual damage or preview a sample repair without paying.",
+      "first_clear_visible_mark": {
+        "id": "03_form",
+        "label_fa": "برگ نگهداشت سنجاق‌شده کنار فهرست عملیات",
+        "surface": "existing bulletin/history record; map command plaque/light for chapters",
+        "economic_effect": 0,
+        "one_time": true
+      }
+    },
+    {
+      "op": 4,
+      "arc": 1,
+      "title_fa": "نفس مخزن",
+      "baseline_operation": "تور صیاد",
+      "baseline_objective": "رهگیری ناوگان",
+      "objective": "intercept",
+      "briefing_fa": "نفت تا رسیدن شناور بعدی در مخزن مانده. مهندس شیفت روی تابلو زمانِ پرشدن و زمانِ پهلوگیری را کنار هم می‌نویسد.",
+      "preparation_decision_fa": "گنجایش بیشتر بخری یا پول را نگه داری و بارگیری را سبک‌تر/سنگین‌تر کنی؟",
+      "encounter_rule_fa": "نتیجه به رسیدگی به دستهٔ میانیِ مشخص وابسته است.",
+      "first_clear_news_fa": "سرپرست مقدار نفت باقی‌مانده را در همان مخزن می‌بیند. گزینش اول بایگانی می‌شود.",
+      "failure_news_fa": "تخلیهٔ ناقص موج به معنی حذف کل نفت ذخیره‌شده نیست.",
+      "teach_or_review_fa": "گنجایش، سرعت بارگیری و نرخ واقعی مستقل‌اند.",
+      "board": "return",
+      "objective_initial": null,
+      "quota_min_pct": 65,
+      "damage_eligible_built_facilities": [
+        "tank"
+      ],
+      "work_order_min_op": 3,
+      "allow_cadence_choice": true,
+      "model_pressure_percent": 116,
+      "groups": [
+        {
+          "beat": 1,
+          "start_s": 6,
+          "spacing_s": 4,
+          "count": 2,
+          "pattern": "a",
+          "channel": "A",
+          "objective_live": false,
+          "final_signature": false
+        },
+        {
+          "beat": 2,
+          "start_s": 18,
+          "spacing_s": 2,
+          "count": 4,
+          "pattern": "c",
+          "channel": "B",
+          "objective_live": true,
+          "final_signature": false
+        },
+        {
+          "beat": 3,
+          "start_s": 36,
+          "spacing_s": 3,
+          "count": 3,
+          "pattern": "b",
+          "channel": "A",
+          "objective_live": false,
+          "final_signature": false
+        }
+      ],
+      "title_en": "Room in the Tank",
+      "briefing_en": "The shift engineer compares time to full storage with the next tanker arrival.",
+      "first_clear_news_en": "The reservoir gauge shows the actual crude left after the shift.",
+      "first_clear_visible_mark": {
+        "id": "04_gauge",
+        "label_fa": "برچسب اندازهٔ مخزن کنار تصویر اسکله",
+        "surface": "existing bulletin/history record; map command plaque/light for chapters",
+        "economic_effect": 0,
+        "one_time": true
+      }
+    },
+    {
+      "op": 5,
+      "arc": 1,
+      "title_fa": "پایان شیفت اول",
+      "baseline_operation": "دیوار آتش",
+      "baseline_objective": "دفع حمله",
+      "objective": "repel",
+      "briefing_fa": "اولین دفتر شیفت بسته می‌شود. تا شب چند درخواست عبور باقی مانده و بندر باید نشان دهد بعد از یک موج سخت هم می‌تواند کار کند.",
+      "preparation_decision_fa": "سرمایه را برای آمادگی این موج خرج کنی یا ابتدا گزارش گلوگاه بندر را بخوانی؟",
+      "encounter_rule_fa": "یک ورودی پایانی پرنور با برچسب فصل؛ قبل از آن فاصلهٔ تنفس.",
+      "first_clear_news_fa": "لوح «اولین شیفت باز» کنار دفتر عوارض نصب می‌شود.",
+      "failure_news_fa": "موج دوباره از برگهٔ آمادگی همین شیفت در دسترس است.",
+      "teach_or_review_fa": "جمع‌بندی عبور، مخزن و یک انتخاب سرمایه‌گذاری.",
+      "board": "join",
+      "objective_initial": null,
+      "quota_min_pct": null,
+      "damage_eligible_built_facilities": [
+        "dock"
+      ],
+      "work_order_min_op": 3,
+      "allow_cadence_choice": true,
+      "model_pressure_percent": 139,
+      "groups": [
+        {
+          "beat": 1,
+          "start_s": 5,
+          "spacing_s": 2,
+          "count": 3,
+          "pattern": "a",
+          "channel": "A",
+          "objective_live": false,
+          "final_signature": false
+        },
+        {
+          "beat": 2,
+          "start_s": 15,
+          "spacing_s": 3,
+          "count": 3,
+          "pattern": "b",
+          "channel": "B",
+          "objective_live": false,
+          "final_signature": false
+        },
+        {
+          "beat": 3,
+          "start_s": 29,
+          "spacing_s": 2,
+          "count": 4,
+          "pattern": "c",
+          "channel": "A",
+          "objective_live": false,
+          "final_signature": false
+        },
+        {
+          "beat": 4,
+          "start_s": 46,
+          "spacing_s": 1,
+          "count": 1,
+          "pattern": "b",
+          "channel": "B",
+          "objective_live": false,
+          "final_signature": true
+        }
+      ],
+      "title_en": "First Shift Complete",
+      "briefing_en": "A few late permits remain before nightfall. The harbor must stay open through a demanding shift.",
+      "first_clear_news_en": "The first reopened shift earns its plaque.",
+      "first_clear_visible_mark": {
+        "id": "05_plaque",
+        "label_fa": "لوح اولین شیفت باز",
+        "surface": "existing bulletin/history record; map command plaque/light for chapters",
+        "economic_effect": 0,
+        "one_time": true
+      }
+    },
+    {
+      "op": 6,
+      "arc": 2,
+      "title_fa": "نوبت پالایش",
+      "baseline_operation": "بارگیری زیر آتش",
+      "baseline_objective": "دفاع از بندر هنگام بارگیری",
+      "objective": "structure",
+      "briefing_fa": "نفت‌کش کنار اسکله است. سوخت نیروگاه از همان ذخیرهٔ اولیه می‌آید و این بار رئیس شیفت آهنگ مصرف را نشان می‌دهد.",
+      "preparation_decision_fa": "سهم صادرات را بالا نگه داری یا برای پالایش سوخت کنار بگذاری؟",
+      "encounter_rule_fa": "دستهٔ دوم و سوم روی وضعیت بارگیریِ مأموریت اثر دارند.",
+      "first_clear_news_fa": "دفتر، سوخت تولیدشده و نفت واقعاً بارگیری‌شده را کنار هم نشان می‌دهد.",
+      "failure_news_fa": "در گزارش، خسارت اسکله جدا از هزینهٔ عملیاتی نیروگاه دیده می‌شود.",
+      "teach_or_review_fa": "پالایشگاه و سهم صادرات/پالایش؛ آموزش اضطراری زودتر به شرط کمبود.",
+      "board": "berth",
+      "objective_initial": 10,
+      "quota_min_pct": null,
+      "damage_eligible_built_facilities": [
+        "dock"
+      ],
+      "work_order_min_op": 3,
+      "allow_cadence_choice": true,
+      "model_pressure_percent": 124,
+      "groups": [
+        {
+          "beat": 1,
+          "start_s": 5,
+          "spacing_s": 3,
+          "count": 3,
+          "pattern": "a",
+          "channel": "A",
+          "objective_live": false,
+          "final_signature": false
+        },
+        {
+          "beat": 2,
+          "start_s": 20,
+          "spacing_s": 2,
+          "count": 5,
+          "pattern": "c",
+          "channel": "A",
+          "objective_live": true,
+          "final_signature": false
+        },
+        {
+          "beat": 3,
+          "start_s": 39,
+          "spacing_s": 3,
+          "count": 3,
+          "pattern": "b",
+          "channel": "A",
+          "objective_live": true,
+          "final_signature": false
+        }
+      ],
+      "title_en": "Refinery Shift",
+      "briefing_en": "A tanker is alongside. Initial generator reserves are shrinking.",
+      "first_clear_news_en": "The shift report pairs actual fuel produced with actual crude loaded.",
+      "first_clear_visible_mark": {
+        "id": "06_lever",
+        "label_fa": "ردیف تخصیص نفت در ثبت شیفت",
+        "surface": "existing bulletin/history record; map command plaque/light for chapters",
+        "economic_effect": 0,
+        "one_time": true
+      }
+    },
+    {
+      "op": 7,
+      "arc": 2,
+      "title_fa": "نوبت‌های جابه‌جا",
+      "baseline_operation": "حلقه‌شکن",
+      "baseline_objective": "شکستن محاصره",
+      "objective": "siege",
+      "briefing_fa": "دو درخواست تجاری پشت‌سر هم رسیده‌اند. روی تابلوی بندر یکی از برگه‌های ورود دیرتر از بقیه حرکت می‌کند.",
+      "preparation_decision_fa": "جلسه را اکنون شروع کنی یا ابتدا سوخت بحرانی را تثبیت کنی؟",
+      "encounter_rule_fa": "هر دو کانال A و B باید حداقل پوشش را بگیرند؛ مجموع تنها کافی نیست.",
+      "first_clear_news_fa": "تابلوی نوبت دوباره خواناست و کشتی‌های جدید در چرخهٔ عادی بازی وارد می‌شوند.",
+      "failure_news_fa": "کاستیِ آمادگی و فشار هر بخش روی یک خط زمانی نشان داده می‌شود.",
+      "teach_or_review_fa": "اثر سوخت بر برق و نرخ واقعی؛ امکان برگشت از بحران.",
+      "board": "split",
+      "objective_initial": null,
+      "quota_min_pct": 65,
+      "damage_eligible_built_facilities": [
+        "power"
+      ],
+      "work_order_min_op": 3,
+      "allow_cadence_choice": true,
+      "model_pressure_percent": 110,
+      "groups": [
+        {
+          "beat": 1,
+          "start_s": 5,
+          "spacing_s": 2,
+          "count": 2,
+          "pattern": "b",
+          "channel": "A",
+          "objective_live": false,
+          "final_signature": false
+        },
+        {
+          "beat": 2,
+          "start_s": 15,
+          "spacing_s": 2,
+          "count": 4,
+          "pattern": "a",
+          "channel": "B",
+          "objective_live": true,
+          "final_signature": false
+        },
+        {
+          "beat": 3,
+          "start_s": 27,
+          "spacing_s": 3,
+          "count": 3,
+          "pattern": "c",
+          "channel": "A",
+          "objective_live": false,
+          "final_signature": false
+        },
+        {
+          "beat": 4,
+          "start_s": 41,
+          "spacing_s": 2,
+          "count": 3,
+          "pattern": "a",
+          "channel": "B",
+          "objective_live": true,
+          "final_signature": false
+        }
+      ],
+      "title_en": "Revised Turnaround",
+      "briefing_en": "Two arrivals are close together. One entry moves late across the schedule.",
+      "first_clear_news_en": "The turn board clears and ordinary traffic resumes its own schedule.",
+      "first_clear_visible_mark": {
+        "id": "07_board",
+        "label_fa": "مهر سامان‌دهی نوبت",
+        "surface": "existing bulletin/history record; map command plaque/light for chapters",
+        "economic_effect": 0,
+        "one_time": true
+      }
+    },
+    {
+      "op": 8,
+      "arc": 2,
+      "title_fa": "یک عقربه کم",
+      "baseline_operation": "چتر فولادی",
+      "baseline_objective": "دفاع هوایی",
+      "objective": "airdef",
+      "briefing_fa": "تابلوی برق نزدیک محدودهٔ ظرفیت است. مهندس چراغ صنعت و مصرف دفاع را هم‌زمان نشان می‌دهد.",
+      "preparation_decision_fa": "پیش از خرید، اثر آن را بر توان باقیمانده و تولید واقعی مقایسه کن.",
+      "encounter_rule_fa": "دستهٔ اول و سوم به هدف متصل‌اند و وسط فرصت جبران است.",
+      "first_clear_news_fa": "نمودار «پیش از خرید/اکنون» در کارت شبکه ذخیره می‌شود.",
+      "failure_news_fa": "خرید انجام‌شده را حذف نمی‌کنیم؛ مانع تنزل عملکرد روی کارت توضیح داده می‌شود.",
+      "teach_or_review_fa": "ظرفیت آزاد و افت خروجی از کمبود انرژی.",
+      "board": "fan",
+      "objective_initial": null,
+      "quota_min_pct": 70,
+      "damage_eligible_built_facilities": [
+        "power"
+      ],
+      "work_order_min_op": 3,
+      "allow_cadence_choice": true,
+      "model_pressure_percent": 121,
+      "groups": [
+        {
+          "beat": 1,
+          "start_s": 6,
+          "spacing_s": 2,
+          "count": 4,
+          "pattern": "a",
+          "channel": "A",
+          "objective_live": true,
+          "final_signature": false
+        },
+        {
+          "beat": 2,
+          "start_s": 21,
+          "spacing_s": 2,
+          "count": 4,
+          "pattern": "b",
+          "channel": "A",
+          "objective_live": false,
+          "final_signature": false
+        },
+        {
+          "beat": 3,
+          "start_s": 36,
+          "spacing_s": 2,
+          "count": 5,
+          "pattern": "b",
+          "channel": "A",
+          "objective_live": true,
+          "final_signature": false
+        }
+      ],
+      "title_en": "One Dial Short",
+      "briefing_en": "Industrial and defense demand approach the network’s available power.",
+      "first_clear_news_en": "The network card can compare the purchase with the previous state.",
+      "first_clear_visible_mark": {
+        "id": "08_dial",
+        "label_fa": "علامت دست‌نویس ظرفیت روی تابلوی شبکه",
+        "surface": "existing bulletin/history record; map command plaque/light for chapters",
+        "economic_effect": 0,
+        "one_time": true
+      }
+    },
+    {
+      "op": 9,
+      "arc": 2,
+      "title_fa": "صدای بارانداز",
+      "baseline_operation": "کاروان طلایی",
+      "baseline_objective": "اسکورت کاروان",
+      "objective": "escort",
+      "briefing_fa": "یک کاروان عادی نوبت عبور دارد و اولین سفارش خدماتی فولاد برای بازسازی بندر روی میز آمده است.",
+      "preparation_decision_fa": "از ذخیره باقی‌مانده خرج کنی یا برای ساخت مجتمع فولاد آماده شوی؟",
+      "encounter_rule_fa": "کاروان از مرحلهٔ دوم تا پایان زیر نظر است؛ حالت آرام پیش از ورود انتخاب می‌شود.",
+      "first_clear_news_fa": "کاروان به فهرست عبورهای امن افزوده می‌شود. بودجهٔ فولاد بندر سر جای خود باقی می‌ماند.",
+      "failure_news_fa": "تلاش مجدد همراه پیش‌نمایش سلامت وسیلهٔ اسکورت است.",
+      "teach_or_review_fa": "فولاد به‌عنوان کاربرد واقعی تعمیر و ظرفیت صنعت.",
+      "board": "escort",
+      "objective_initial": 10,
+      "quota_min_pct": null,
+      "damage_eligible_built_facilities": [
+        "steel"
+      ],
+      "work_order_min_op": 3,
+      "allow_cadence_choice": true,
+      "model_pressure_percent": 131,
+      "groups": [
+        {
+          "beat": 1,
+          "start_s": 5,
+          "spacing_s": 3,
+          "count": 3,
+          "pattern": "a",
+          "channel": "A",
+          "objective_live": false,
+          "final_signature": false
+        },
+        {
+          "beat": 2,
+          "start_s": 17,
+          "spacing_s": 2,
+          "count": 4,
+          "pattern": "c",
+          "channel": "A",
+          "objective_live": true,
+          "final_signature": false
+        },
+        {
+          "beat": 3,
+          "start_s": 31,
+          "spacing_s": 2,
+          "count": 3,
+          "pattern": "a",
+          "channel": "A",
+          "objective_live": true,
+          "final_signature": false
+        },
+        {
+          "beat": 4,
+          "start_s": 44,
+          "spacing_s": 2,
+          "count": 4,
+          "pattern": "b",
+          "channel": "A",
+          "objective_live": true,
+          "final_signature": false
+        }
+      ],
+      "title_en": "Sounds of the Quay",
+      "briefing_en": "An ordinary convoy is due. A steel request for port maintenance is on the desk.",
+      "first_clear_news_en": "The convoy enters the safe-crossing record. Stored steel stays in the port account.",
+      "first_clear_visible_mark": {
+        "id": "09_order",
+        "label_fa": "اولین برگ سفارش نگهداشت",
+        "surface": "existing bulletin/history record; map command plaque/light for chapters",
+        "economic_effect": 0,
+        "one_time": true
+      }
+    },
+    {
+      "op": 10,
+      "arc": 2,
+      "title_fa": "چراغ سکوی نفت",
+      "baseline_operation": "نگهبان شعله",
+      "baseline_objective": "دفاع از سکو",
+      "objective": "structure",
+      "briefing_fa": "در پایان شیفت دوم سوخت، نفت و برق از سه تابلوی جدا خوانده می‌شوند. سکوی کاری این شیفت باید فعال بماند.",
+      "preparation_decision_fa": "برای پایداری تولید به ظرفیت تازه نیاز داری یا اولین تعمیر مفیدتر است؟",
+      "encounter_rule_fa": "سلامت نشان سکو با فشار سه لَخت میانی سنجیده می‌شود و سپس مهر پایان فصل می‌رسد.",
+      "first_clear_news_fa": "چراغ دوم روی دفتر اتاق فرمان روشن می‌شود. سکو در نمای نزدیک وضعیت عملیاتی واقعی‌اش را دارد.",
+      "failure_news_fa": "جبران خسارت، مرحلهٔ تولید را پاک نمی‌کند.",
+      "teach_or_review_fa": "خروجی بالقوه و خروجی واقعی؛ جمع‌بندی برق/سوخت/فولاد.",
+      "board": "berth",
+      "objective_initial": 10,
+      "quota_min_pct": null,
+      "damage_eligible_built_facilities": [
+        "oil"
+      ],
+      "work_order_min_op": 3,
+      "allow_cadence_choice": true,
+      "model_pressure_percent": 147,
+      "groups": [
+        {
+          "beat": 1,
+          "start_s": 5,
+          "spacing_s": 2,
+          "count": 3,
+          "pattern": "b",
+          "channel": "A",
+          "objective_live": false,
+          "final_signature": false
+        },
+        {
+          "beat": 2,
+          "start_s": 16,
+          "spacing_s": 2,
+          "count": 4,
+          "pattern": "b",
+          "channel": "A",
+          "objective_live": true,
+          "final_signature": false
+        },
+        {
+          "beat": 3,
+          "start_s": 27,
+          "spacing_s": 2,
+          "count": 4,
+          "pattern": "a",
+          "channel": "A",
+          "objective_live": true,
+          "final_signature": false
+        },
+        {
+          "beat": 4,
+          "start_s": 40,
+          "spacing_s": 2,
+          "count": 4,
+          "pattern": "c",
+          "channel": "A",
+          "objective_live": true,
+          "final_signature": false
+        },
+        {
+          "beat": 5,
+          "start_s": 53,
+          "spacing_s": 1,
+          "count": 1,
+          "pattern": "b",
+          "channel": "A",
+          "objective_live": false,
+          "final_signature": true
+        }
+      ],
+      "title_en": "Platform Lights",
+      "briefing_en": "Three indicators show fuel, crude and power at the end of the second shift.",
+      "first_clear_news_en": "A second light appears on the command ledger.",
+      "first_clear_visible_mark": {
+        "id": "10_light",
+        "label_fa": "چراغ دوم دفتر",
+        "surface": "existing bulletin/history record; map command plaque/light for chapters",
+        "economic_effect": 0,
+        "one_time": true
+      }
+    },
+    {
+      "op": 11,
+      "arc": 3,
+      "title_fa": "راه بازگشت",
+      "baseline_operation": "شکارچیان شب",
+      "baseline_objective": "رهگیری ناوگان",
+      "objective": "intercept",
+      "briefing_fa": "یک کشتی تجاری با نشان مسیر متفاوت از بقیه دیده شده است. دفتر تردد ابتدا هشدار انسانی و فرصت اصلاح را نشان می‌دهد.",
+      "preparation_decision_fa": "در بخش تمرینی یک هشدار را بخوان و اجازهٔ بازگشت به مسیر بده، سپس موج جداگانه را شروع کن.",
+      "encounter_rule_fa": "دو سهمیهٔ متناوب در جدول دیده می‌شود. حادثهٔ اداری قبل از موج مسیر مستقلی دارد.",
+      "first_clear_news_fa": "کشتی تمرینی به مسیر برگشت. اگر بخش آموزشی را رد کرده‌ای، در دفتر فرماندهی برای مرور می‌ماند.",
+      "failure_news_fa": "تخلف مسیر در نتیجهٔ موج یا شمار دشمنان شمرده نمی‌شود.",
+      "teach_or_review_fa": "معرفی تخلف نادر پس از چندین عبور سالم؛ آموزش تمرینی بدون پول.",
+      "board": "return",
+      "objective_initial": null,
+      "quota_min_pct": 70,
+      "damage_eligible_built_facilities": [
+        "optical",
+        "dock"
+      ],
+      "work_order_min_op": 3,
+      "allow_cadence_choice": true,
+      "model_pressure_percent": 151,
+      "groups": [
+        {
+          "beat": 1,
+          "start_s": 5,
+          "spacing_s": 2,
+          "count": 4,
+          "pattern": "a",
+          "channel": "A",
+          "objective_live": false,
+          "final_signature": false
+        },
+        {
+          "beat": 2,
+          "start_s": 17,
+          "spacing_s": 2,
+          "count": 4,
+          "pattern": "b",
+          "channel": "B",
+          "objective_live": true,
+          "final_signature": false
+        },
+        {
+          "beat": 3,
+          "start_s": 29,
+          "spacing_s": 2,
+          "count": 4,
+          "pattern": "c",
+          "channel": "A",
+          "objective_live": false,
+          "final_signature": false
+        },
+        {
+          "beat": 4,
+          "start_s": 44,
+          "spacing_s": 2,
+          "count": 4,
+          "pattern": "a",
+          "channel": "B",
+          "objective_live": true,
+          "final_signature": false
+        }
+      ],
+      "title_en": "The Way Back",
+      "briefing_en": "A merchant needs a route correction. The training desk explains how to advise it safely.",
+      "first_clear_news_en": "The practice incident resolves without income or a combat entry.",
+      "first_clear_visible_mark": {
+        "id": "11_return",
+        "label_fa": "مهر بازگشت به مسیر در راهنمای عبور",
+        "surface": "existing bulletin/history record; map command plaque/light for chapters",
+        "economic_effect": 0,
+        "one_time": true
+      }
+    },
+    {
+      "op": 12,
+      "arc": 3,
+      "title_fa": "بدهی تعمیر",
+      "baseline_operation": "سپیده‌دم سرخ",
+      "baseline_objective": "دفاع از بندر هنگام بارگیری",
+      "objective": "structure",
+      "briefing_fa": "جرثقیل بارگیری برای یک شیفت شلوغ آماده می‌شود. اگر تعمیر معوق داری، کاهش راندمان پیش از شروع دیده می‌شود.",
+      "preparation_decision_fa": "ابتدا یک واحد تعمیر کن یا با همان ظرفیت فعلی بارگیری را ادامه بده.",
+      "encounter_rule_fa": "اوج فشار وسط بارگیری است و فاصلهٔ پایانی برای بازیابی خوانایی.",
+      "first_clear_news_fa": "یک رسید، سلامت هدف نبرد و هزینهٔ واقعی تعمیر بندر را جدا نشان می‌دهد.",
+      "failure_news_fa": "صف تعمیرها باقی می‌ماند و همان آسیب دوباره ثبت نخواهد شد.",
+      "teach_or_review_fa": "اولویت‌دادن به تعمیر دو بخش؛ نقش مجتمع فولاد.",
+      "board": "berth",
+      "objective_initial": 10,
+      "quota_min_pct": null,
+      "damage_eligible_built_facilities": [
+        "dock",
+        "steel"
+      ],
+      "work_order_min_op": 3,
+      "allow_cadence_choice": true,
+      "model_pressure_percent": 126,
+      "groups": [
+        {
+          "beat": 1,
+          "start_s": 6,
+          "spacing_s": 3,
+          "count": 3,
+          "pattern": "a",
+          "channel": "A",
+          "objective_live": false,
+          "final_signature": false
+        },
+        {
+          "beat": 2,
+          "start_s": 18,
+          "spacing_s": 2,
+          "count": 5,
+          "pattern": "c",
+          "channel": "A",
+          "objective_live": true,
+          "final_signature": false
+        },
+        {
+          "beat": 3,
+          "start_s": 34,
+          "spacing_s": 2,
+          "count": 5,
+          "pattern": "b",
+          "channel": "A",
+          "objective_live": true,
+          "final_signature": false
+        },
+        {
+          "beat": 4,
+          "start_s": 49,
+          "spacing_s": 3,
+          "count": 4,
+          "pattern": "c",
+          "channel": "A",
+          "objective_live": false,
+          "final_signature": false
+        }
+      ],
+      "title_en": "Outstanding Repairs",
+      "briefing_en": "A loading crane prepares for a busy shift. An outstanding repair is visible before the operation.",
+      "first_clear_news_en": "Mission condition and actual repair cost have separate entries.",
+      "first_clear_visible_mark": {
+        "id": "12_service",
+        "label_fa": "ستون تعمیر انجام‌شده/معوق",
+        "surface": "existing bulletin/history record; map command plaque/light for chapters",
+        "economic_effect": 0,
+        "one_time": true
+      }
+    },
+    {
+      "op": 13,
+      "arc": 3,
+      "title_fa": "حساب آب",
+      "baseline_operation": "مشت آهنین",
+      "baseline_objective": "دفع حمله",
+      "objective": "repel",
+      "briefing_fa": "شهرک و پالایشگاه هم‌زمان آب می‌خواهند. خط تقاضای هر دو در تابلوی خدمات بندر دیده می‌شود.",
+      "preparation_decision_fa": "اول آب موردنیاز را تأمین کنی یا با ظرفیت فعلی از موج بگذری؟",
+      "encounter_rule_fa": "سلامت عمومی معیار است؛ انتخاب هزینهٔ ماندگار پیش از ورود روی ذخیره خواهد ماند.",
+      "first_clear_news_fa": "تابلوی شهرک آب در دسترس و اثر آن بر پایداری را گزارش می‌دهد.",
+      "failure_news_fa": "کار خدمات پایه ادامه دارد و بازیکن می‌تواند قبل از تکرار شبکه را اصلاح کند.",
+      "teach_or_review_fa": "آب‌شیرین‌کن، شهرک و هزینهٔ خدمت‌رسانی.",
+      "board": "join",
+      "objective_initial": null,
+      "quota_min_pct": null,
+      "damage_eligible_built_facilities": [
+        "water",
+        "city"
+      ],
+      "work_order_min_op": 3,
+      "allow_cadence_choice": true,
+      "model_pressure_percent": 139,
+      "groups": [
+        {
+          "beat": 1,
+          "start_s": 5,
+          "spacing_s": 2,
+          "count": 4,
+          "pattern": "b",
+          "channel": "A",
+          "objective_live": false,
+          "final_signature": false
+        },
+        {
+          "beat": 2,
+          "start_s": 19,
+          "spacing_s": 2,
+          "count": 5,
+          "pattern": "a",
+          "channel": "B",
+          "objective_live": false,
+          "final_signature": false
+        },
+        {
+          "beat": 3,
+          "start_s": 34,
+          "spacing_s": 2,
+          "count": 4,
+          "pattern": "c",
+          "channel": "A",
+          "objective_live": false,
+          "final_signature": false
+        },
+        {
+          "beat": 4,
+          "start_s": 49,
+          "spacing_s": 2,
+          "count": 5,
+          "pattern": "b",
+          "channel": "B",
+          "objective_live": false,
+          "final_signature": false
+        }
+      ],
+      "title_en": "Water Accounts",
+      "briefing_en": "The town and refinery request water at the same time. Both demands appear on the utility board.",
+      "first_clear_news_en": "The town reports available water and the resulting stability.",
+      "first_clear_visible_mark": {
+        "id": "13_water",
+        "label_fa": "نشان خدمات آب روی تابلو",
+        "surface": "existing bulletin/history record; map command plaque/light for chapters",
+        "economic_effect": 0,
+        "one_time": true
+      }
+    },
+    {
+      "op": 14,
+      "arc": 3,
+      "title_fa": "اتاق روشن",
+      "baseline_operation": "ستون‌های دریا",
+      "baseline_objective": "دفاع از سکو",
+      "objective": "structure",
+      "briefing_fa": "پیام شهرک می‌رسد که شیفت شب باید طبق روال بگذرد. قرار است گزارش این موج هم کنار گزارش‌های خدمات بندر ثبت شود.",
+      "preparation_decision_fa": "سرمایه را صرف ظرفیت خام کنی یا پایداری و رفاه را بالا ببری؟",
+      "encounter_rule_fa": "دو گروه آخر در پنجرهٔ فعال سلامت سکو قرار دارند.",
+      "first_clear_news_fa": "چراغ‌های خدمات بندر متناسب با پایداری فعلی نمایش داده می‌شوند.",
+      "failure_news_fa": "پیش از تکرار، دو راه افزایش ظرفیت و افزایش پایداری با اثر پیش‌بینی‌شده دیده می‌شود.",
+      "teach_or_review_fa": "رفاه و خدمات؛ اثر غیرمستقیم بر صنعت.",
+      "board": "berth",
+      "objective_initial": 10,
+      "quota_min_pct": null,
+      "damage_eligible_built_facilities": [
+        "welfare",
+        "city"
+      ],
+      "work_order_min_op": 3,
+      "allow_cadence_choice": true,
+      "model_pressure_percent": 130,
+      "groups": [
+        {
+          "beat": 1,
+          "start_s": 5,
+          "spacing_s": 3,
+          "count": 4,
+          "pattern": "a",
+          "channel": "A",
+          "objective_live": false,
+          "final_signature": false
+        },
+        {
+          "beat": 2,
+          "start_s": 19,
+          "spacing_s": 2,
+          "count": 5,
+          "pattern": "c",
+          "channel": "A",
+          "objective_live": false,
+          "final_signature": false
+        },
+        {
+          "beat": 3,
+          "start_s": 31,
+          "spacing_s": 2,
+          "count": 5,
+          "pattern": "a",
+          "channel": "A",
+          "objective_live": true,
+          "final_signature": false
+        },
+        {
+          "beat": 4,
+          "start_s": 47,
+          "spacing_s": 2,
+          "count": 5,
+          "pattern": "b",
+          "channel": "A",
+          "objective_live": true,
+          "final_signature": false
+        }
+      ],
+      "title_en": "The Lit Room",
+      "briefing_en": "The town is working the night shift. Its services have a place in the harbor report.",
+      "first_clear_news_en": "The visible service lamps follow actual current stability.",
+      "first_clear_visible_mark": {
+        "id": "14_city",
+        "label_fa": "مارک خدمات شهرک",
+        "surface": "existing bulletin/history record; map command plaque/light for chapters",
+        "economic_effect": 0,
+        "one_time": true
+      }
+    },
+    {
+      "op": 15,
+      "arc": 3,
+      "title_fa": "یک شیفت کامل",
+      "baseline_operation": "سد گلوگاه",
+      "baseline_objective": "شکستن محاصره",
+      "objective": "siege",
+      "briefing_fa": "بندر دوباره همهٔ شیفت‌ها را پر کرده است. پیش از ورود کاروان بعد، سه خانوادهٔ درآمد و هزینه باید قابل توضیح باشند.",
+      "preparation_decision_fa": "موج پایان فصل را با موجودی فعلی بپذیری یا یک کار معوق را اول انجام بدهی؟",
+      "encounter_rule_fa": "تسویهٔ دو کانال پیش از پالس پایانِ فصل؛ ورودی‌های هم‌زمان دیده می‌شوند.",
+      "first_clear_news_fa": "لوح «بندر سه‌شیفته» روی دیوار دفتر نصب می‌شود.",
+      "failure_news_fa": "دفتر هزینه‌ها سهم تجارت، صادرات و تعمیر را برای همین شیفت نگه می‌دارد.",
+      "teach_or_review_fa": "تسلط بر منابع پایه؛ جمع‌بندی فصل.",
+      "board": "split",
+      "objective_initial": null,
+      "quota_min_pct": 70,
+      "damage_eligible_built_facilities": [
+        "dock",
+        "refinery"
+      ],
+      "work_order_min_op": 3,
+      "allow_cadence_choice": true,
+      "model_pressure_percent": 144,
+      "groups": [
+        {
+          "beat": 1,
+          "start_s": 5,
+          "spacing_s": 2,
+          "count": 4,
+          "pattern": "a",
+          "channel": "A",
+          "objective_live": false,
+          "final_signature": false
+        },
+        {
+          "beat": 2,
+          "start_s": 16,
+          "spacing_s": 2,
+          "count": 4,
+          "pattern": "b",
+          "channel": "B",
+          "objective_live": true,
+          "final_signature": false
+        },
+        {
+          "beat": 3,
+          "start_s": 27,
+          "spacing_s": 1,
+          "count": 6,
+          "pattern": "c",
+          "channel": "A",
+          "objective_live": false,
+          "final_signature": false
+        },
+        {
+          "beat": 4,
+          "start_s": 44,
+          "spacing_s": 2,
+          "count": 6,
+          "pattern": "c",
+          "channel": "B",
+          "objective_live": true,
+          "final_signature": false
+        },
+        {
+          "beat": 5,
+          "start_s": 59,
+          "spacing_s": 1,
+          "count": 1,
+          "pattern": "b",
+          "channel": "A",
+          "objective_live": false,
+          "final_signature": true
+        }
+      ],
+      "title_en": "All Shifts Running",
+      "briefing_en": "The harbor has filled its shift book. The operator can now explain income and maintenance.",
+      "first_clear_news_en": "The three-shift plaque is installed in the command room.",
+      "first_clear_visible_mark": {
+        "id": "15_plaque",
+        "label_fa": "لوح بندر سه‌شیفته",
+        "surface": "existing bulletin/history record; map command plaque/light for chapters",
+        "economic_effect": 0,
+        "one_time": true
+      }
+    },
+    {
+      "op": 16,
+      "arc": 4,
+      "title_fa": "جای خالی در صف",
+      "baseline_operation": "فانوس نجات",
+      "baseline_objective": "نجات کشتی آسیب‌دیده",
+      "objective": "rescue",
+      "briefing_fa": "یک کشتی تجاری خسارت دیده و بی‌خطر از صف معمولی جدا شده است؛ درخواست بازگشت آن ثبت شده.",
+      "preparation_decision_fa": "سلامت خود بندر و سلامت جداگانهٔ کشتی را در جریان کمک دنبال کن.",
+      "encounter_rule_fa": "سلامت اولیهٔ کشتی پایین‌تر است؛ باید تا پنجرهٔ آخر زنده بماند.",
+      "first_clear_news_fa": "کشتی به باجهٔ خدمات برمی‌گردد و نام آن در پروندهٔ نجات ثبت می‌شود.",
+      "failure_news_fa": "تلاش ناموفق عملیات امداد به‌عنوان قاچاق یا تخلف ثبت نمی‌شود.",
+      "teach_or_review_fa": "تفکیک نجات، تخلف اداری و موج خصمانه.",
+      "board": "escort",
+      "objective_initial": 7,
+      "quota_min_pct": null,
+      "damage_eligible_built_facilities": [
+        "dock",
+        "water"
+      ],
+      "work_order_min_op": 3,
+      "allow_cadence_choice": true,
+      "model_pressure_percent": 139,
+      "groups": [
+        {
+          "beat": 1,
+          "start_s": 6,
+          "spacing_s": 2,
+          "count": 5,
+          "pattern": "b",
+          "channel": "A",
+          "objective_live": false,
+          "final_signature": false
+        },
+        {
+          "beat": 2,
+          "start_s": 20,
+          "spacing_s": 3,
+          "count": 3,
+          "pattern": "a",
+          "channel": "A",
+          "objective_live": true,
+          "final_signature": false
+        },
+        {
+          "beat": 3,
+          "start_s": 30,
+          "spacing_s": 2,
+          "count": 4,
+          "pattern": "c",
+          "channel": "A",
+          "objective_live": true,
+          "final_signature": false
+        },
+        {
+          "beat": 4,
+          "start_s": 40,
+          "spacing_s": 2,
+          "count": 4,
+          "pattern": "b",
+          "channel": "A",
+          "objective_live": false,
+          "final_signature": false
+        },
+        {
+          "beat": 5,
+          "start_s": 54,
+          "spacing_s": 3,
+          "count": 4,
+          "pattern": "a",
+          "channel": "A",
+          "objective_live": true,
+          "final_signature": false
+        }
+      ],
+      "title_en": "A Space in the Queue",
+      "briefing_en": "A damaged merchant has left the ordinary queue and requested assistance.",
+      "first_clear_news_en": "The returned ship appears in the rescue register.",
+      "first_clear_visible_mark": {
+        "id": "16_rescue",
+        "label_fa": "برچسب نخستین نجات در دفتر",
+        "surface": "existing bulletin/history record; map command plaque/light for chapters",
+        "economic_effect": 0,
+        "one_time": true
+      }
+    },
+    {
+      "op": 17,
+      "arc": 4,
+      "title_fa": "اندوختهٔ شیفت",
+      "baseline_operation": "سقف آهنین",
+      "baseline_objective": "دفاع هوایی",
+      "objective": "airdef",
+      "briefing_fa": "کارکنان تدارکات می‌خواهند هزینهٔ مصرف و تولیدِ جبرانی هر دو معلوم باشد.",
+      "preparation_decision_fa": "خرج ذخیرهٔ موجود برای تدارک موج منطقی‌تر است یا ساخت ظرفیت تولید؟",
+      "encounter_rule_fa": "میان دو مسابقهٔ سهمیه‌دار یک دستهٔ طولانی قرار دارد.",
+      "first_clear_news_fa": "گزارش شیفت ورودی و خرج انبار را جدا به بازیکن نشان می‌دهد.",
+      "failure_news_fa": "با موجودی کم، چیدمان و گزینهٔ جایگزین در دسترس است.",
+      "teach_or_review_fa": "صنایع دفاعی، مصرف فولاد و سوخت و تدارکات.",
+      "board": "fan",
+      "objective_initial": null,
+      "quota_min_pct": 70,
+      "damage_eligible_built_facilities": [
+        "arms",
+        "steel"
+      ],
+      "work_order_min_op": 3,
+      "allow_cadence_choice": true,
+      "model_pressure_percent": 141,
+      "groups": [
+        {
+          "beat": 1,
+          "start_s": 5,
+          "spacing_s": 3,
+          "count": 3,
+          "pattern": "a",
+          "channel": "A",
+          "objective_live": false,
+          "final_signature": false
+        },
+        {
+          "beat": 2,
+          "start_s": 17,
+          "spacing_s": 2,
+          "count": 5,
+          "pattern": "b",
+          "channel": "A",
+          "objective_live": true,
+          "final_signature": false
+        },
+        {
+          "beat": 3,
+          "start_s": 32,
+          "spacing_s": 2,
+          "count": 6,
+          "pattern": "b",
+          "channel": "A",
+          "objective_live": false,
+          "final_signature": false
+        },
+        {
+          "beat": 4,
+          "start_s": 46,
+          "spacing_s": 2,
+          "count": 6,
+          "pattern": "c",
+          "channel": "A",
+          "objective_live": true,
+          "final_signature": false
+        }
+      ],
+      "title_en": "Shift Supplies",
+      "briefing_en": "The supply crew needs a clear record of what was used and what was produced.",
+      "first_clear_news_en": "The report separates store input from consumption.",
+      "first_clear_visible_mark": {
+        "id": "17_supply",
+        "label_fa": "سطر موجودی آغاز و پایان شیفت",
+        "surface": "existing bulletin/history record; map command plaque/light for chapters",
+        "economic_effect": 0,
+        "one_time": true
+      }
+    },
+    {
+      "op": 18,
+      "arc": 4,
+      "title_fa": "کاروان دوم",
+      "baseline_operation": "عبور بزرگ",
+      "baseline_objective": "اسکورت کاروان",
+      "objective": "escort",
+      "briefing_fa": "دو درخواست عبور نزدیک به هم‌اند. مدیر بندر پیشنهاد می‌دهد کار تکراریِ دریافت درآمد را به او بسپاری.",
+      "preparation_decision_fa": "خودت صندوق را جمع کنی یا با مدیر بندر مسیر خودکار را امتحان کنی؟",
+      "encounter_rule_fa": "سه بخش کوچک همراهی با دو فاصلهٔ استراحت دوطرفه؛ زمان و میزان سلامت نمایش داده شود.",
+      "first_clear_news_fa": "کاروان عبور می‌کند؛ دفتر اقتصادی فقط یک ثبت برای هر دریافت دارد.",
+      "failure_news_fa": "تلاش ناموفق، دستیار و ارتقاهای خریداری‌شده را پس نمی‌گیرد.",
+      "teach_or_review_fa": "مدیریت کارهای تکراری بعد از تجربهٔ دستی.",
+      "board": "escort",
+      "objective_initial": 10,
+      "quota_min_pct": null,
+      "damage_eligible_built_facilities": [
+        "dock",
+        "tank"
+      ],
+      "work_order_min_op": 3,
+      "allow_cadence_choice": true,
+      "model_pressure_percent": 143,
+      "groups": [
+        {
+          "beat": 1,
+          "start_s": 6,
+          "spacing_s": 2,
+          "count": 3,
+          "pattern": "a",
+          "channel": "A",
+          "objective_live": true,
+          "final_signature": false
+        },
+        {
+          "beat": 2,
+          "start_s": 16,
+          "spacing_s": 2,
+          "count": 4,
+          "pattern": "c",
+          "channel": "A",
+          "objective_live": false,
+          "final_signature": false
+        },
+        {
+          "beat": 3,
+          "start_s": 29,
+          "spacing_s": 2,
+          "count": 4,
+          "pattern": "b",
+          "channel": "A",
+          "objective_live": true,
+          "final_signature": false
+        },
+        {
+          "beat": 4,
+          "start_s": 40,
+          "spacing_s": 2,
+          "count": 5,
+          "pattern": "c",
+          "channel": "A",
+          "objective_live": false,
+          "final_signature": false
+        },
+        {
+          "beat": 5,
+          "start_s": 56,
+          "spacing_s": 2,
+          "count": 4,
+          "pattern": "b",
+          "channel": "A",
+          "objective_live": true,
+          "final_signature": false
+        }
+      ],
+      "title_en": "The Second Convoy",
+      "briefing_en": "Two convoys have close arrival times. The harbor manager offers to handle repeated collection.",
+      "first_clear_news_en": "The convoy clears; each collection has exactly one financial entry.",
+      "first_clear_visible_mark": {
+        "id": "18_team",
+        "label_fa": "امضای مدیر شیفت در دفتر",
+        "surface": "existing bulletin/history record; map command plaque/light for chapters",
+        "economic_effect": 0,
+        "one_time": true
+      }
+    },
+    {
+      "op": 19,
+      "arc": 4,
+      "title_fa": "ظرفیت پنهان",
+      "baseline_operation": "خنثی‌ساز",
+      "baseline_objective": "دفع حمله",
+      "objective": "repel",
+      "briefing_fa": "انبار بزرگ شده ولی نرخ واقعی بعضی صنایع هنوز پایین است. گزارش شیفت یک گلوگاه واقعی ذخیره را نشان می‌دهد.",
+      "preparation_decision_fa": "بین رفع کمبود سوخت، برق یا ظرفیت کارخانه، گلوگاه فعلی خودت را انتخاب کن.",
+      "encounter_rule_fa": "فشار پیوستهٔ شروع و پایان با وقفهٔ بلندتر بینشان.",
+      "first_clear_news_fa": "آمار قبل و بعد از آخرین تغییر در پروندهٔ صنعت دیده می‌شود.",
+      "failure_news_fa": "گزارش علت افت تنها بر پایهٔ دادهٔ همان ذخیره صادر می‌شود.",
+      "teach_or_review_fa": "بازده نهایی خرج و محدودیت ورودی.",
+      "board": "join",
+      "objective_initial": null,
+      "quota_min_pct": null,
+      "damage_eligible_built_facilities": [
+        "power",
+        "refinery"
+      ],
+      "work_order_min_op": 3,
+      "allow_cadence_choice": true,
+      "model_pressure_percent": 151,
+      "groups": [
+        {
+          "beat": 1,
+          "start_s": 6,
+          "spacing_s": 2,
+          "count": 5,
+          "pattern": "c",
+          "channel": "A",
+          "objective_live": false,
+          "final_signature": false
+        },
+        {
+          "beat": 2,
+          "start_s": 20,
+          "spacing_s": 2,
+          "count": 5,
+          "pattern": "a",
+          "channel": "B",
+          "objective_live": false,
+          "final_signature": false
+        },
+        {
+          "beat": 3,
+          "start_s": 33,
+          "spacing_s": 3,
+          "count": 4,
+          "pattern": "b",
+          "channel": "A",
+          "objective_live": false,
+          "final_signature": false
+        },
+        {
+          "beat": 4,
+          "start_s": 48,
+          "spacing_s": 2,
+          "count": 6,
+          "pattern": "b",
+          "channel": "B",
+          "objective_live": false,
+          "final_signature": false
+        }
+      ],
+      "title_en": "Hidden Capacity",
+      "briefing_en": "The stores have grown, yet part of the industry is still running under capacity.",
+      "first_clear_news_en": "The industry report compares the last change with current output.",
+      "first_clear_visible_mark": {
+        "id": "19_trace",
+        "label_fa": "نشان ثبت گلوگاه در دفتر مهندس",
+        "surface": "existing bulletin/history record; map command plaque/light for chapters",
+        "economic_effect": 0,
+        "one_time": true
+      }
+    },
+    {
+      "op": 20,
+      "arc": 4,
+      "title_fa": "شهر و دریا",
+      "baseline_operation": "طلوع خونین",
+      "baseline_objective": "رهگیری ناوگان",
+      "objective": "intercept",
+      "briefing_fa": "در پایان شیفت چهارم هم شهرک خدمت پایدار می‌خواهد و هم اسکله نیاز به آمادگی دارد.",
+      "preparation_decision_fa": "بعد از یک خرج تازه، کدام تصمیم برای موج بعد هنوز قابل عقب‌انداختن است؟",
+      "encounter_rule_fa": "سهمیهٔ دو نیمه و ورودی نهایی؛ تصمیم آمادگی امروز اثر هزینهٔ شیفت بعد را دارد.",
+      "first_clear_news_fa": "لوح «شهر و دریا» با تاریخ اولین پیروزی ثبت می‌شود.",
+      "failure_news_fa": "امکان بازگشت به عملیات‌های قبلی و کسب درآمد پایه باز است.",
+      "teach_or_review_fa": "جمع‌بندی تعارض سرمایه‌گذاری، خدمات و آمادگی.",
+      "board": "return",
+      "objective_initial": null,
+      "quota_min_pct": 75,
+      "damage_eligible_built_facilities": [
+        "city",
+        "dock"
+      ],
+      "work_order_min_op": 3,
+      "allow_cadence_choice": true,
+      "model_pressure_percent": 153,
+      "groups": [
+        {
+          "beat": 1,
+          "start_s": 5,
+          "spacing_s": 2,
+          "count": 5,
+          "pattern": "c",
+          "channel": "A",
+          "objective_live": false,
+          "final_signature": false
+        },
+        {
+          "beat": 2,
+          "start_s": 18,
+          "spacing_s": 2,
+          "count": 5,
+          "pattern": "b",
+          "channel": "B",
+          "objective_live": true,
+          "final_signature": false
+        },
+        {
+          "beat": 3,
+          "start_s": 32,
+          "spacing_s": 2,
+          "count": 5,
+          "pattern": "a",
+          "channel": "A",
+          "objective_live": true,
+          "final_signature": false
+        },
+        {
+          "beat": 4,
+          "start_s": 47,
+          "spacing_s": 2,
+          "count": 5,
+          "pattern": "c",
+          "channel": "B",
+          "objective_live": true,
+          "final_signature": false
+        },
+        {
+          "beat": 5,
+          "start_s": 63,
+          "spacing_s": 1,
+          "count": 1,
+          "pattern": "b",
+          "channel": "A",
+          "objective_live": false,
+          "final_signature": true
+        }
+      ],
+      "title_en": "The Town and the Sea",
+      "briefing_en": "The town needs stable services while the quay prepares for another demanding shift.",
+      "first_clear_news_en": "The Town and Sea plaque records the first clear.",
+      "first_clear_visible_mark": {
+        "id": "20_plaque",
+        "label_fa": "لوح شهر و دریا",
+        "surface": "existing bulletin/history record; map command plaque/light for chapters",
+        "economic_effect": 0,
+        "one_time": true
+      }
+    },
+    {
+      "op": 21,
+      "arc": 5,
+      "title_fa": "شیفت مستقل",
+      "baseline_operation": "سنگر سکو",
+      "baseline_objective": "دفاع از سکو",
+      "objective": "structure",
+      "briefing_fa": "اداره‌ای که روز نخست با چند ذخیرهٔ اولیه باز شد حالا عملیات عادی خود را دارد. گزارش امروز به مدیریت یک شیفت کامل می‌پردازد.",
+      "preparation_decision_fa": "ترمیم موضعی کنی یا با توان باقی‌مانده به مرحله بعد برسی؟",
+      "encounter_rule_fa": "دو دستهٔ پایانی پی‌درپی فشار نشان ساختمان را تغییر می‌دهند.",
+      "first_clear_news_fa": "نگهداشت تأسیسات در پروندهٔ شیفت ثبت می‌شود.",
+      "failure_news_fa": "اولویت بعدی روی نقشه به علت واقعی افت ظرفیت متصل می‌شود.",
+      "teach_or_review_fa": "نگهداشت تأسیسات بالغ و موجودی اطمینان.",
+      "board": "berth",
+      "objective_initial": 10,
+      "quota_min_pct": null,
+      "damage_eligible_built_facilities": [
+        "oil",
+        "tank"
+      ],
+      "work_order_min_op": 3,
+      "allow_cadence_choice": true,
+      "model_pressure_percent": 162,
+      "groups": [
+        {
+          "beat": 1,
+          "start_s": 5,
+          "spacing_s": 2,
+          "count": 5,
+          "pattern": "b",
+          "channel": "A",
+          "objective_live": false,
+          "final_signature": false
+        },
+        {
+          "beat": 2,
+          "start_s": 18,
+          "spacing_s": 2,
+          "count": 5,
+          "pattern": "c",
+          "channel": "A",
+          "objective_live": false,
+          "final_signature": false
+        },
+        {
+          "beat": 3,
+          "start_s": 33,
+          "spacing_s": 2,
+          "count": 5,
+          "pattern": "a",
+          "channel": "A",
+          "objective_live": true,
+          "final_signature": false
+        },
+        {
+          "beat": 4,
+          "start_s": 45,
+          "spacing_s": 2,
+          "count": 5,
+          "pattern": "c",
+          "channel": "A",
+          "objective_live": true,
+          "final_signature": false
+        }
+      ],
+      "title_en": "An Independent Shift",
+      "briefing_en": "The port that once relied on opening reserves now runs a complete service shift.",
+      "first_clear_news_en": "The shift book adds a facility-maintenance record.",
+      "first_clear_visible_mark": {
+        "id": "21_shift",
+        "label_fa": "مهر شیفت مستقل",
+        "surface": "existing bulletin/history record; map command plaque/light for chapters",
+        "economic_effect": 0,
+        "one_time": true
+      }
+    },
+    {
+      "op": 22,
+      "arc": 5,
+      "title_fa": "دفتر نوبت",
+      "baseline_operation": "دیوار طوفان",
+      "baseline_objective": "شکستن محاصره",
+      "objective": "siege",
+      "briefing_fa": "ورود کاروان‌ها منظم است؛ یک ناهماهنگی مُهر زمانی ممکن است دو بار ثبت شود. حسابدار منتظر تطبیق دو رسید است.",
+      "preparation_decision_fa": "گزارش تجارت را اکنون ببینی یا بعد از موج به آن برگردی؟",
+      "encounter_rule_fa": "دو کانال با طول نامساوی؛ فقط در یکی از کانال‌ها هجوم پایانی دیده می‌شود.",
+      "first_clear_news_fa": "ثبت رویدادها با شناسهٔ کشتی تطبیق دارد. هر عبور فقط یک ردیف درآمد دارد.",
+      "failure_news_fa": "بازگشت از وقفه یا تکرار موج یک عوارض اضافه صادر نمی‌کند.",
+      "teach_or_review_fa": "تطبیق درآمد با کشتی واقعی، اقتصاد آفلاین و گزارش بازگشت.",
+      "board": "split",
+      "objective_initial": null,
+      "quota_min_pct": 75,
+      "damage_eligible_built_facilities": [
+        "optical",
+        "dock"
+      ],
+      "work_order_min_op": 3,
+      "allow_cadence_choice": true,
+      "model_pressure_percent": 162,
+      "groups": [
+        {
+          "beat": 1,
+          "start_s": 6,
+          "spacing_s": 2,
+          "count": 3,
+          "pattern": "b",
+          "channel": "A",
+          "objective_live": false,
+          "final_signature": false
+        },
+        {
+          "beat": 2,
+          "start_s": 18,
+          "spacing_s": 2,
+          "count": 5,
+          "pattern": "a",
+          "channel": "B",
+          "objective_live": true,
+          "final_signature": false
+        },
+        {
+          "beat": 3,
+          "start_s": 29,
+          "spacing_s": 2,
+          "count": 5,
+          "pattern": "c",
+          "channel": "A",
+          "objective_live": false,
+          "final_signature": false
+        },
+        {
+          "beat": 4,
+          "start_s": 43,
+          "spacing_s": 2,
+          "count": 3,
+          "pattern": "b",
+          "channel": "B",
+          "objective_live": true,
+          "final_signature": false
+        },
+        {
+          "beat": 5,
+          "start_s": 52,
+          "spacing_s": 2,
+          "count": 4,
+          "pattern": "c",
+          "channel": "A",
+          "objective_live": false,
+          "final_signature": false
+        }
+      ],
+      "title_en": "The Turn Book",
+      "briefing_en": "One timestamp needs cross-checking in an otherwise orderly port ledger.",
+      "first_clear_news_en": "Transit entries match their ships; a crossing has one payment.",
+      "first_clear_visible_mark": {
+        "id": "22_stamp",
+        "label_fa": "مهر تطبیق دو رسید",
+        "surface": "existing bulletin/history record; map command plaque/light for chapters",
+        "economic_effect": 0,
+        "one_time": true
+      }
+    },
+    {
+      "op": 23,
+      "arc": 5,
+      "title_fa": "نفت‌کش شیفت آخر",
+      "baseline_operation": "آخرین بارگیری",
+      "baseline_objective": "دفاع از بندر هنگام بارگیری",
+      "objective": "structure",
+      "briefing_fa": "آخرین قرارداد بارگیری این فصل آماده است. مقدار قابل فروش پیش از شروع در پنل اقتصاد آمده است.",
+      "preparation_decision_fa": "بخشی از نفت را برای سوخت نگه داری یا فروش فعلی را بیشتر کنی؟",
+      "encounter_rule_fa": "بزرگ‌ترین خوشه پیش از پنجرهٔ آخر بارگیری می‌رسد.",
+      "first_clear_news_fa": "دفتر، مقدار واقعی بارگیری و نفت باقی‌مانده برای شیفت بعد را چاپ می‌کند.",
+      "failure_news_fa": "مقدار فروخته‌شده با از دست رفتن هدف نمایشی پس گرفته یا دوباره صادر نمی‌شود.",
+      "teach_or_review_fa": "تراز ذخیره، فرصت صادرات و ریسک تعمیر.",
+      "board": "berth",
+      "objective_initial": 10,
+      "quota_min_pct": null,
+      "damage_eligible_built_facilities": [
+        "dock",
+        "refinery"
+      ],
+      "work_order_min_op": 3,
+      "allow_cadence_choice": true,
+      "model_pressure_percent": 140,
+      "groups": [
+        {
+          "beat": 1,
+          "start_s": 6,
+          "spacing_s": 3,
+          "count": 4,
+          "pattern": "a",
+          "channel": "A",
+          "objective_live": false,
+          "final_signature": false
+        },
+        {
+          "beat": 2,
+          "start_s": 18,
+          "spacing_s": 2,
+          "count": 4,
+          "pattern": "c",
+          "channel": "A",
+          "objective_live": false,
+          "final_signature": false
+        },
+        {
+          "beat": 3,
+          "start_s": 31,
+          "spacing_s": 1,
+          "count": 7,
+          "pattern": "b",
+          "channel": "A",
+          "objective_live": true,
+          "final_signature": false
+        },
+        {
+          "beat": 4,
+          "start_s": 47,
+          "spacing_s": 2,
+          "count": 5,
+          "pattern": "c",
+          "channel": "A",
+          "objective_live": true,
+          "final_signature": false
+        }
+      ],
+      "title_en": "The Final Tanker Shift",
+      "briefing_en": "The last loading contract of this chapter is ready. The economy panel shows what can be loaded.",
+      "first_clear_news_en": "The ledger reports actual crude loaded and reserves left.",
+      "first_clear_visible_mark": {
+        "id": "23_export",
+        "label_fa": "سطر جمع فروش واقعی شیفت",
+        "surface": "existing bulletin/history record; map command plaque/light for chapters",
+        "economic_effect": 0,
+        "one_time": true
+      }
+    },
+    {
+      "op": 24,
+      "arc": 5,
+      "title_fa": "چراغ برگشت",
+      "baseline_operation": "نجات در تاریکی",
+      "baseline_objective": "نجات کشتی آسیب‌دیده",
+      "objective": "rescue",
+      "briefing_fa": "خبر یک کشتی آسیب‌دیده رسیده است. بندر باید یک‌بار دیگر از ظرفیت خدماتی‌اش برای بازگرداندن امن آن استفاده کند.",
+      "preparation_decision_fa": "با منبع کمتر این عملیات را تمام کنی یا ابتدا هزینهٔ بازگشت را در بندر جبران کنی؟",
+      "encounter_rule_fa": "هدفِ آسیب‌دیده از ابتدا پیش‌نمایش می‌شود، اما در دسته‌های دوم، چهارم و پنجم در معرض افت است.",
+      "first_clear_news_fa": "آخرین کشتیِ نیازمند کمک به دفتر ایمن وارد می‌شود.",
+      "failure_news_fa": "آزمون زمان و سلامت نجات با یک پیش‌نمایش قابل مرور است.",
+      "teach_or_review_fa": "مرور دو نوار سلامت و ذخایر عملیاتی برای پایان.",
+      "board": "escort",
+      "objective_initial": 7,
+      "quota_min_pct": null,
+      "damage_eligible_built_facilities": [
+        "water",
+        "dock"
+      ],
+      "work_order_min_op": 3,
+      "allow_cadence_choice": true,
+      "model_pressure_percent": 164,
+      "groups": [
+        {
+          "beat": 1,
+          "start_s": 6,
+          "spacing_s": 2,
+          "count": 4,
+          "pattern": "a",
+          "channel": "A",
+          "objective_live": false,
+          "final_signature": false
+        },
+        {
+          "beat": 2,
+          "start_s": 17,
+          "spacing_s": 2,
+          "count": 5,
+          "pattern": "c",
+          "channel": "A",
+          "objective_live": true,
+          "final_signature": false
+        },
+        {
+          "beat": 3,
+          "start_s": 29,
+          "spacing_s": 3,
+          "count": 3,
+          "pattern": "b",
+          "channel": "A",
+          "objective_live": false,
+          "final_signature": false
+        },
+        {
+          "beat": 4,
+          "start_s": 39,
+          "spacing_s": 2,
+          "count": 4,
+          "pattern": "a",
+          "channel": "A",
+          "objective_live": true,
+          "final_signature": false
+        },
+        {
+          "beat": 5,
+          "start_s": 53,
+          "spacing_s": 2,
+          "count": 4,
+          "pattern": "c",
+          "channel": "A",
+          "objective_live": true,
+          "final_signature": false
+        }
+      ],
+      "title_en": "Return Light",
+      "briefing_en": "Another damaged vessel asks to return, and the harbor has a full-service shift to deliver.",
+      "first_clear_news_en": "The last ship requiring assistance enters the safe-return register.",
+      "first_clear_visible_mark": {
+        "id": "24_lamp",
+        "label_fa": "نشان چراغ بازگشت",
+        "surface": "existing bulletin/history record; map command plaque/light for chapters",
+        "economic_effect": 0,
+        "one_time": true
+      }
+    },
+    {
+      "op": 25,
+      "arc": 5,
+      "title_fa": "تنگه باز است",
+      "baseline_operation": "تاج هرمز",
+      "baseline_objective": "دفع حمله",
+      "objective": "repel",
+      "briefing_fa": "تابلوهای روز اول هنوز روی دیوارند. اکنون ادارهٔ بندر باید یک شیفت کامل عبور، صادرات و حفاظت را با هم تحویل دهد.",
+      "preparation_decision_fa": "آخرین خرج از ذخیره را برای پایداری بندر نگه داری یا این موج را آسوده‌تر بگذرانی؟",
+      "encounter_rule_fa": "پنج گروه آغازین هر کدام یادآور ریتم یک فصل‌اند، ششمین ورودی مهر پایان کار است.",
+      "first_clear_news_fa": "چراغ «تنگه باز است» روی فرماندهی روشن می‌شود. دفتر شیفت قشم و سفارش‌های داخلی آماده‌اند.",
+      "failure_news_fa": "شکست در آخرین موج پایان پرونده نیست. از همین ذخیره می‌توان برگشت و دوباره تلاش کرد.",
+      "teach_or_review_fa": "بازشدن شیفت‌های قشم و دفتر سفارش‌های داخلی بندر.",
+      "board": "join",
+      "objective_initial": null,
+      "quota_min_pct": null,
+      "damage_eligible_built_facilities": [
+        "dock",
+        "power"
+      ],
+      "work_order_min_op": 3,
+      "allow_cadence_choice": true,
+      "model_pressure_percent": 177,
+      "groups": [
+        {
+          "beat": 1,
+          "start_s": 5,
+          "spacing_s": 2,
+          "count": 4,
+          "pattern": "c",
+          "channel": "A",
+          "objective_live": false,
+          "final_signature": false
+        },
+        {
+          "beat": 2,
+          "start_s": 15,
+          "spacing_s": 2,
+          "count": 4,
+          "pattern": "b",
+          "channel": "B",
+          "objective_live": false,
+          "final_signature": false
+        },
+        {
+          "beat": 3,
+          "start_s": 27,
+          "spacing_s": 2,
+          "count": 4,
+          "pattern": "a",
+          "channel": "A",
+          "objective_live": false,
+          "final_signature": false
+        },
+        {
+          "beat": 4,
+          "start_s": 38,
+          "spacing_s": 2,
+          "count": 4,
+          "pattern": "c",
+          "channel": "B",
+          "objective_live": false,
+          "final_signature": false
+        },
+        {
+          "beat": 5,
+          "start_s": 51,
+          "spacing_s": 2,
+          "count": 4,
+          "pattern": "b",
+          "channel": "A",
+          "objective_live": false,
+          "final_signature": false
+        },
+        {
+          "beat": 6,
+          "start_s": 64,
+          "spacing_s": 1,
+          "count": 1,
+          "pattern": "b",
+          "channel": "B",
+          "objective_live": false,
+          "final_signature": true
+        }
+      ],
+      "title_en": "The Strait Is Open",
+      "briefing_en": "The opening day’s boards are still on the wall. Deliver a full shift of transit, exports and protection.",
+      "first_clear_news_en": "The command building lights up. Your port, progress and economy continue.",
+      "first_clear_visible_mark": {
+        "id": "25_open",
+        "label_fa": "چراغ تنگه باز است روی ساختمان فرماندهی",
+        "surface": "existing bulletin/history record; map command plaque/light for chapters",
+        "economic_effect": 0,
+        "one_time": true
+      }
+    }
+  ],
+  "board_layouts": {
+    "single": {
+      "title_fa": "گذر ساده",
+      "presentation_fa": "یک ورودی فعال؛ نشان مقصد و نوار سلامت بندر در نیمهٔ مرکزی و نخستین رخداد در قاب.",
+      "camera_test": "single lane, berth and whole first exchange visible"
+    },
+    "escort": {
+      "title_fa": "همراهی شناور",
+      "presentation_fa": "شناور مأموریت در بخش مرکزی قابلیت لمس و مانیتور مستقل دارد. علامت بالای صحنه سلامت بندر را نگه دارد.",
+      "camera_test": "one followable objective over the shipping scene; shared gameplay camera anchor"
+    },
+    "fan": {
+      "title_fa": "نوبت‌های علامت‌دار",
+      "presentation_fa": "هر گروه سهمیه‌دار شکل مجزا در خط موج و نشان موقت روی میدان می‌گیرد.",
+      "camera_test": "tagged batches in HUD and first encounter visible without panning"
+    },
+    "return": {
+      "title_fa": "دو نوبت ورود",
+      "presentation_fa": "دو گروه با نشان A/B روی پیش‌نمایش و زمان ورود مشخص؛ نمای باز دو ورودی امن خوانا بماند.",
+      "camera_test": "two distinct cues on fitted camera"
+    },
+    "join": {
+      "title_fa": "دید مشترک",
+      "presentation_fa": "پیش‌نمایش دو نوبت ورود در یک قاب و یک پرچم خروج؛ تمرین جابه‌جایی نگاه بین نوبت‌ها.",
+      "camera_test": "two cues and shared exit visible"
+    },
+    "berth": {
+      "title_fa": "شیفت بارگیری",
+      "presentation_fa": "شیء هدف و نشان سلامت مستقل کنار اسکله در قاب امن بماند؛ با انتخاب هدف، پنل اقتصاد در نبرد باز نشود.",
+      "camera_test": "objective anchor and active pressure visible with HUD"
+    },
+    "split": {
+      "title_fa": "دو بخش میدان",
+      "presentation_fa": "پیشرفت سهمیهٔ A/B با دو شکل جدا در پیش‌نمایش و نتیجه؛ دوربین هر دو رخداد را نشان دهد.",
+      "camera_test": "dual quotas, avoid off-screen active decisions"
+    }
+  },
+  "cadence": {
+    "default": "normal",
+    "normal_offset_s_per_prior_beat": 0,
+    "spaced_offset_s_per_prior_beat": 3,
+    "spaced_unlock_op": 4,
+    "default_playback_rates": [
+      1,
+      2,
+      3
+    ],
+    "schedule_clock": "battle simulation seconds; paused battle advances zero",
+    "result_time_metric": "simulation seconds and selected cadence reported separately"
+  },
+  "work_order": {
+    "first_terminal_attempt_once_per_operation": true,
+    "no_damage_before_op": 3,
+    "max_points": 2,
+    "failure_points": 2,
+    "severe_threshold": "harbor_hp < 10 OR objective_hp < 4 if present",
+    "light_threshold": "harbor_hp < 17 OR (objective exists AND 3*objective_hp < 2*objective_initial)",
+    "points_map": "failure or severe: 2, else light: 1, else 0",
+    "new_damage_on_retry": 0,
+    "fallback": "dock",
+    "wallet_and_repair_authority": "economy/economy.json"
+  },
+  "procurement_reference": [
+    {
+      "op": 1,
+      "slot_alias": "A",
+      "kind": "cannon",
+      "to_tier": 1,
+      "cash": 250,
+      "steel": 30
+    },
+    {
+      "op": 5,
+      "slot_alias": "B",
+      "kind": "ew",
+      "to_tier": 1,
+      "cash": 420,
+      "steel": 40
+    },
+    {
+      "op": 10,
+      "slot_alias": "A",
+      "kind": "cannon",
+      "to_tier": 2,
+      "cash": 388,
+      "steel": 48
+    },
+    {
+      "op": 15,
+      "slot_alias": "B",
+      "kind": "ew",
+      "to_tier": 2,
+      "cash": 651,
+      "steel": 64
+    },
+    {
+      "op": 20,
+      "slot_alias": "A",
+      "kind": "cannon",
+      "to_tier": 3,
+      "cash": 601,
+      "steel": 66
+    },
+    {
+      "op": 25,
+      "slot_alias": "B",
+      "kind": "ew",
+      "to_tier": 3,
+      "cash": 1010,
+      "steel": 88
+    }
+  ],
+  "engine_bridge": {
+    "source_queue": "existing deterministic buildSpawnQueue with baseline stage and objective; retain existing class legality; take successive slices by groups[].count; do not append final signature twice",
+    "scheduling": "spawn when battle-clock reaches start_s+j*spacing_s+cadenceOffset; sort ties by beat then index; existing boss remains the final stage signature",
+    "campaign_goal_contract": "20 hearts; escort/structure tracked in 10 display units, rescue starts at 7; quota% for marked beats and both designated siege channels",
+    "real_hp_scaling": "each hostile on this campaign uses existing HP for its kind/wave times operation.model_pressure_percent/100, rounded upward. Verify on APK; audit with legacy scale disabled exactly once. Other modes use separately versioned tuning.",
+    "sim_method": "Offline aggregate independent envelope; deadline and capacity are QA-only, not playable resources. No positions or real-world routes in design data."
+  },
+  "result_stars": {
+    "failure": 0,
+    "win": 1,
+    "two_min_hearts": 14,
+    "three_min_hearts": 19,
+    "cap_if_objective_below_half_start": 2,
+    "monetary_multiplier": 1
+  },
+  "handoff_after_25": "next=26 from ../endgame/regional_operations.json; region1 court, four new domestic port orders. Never claim final story completion at M25.",
+  "first_wave_guard": {
+    "minimum_foreground_elapsed_s": 120,
+    "explicit_start_only": true,
+    "fallback": "one non-sellable, non-owned rank1 cannon loan, no grid load or charge, only if no playable owned tower; does not persist into M02, standard earned buy remains available",
+    "restoration": "never synthesize a start input or grant during migration"
+  }
+}

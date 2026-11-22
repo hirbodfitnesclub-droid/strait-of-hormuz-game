@@ -14,6 +14,7 @@ def main():
     parser.add_argument('--serial', help='adb serial if several devices are attached')
     parser.add_argument('--seconds', type=int, default=600)
     parser.add_argument('--interval', type=int, default=30)
+    parser.add_argument('--scene', help='Name of the scene or save used for this paired recording')
     parser.add_argument('--output', required=True, help='new JSONL file')
     args = parser.parse_args()
     if min(args.interval, args.seconds) < 1:
@@ -34,8 +35,14 @@ def main():
             stream.write(json.dumps(record, ensure_ascii=False) + '\n')
             stream.flush()
 
-        write({'startedUtc': datetime.now(timezone.utc).isoformat(),
+        webview = read('shell', 'dumpsys', 'webviewupdate')
+        write({'startedUtc': datetime.now(timezone.utc).isoformat(), 'scene': args.scene,
                'model': read('shell', 'getprop', 'ro.product.model'),
+               'soc': read('shell', 'getprop', 'ro.soc.model') or read('shell', 'getprop', 'ro.board.platform'),
+               'ram': next((line for line in read('shell', 'cat', '/proc/meminfo').splitlines() if line.startswith('MemTotal:')), None),
+               'webview': next((line.strip() for line in webview.splitlines() if 'Current WebView package' in line), None),
+               'displaySize': read('shell', 'wm', 'size'),
+               'brightnessSetting': read('shell', 'settings', 'get', 'system', 'screen_brightness'),
                'android': read('shell', 'getprop', 'ro.build.version.release'),
                'packageVersion': [line.strip() for line in read('shell', 'dumpsys', 'package', PACKAGE).splitlines()
                                   if 'versionName=' in line or 'versionCode=' in line]})
@@ -46,6 +53,7 @@ def main():
             write({'seconds': round(elapsed, 2),
                    'processCpu': [line.strip() for line in cpu.splitlines() if PACKAGE in line] or None,
                    'memory': read('shell', 'dumpsys', 'meminfo', PACKAGE),
+                   'androidUiFrames': read('shell', 'dumpsys', 'gfxinfo', PACKAGE, 'framestats'),
                    'thermalService': read('shell', 'dumpsys', 'thermalservice'),
                    'battery': read('shell', 'dumpsys', 'battery')})
             if elapsed >= args.seconds:

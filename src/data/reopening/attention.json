@@ -1,0 +1,61 @@
+{
+  "schema": "hormuz.attention.v5",
+  "minimum_active_s_wave_1": 120,
+  "treasury_threshold_fraction": 0.6,
+  "gate_power": {
+    "through_operation": 10,
+    "min_projected_fraction": 0.9
+  },
+  "episode_apply_window_active_s": 3,
+  "hint_window_s": 3,
+  "hint_cooldown_s": 8,
+  "lower_equal_replacement": "stable entity id for equal actionable priority, tie-break by oldest first-blocked time then id",
+  "max_simultaneous_highlights": 1,
+  "optional_rescue_wait_s": 12,
+  "priorities": [
+    {
+      "id": "P1",
+      "target": "battle",
+      "condition": "battle active",
+      "response": "static world remains; highlight at most one actionable ability, never auto cast"
+    },
+    {
+      "id": "P2",
+      "target": "current real blocking facility or its affordable immediate prerequisite",
+      "condition": "current persisted state is fully blocked, no independent user mastery for family"
+    },
+    {
+      "id": "P3",
+      "target": "treasury",
+      "condition": "first due not collected or bank/positive_capacity >=0.60; first due uncollected only; action transfers at least one Rial"
+    },
+    {
+      "id": "P4",
+      "target": "wave or selected facility",
+      "condition": "eligible, available now; automatic prompt never starts wave or purchases"
+    }
+  ],
+  "fixtures": {
+    "normal_cash": 1200,
+    "normal_bank": 260,
+    "opening_oil": 400,
+    "preloaded_tanker": 625,
+    "tank_upgrade_cost": 90,
+    "poor_cash": 20,
+    "poor_bank_stored": 260,
+    "bank_threshold_counts_actual": true
+  },
+  "mastery_key": "mastery.tank_overflow_resolved",
+  "reward_authority": "transaction receipt; feedback has no economic effect",
+  "hint_state_scope": {
+    "clock": "foreground active seconds",
+    "key": [
+      "episode_id",
+      "target"
+    ],
+    "preserve_cadence_when_suspended_or_covered": true,
+    "dismiss_until_episode_ends": true,
+    "first_due_requires_posted_toll": true,
+    "first_wave_hint_ends_on_first_manual_start": true
+  }
+}

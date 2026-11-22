@@ -205,3 +205,52 @@
   .workshop .income-receipt { display:none; }
   .workshop .collect-income { min-height:57px; }
 }
+
+/* Opening guidance stays on the existing enamel controls and never intercepts the map. */
+.workshop .opening-status {
+  position:absolute; inset-inline-end:8px; top:calc(var(--wk-header-bottom) + 56px);
+  display:flex; flex-wrap:wrap; justify-content:flex-start; align-items:center;
+  gap:3px; max-width:min(310px,calc(100% - 22px)); z-index:18; pointer-events:none;
+}
+.workshop .opening-status button { pointer-events:auto; }
+.workshop .opening-tank-status, .workshop .opening-guide {
+  display:flex; gap:6px; align-items:center; color:#ffeaba; background:#1b3942f3;
+  border:1px solid #cba35e; border-radius:9px; padding:3px 8px;
+}
+.workshop .opening-tank-status { min-height:44px; }
+.workshop .opening-tank-status span { display:grid; text-align:start; }
+.workshop .opening-tank-status strong { font-size:13px; }
+.workshop .opening-tank-status small,.workshop .opening-guide { font-size:11px; }
+.workshop .opening-skip, .workshop .opening-dismiss { min-height:44px; padding:4px 6px; min-width:44px; border-radius:8px; }
+.workshop .opening-skip { color:#ffe3a4; text-decoration:underline; background:transparent; }
+.workshop .opening-dismiss { color:#f8deb5; background:#183b43; border:1px solid #b38e59; }
+.workshop [data-opening-highlight] { outline:3px solid #ffe9a3; outline-offset:2px; }
+.workshop .income-receipt:has(.opening-toll-receipt) { flex-wrap:wrap; width:min(83vw,360px); line-height:1.35; }
+.workshop .opening-toll-receipt { color:#ffe39e; }
+.workshop-sheet .opening-capacity-note, .workshop-sheet .opening-grid-warning {
+  font-size:12px; display:grid; gap:4px; padding:6px 8px; color:#4d381b;
+}
+.opening-capacity-note span, .opening-grid-warning span { display:flex; align-items:center; gap:4px; }
+.opening-capacity-note button,.opening-grid-warning button,.opening-withdraw {
+  min-height:44px; color:#305554; text-decoration:underline; font-weight:700;
+}
+.workshop-sheet .opening-grid-warning,.workshop-sheet .opening-withdraw { color:#ffe7bc; }
+.workshop-sheet .opening-grid-warning button { color:inherit; }
+@media (prefers-reduced-motion: no-preference) {
+  .workshop [data-opening-highlight] { animation:opening-focus .95s ease-in-out infinite alternate; }
+  @keyframes opening-focus { from { outline-color:#e4ae49; } to { outline-color:#ffedb9; } }
+}
+.workshop .opening-help { min-height:44px; padding:4px 8px; border:1px solid #bf9a5c; border-radius:8px; background:#21424c; color:#ffecc3; font-size:12px; }
+
+.opening-result-notes, .opening-dock-order {
+  padding: .45rem .7rem;
+  border: 1px solid #806c4e;
+  border-radius: .4rem;
+  background: #19252b;
+  color: #f4e5c5;
+  font-size: .8rem;
+  line-height: 1.6;
+}
+.opening-result-notes p, .opening-dock-order p { margin: .2rem 0; }
+.opening-dock-order strong { display: inline-flex; align-items: center; gap: .4rem; }
+.opening-result-notes summary { cursor: pointer; text-decoration: underline; }

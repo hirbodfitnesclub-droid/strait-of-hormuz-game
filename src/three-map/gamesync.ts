@@ -1,24 +1,28 @@
+import { combatTowers } from "../lib/opening-operations";
 import { worldLane } from './world-lane';
 import { TapGesture } from '../lib/tap-gesture';
 import * as THREE from 'three';
-import lanesData from './lanes-3d.json';
 import slotsData from './slots-3d.json';
 import buildingsData from './buildings-3d.json';
 import { loadModel, TOWER_MODEL, BRANCH_MODEL, groundY, buildingScale } from './models3d';
 import { makeShip } from './ships3d';
 import { pctTo3d, point3dToPct } from './coords';
-import { INTERCEPT_LINE, positionAt, boatPosition, getRange, getStats, getSlots, enemyMissilePosition, enemyPosition, distance, type GameState, type Shot } from '@/lib/game';
+import { INTERCEPT_LINE, positionAt, boatPosition, merchantLane, getRange, getStats, getSlots, enemyMissilePosition, enemyPosition, distance, type GameState, type Shot } from '@/lib/game';
 import type { BattleSound } from '@/lib/battle-audio';
 import { BattleFX } from './battlefx';
+import { canOfferOpeningWave } from '@/lib/opening-attention';
 import { canonicalAnimName } from './anim-names';
 
-type LaneName = 'enemy' | 'trade' | 'pirate' | 'port';
-const LANES = lanesData as Record<LaneName, [number, number][]>;
+const laneNames = ['enemy','trade','inbound','outbound','pirate','port'] as const;
+type LaneName = typeof laneNames[number];
 const SLOTS = (slotsData as { slots: { id: number; island: string; x: number; z: number }[] }).slots;
 const PLATFORMS = (slotsData as { platforms: { id: number; x: number; z: number }[] }).platforms;
 const BUILDINGS = buildingsData as Record<string, { glb: string; x: number; z: number; water: boolean }>;
 
+export type OpeningLandmark = {kind: 'merchant' | 'tanker'; id: number} | {kind: 'radar'};
+
 export interface SyncCallbacks {
+  onOpeningInspect?(target: OpeningLandmark | null): void;
   onSound?(kind: BattleSound): void;
   onSlot(id: number): void;
   onBuilding(id: string): void;
@@ -199,18 +203,36 @@ function setBar(bar: { fg: THREE.Sprite }, frac: number) {
   (bar.fg.material as THREE.SpriteMaterial).color.setHex(f > 0.5 ? 0x53d769 : f > 0.25 ? 0xffb340 : 0xff5040);
 }
 
-function glyphSprite(text: string, color: string, size = 3.4): THREE.Sprite {
+function glyphSprite(text: string | ((ctx: CanvasRenderingContext2D) => void), color: string, size = 3.4): THREE.Sprite {
   const c = document.createElement('canvas'); c.width = c.height = 128;
   const ctx = c.getContext('2d')!;
   ctx.beginPath(); ctx.arc(64, 64, 52, 0, Math.PI * 2);
   ctx.fillStyle = 'rgba(6,24,38,0.78)'; ctx.fill();
   ctx.lineWidth = 6; ctx.strokeStyle = color; ctx.stroke();
   ctx.fillStyle = color; ctx.font = 'bold 64px system-ui'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-  ctx.fillText(text, 64, 68);
+  if (typeof text === 'string') ctx.fillText(text, 64, 68);
+  else { ctx.lineJoin = 'round'; ctx.lineCap = 'round'; text(ctx); }
   const tex = new THREE.CanvasTexture(c);
   const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false }));
   s.scale.set(size, size, 1); s.renderOrder = 25;
   return s;
+}
+
+function harborShipSymbol(kind: 'toll' | 'cargo') {
+  return glyphSprite(ctx => {
+    ctx.beginPath();
+    const outline = kind === 'toll'
+      ? [[43,36],[84,36],[84,89],[76,83],[68,89],[60,83],[52,89],[43,83],[43,36]]
+      : [[41,88],[41,56],[53,36],[87,47],[87,53],[53,53],[53,88],[36,88]];
+    outline.forEach(([x,y], i) => i ? ctx.lineTo(x,y) : ctx.moveTo(x,y));
+    if (kind === 'toll') {
+      ctx.moveTo(53,51); ctx.lineTo(74,51); ctx.moveTo(53,65); ctx.lineTo(67,65);
+    } else {
+      ctx.moveTo(79,54); ctx.lineTo(79,69); ctx.moveTo(69,83);
+      ctx.rect(68,71,22,14);
+    }
+    ctx.stroke();
+  }, kind === 'toll' ? '#f1cf7c' : '#94ded7', 3.8);
 }
 
 function enemyModel(kind: string, boss: number): THREE.Group {
@@ -243,7 +265,7 @@ function enemyShip(kind: string, boss: number): Promise<THREE.Group> {
 }
 
 interface Ent { obj: THREE.Group; bar?: ReturnType<typeof barSprites>; init?: boolean; phase: number; bobAmp: number; wake?: THREE.Mesh; speed?: number; lastTx?: number; lastTz?: number; /** D-022: ambient-traffic cruise speed (world u/s at 1x) — stepMotion clamps the render chase to it so a hitched frame can no longer teleport a ship. */ cruise?: number; lastTx2?: number; lastTz2?: number; ind?: { stun: THREE.Sprite; slow: THREE.Sprite; eye: THREE.Sprite; shield: THREE.Mesh | null } }
-interface PopupSprite { sp: THREE.Sprite; mat: THREE.SpriteMaterial; tex: THREE.CanvasTexture; cv: HTMLCanvasElement; age: number; dur: number; wx: number; wz: number; baseY: number; w: number }
+interface PopupSprite { sp: THREE.Sprite; mat: THREE.SpriteMaterial; tex: THREE.CanvasTexture; cv: HTMLCanvasElement; age: number; dur: number; wx: number; wz: number; baseY: number; w: number; anchor?: THREE.Object3D }
 interface BldRec { obj: THREE.Object3D; band: number; baseScale: number; groundBase: number; minY: number; local: THREE.Box3; ring: THREE.Mesh; ringBase: number; platform: boolean }
 
 let _wakeTex: THREE.Texture | null = null;
@@ -392,6 +414,10 @@ export class GameSync3D {
   private enemyRibbonMat: THREE.LineDashedMaterial | null = null;
   private wavePulseAt = -1e9;
   private buildingActive: Record<string, boolean> = {};
+  private openingSignals: { root: THREE.Group; scanner: THREE.Group; antenna: THREE.Mesh; ready: THREE.Sprite; stalled: THREE.Sprite } | null = null;
+  private shipSymbols = new Map<'toll' | 'cargo', THREE.Sprite>();
+  private machineryClock = { oil: 0, dock: 0 };
+  private readonly labelPosition = new THREE.Vector3();
   private platforms = new Map<number, THREE.Object3D>();
   private pads = new Map<number, THREE.Object3D>();
   // PERF: selection/target rings are two persistent meshes whose geometries
@@ -484,11 +510,11 @@ export class GameSync3D {
     map.scene.add(this.root); this.root.add(this.statics); this.root.add(this.dyn); this.dyn.add(this.fx.group);
     // cheaper shadow filtering (PCF instead of PCFSoft) — same look at game scale, less GPU
     try { (map as unknown as { renderer?: THREE.WebGLRenderer }).renderer!.shadowMap.type = THREE.PCFShadowMap; } catch { /* noop */ }
-    this.curves = Object.fromEntries((Object.keys(LANES) as LaneName[]).map(n => [n, worldLane(n)])) as Record<LaneName, ReturnType<typeof worldLane>>;
+    this.curves = Object.fromEntries(laneNames.map(n => [n, worldLane(n)])) as Record<LaneName, ReturnType<typeof worldLane>>;
     // PERF: sample every lane's points + tangents ONCE into a fixed-resolution
     // cache. setTarget used to call curve.getPointAt/getTangentAt (arc-length
     // reparam each call) for every entity on every frame.
-    this.laneCache = Object.fromEntries((Object.keys(LANES) as LaneName[]).map(n => {
+    this.laneCache = Object.fromEntries(laneNames.map(n => {
       const pts: THREE.Vector3[] = []; const tans: THREE.Vector3[] = [];
       for (let i = 0; i <= LANE_SAMPLES; i++) { pts.push(this.curves[n].getPointAt(i / LANE_SAMPLES)); tans.push(this.curves[n].getTangentAt(i / LANE_SAMPLES)); }
       return [n, { pts, tans }];
@@ -517,11 +543,23 @@ export class GameSync3D {
     // lane ribbons (subtle, only enemy + trade). The enemy route is the PRD
     // §2.3 dashed red line: dim at rest, bright pulse for a few seconds when
     // a wave starts (phase transition observed in setState).
-    for (const n of ['enemy', 'trade'] as LaneName[]) {
+    for (const n of ['enemy', 'outbound', 'inbound'] as LaneName[]) {
       const pts = this.laneCache[n].pts.map(p => p.clone().setY(0.3));
       const mat = n === 'enemy'
         ? new THREE.LineDashedMaterial({ color: 0xff5040, transparent: true, opacity: 0.28, dashSize: 3.4, gapSize: 2.4 })
         : new THREE.LineBasicMaterial({ color: 0x53d769, transparent: true, opacity: 0.28 });
+      if (n !== 'enemy') {
+        // Gate marks at both ends and chevrons on the water show the voyage direction.
+        const marks: THREE.Vector3[] = [];
+        for (const u of [0, .18, .5, .82, 1]) {
+          const point = this.curves[n].getPointAt(u).setY(.33);
+          const forward = this.curves[n].getTangentAt(u);
+          const side = new THREE.Vector3(-forward.z, 0, forward.x).multiplyScalar(1.8);
+          const back = point.clone().addScaledVector(forward, u === 0 || u === 1 ? 0 : -3.8);
+          marks.push(back.clone().add(side), point, point, back.clone().sub(side));
+        }
+        this.statics.add(new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(marks), mat));
+      }
       const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), mat);
       if (n === 'enemy') { line.computeLineDistances(); this.enemyRibbonMat = mat as THREE.LineDashedMaterial; }
       this.statics.add(line);
@@ -566,6 +604,16 @@ export class GameSync3D {
     if (debug.__telemetry === this.telemetry) delete debug.__telemetry;
     if (debug.__gamesync3d === this) delete debug.__gamesync3d;
     this.entPending.clear();
+    for (const symbol of this.shipSymbols.values()) { symbol.material.map?.dispose(); symbol.material.dispose(); }
+    this.openingSignals?.root.traverse(node => {
+      if (node instanceof THREE.Sprite) {
+        node.material.map?.dispose();
+        node.material.dispose();
+      } else if (node instanceof THREE.Mesh) {
+        node.geometry.dispose();
+        node.material.dispose();
+      }
+    });
     // PERF2 (D-020): drain the popup pool with real GPU disposal — v0.5.0
     // never disposed a single popup texture (audit2 team 1: the pool grew
     // to its 28-sprite cap in the first battles and every texture upload
@@ -585,7 +633,8 @@ export class GameSync3D {
     const stats = getStats(game);
     const fuelCap = game.research.includes('reserve') ? 3000 : 2500;
     this.buildingActive = {
-      oil: stats.oilCapacity > 0 && game.oil < stats.oilCapacity,
+      oil: game.opening ? game.opening.activeSeconds === 0 || game.opening.generated > 0 : stats.oilCapacity > 0 && game.oil < stats.oilCapacity,
+      dock: game.opening ? game.opening.lastExportedOil > 0 || (game.opening.activeSeconds === 0 && game.idle.port?.tanker?.stage === 'loading') : true,
       refinery: game.oil > 0 && game.fuel < fuelCap,
       power: game.fuel > 0,
       steel: game.oil > 0 && game.fuel > 0 && game.steel < 2000,
@@ -652,6 +701,7 @@ export class GameSync3D {
     this.consumePopups(game);
     this.detectStateEvents(game);
     this.computeBuildingActive(game);
+    this.syncOpeningSignals(game);
     // movement stability: cap how far a target may move per state update (~22 u/s) so a
     // hitched tick can no longer teleport ships — they sail fast instead of streaking.
     const nowS = performance.now();
@@ -681,6 +731,12 @@ export class GameSync3D {
       if (p.text === '💥') { this.strikeFx(p.x, p.y); continue; }
       if (p.text.startsWith('🔥')) { this.sound('combo'); continue; }
       if (p.text.startsWith('✸')) { this.sound('crit'); this.spawnPopup(p.x, p.y, p.text, '#ffb340', Math.max(0.7, p.life)); continue; }
+      if (game.opening && p.text.startsWith('عوارض +')) {
+        const hull = this.ents.get('merchant-' + (p.merchantId ?? game.opening.lastToll?.shipId))?.obj;
+        if (hull) this.spawnPopupWorld(hull.position.x, hull.position.z, p.text, '#e8c781', p.life, hull);
+        else this.spawnPopup(p.x, p.y, p.text, '#e8c781', p.life);
+        continue;
+      }
       if (/^\+[0-9۰-۹]/.test(p.text)) this.spawnPopup(p.x, p.y, p.text, '#7be495', Math.max(0.7, p.life));
     }
     if (this.seenPopups.size > 400) this.seenPopups = new Set(game.popups.map(q => q.id));
@@ -729,7 +785,7 @@ export class GameSync3D {
     this.spawnPopupWorld(wx, wz, text, color, dur);
   }
 
-  private spawnPopupWorld(wx: number, wz: number, text: string, color: string, dur: number) {
+  private spawnPopupWorld(wx: number, wz: number, text: string, color: string, dur: number, anchor?: THREE.Object3D) {
     let ps = this.popupFree.pop();
     if (!ps) {
       if (this.popupSprites.size >= 28) return; // hard cap — busiest frames stay bounded
@@ -746,7 +802,7 @@ export class GameSync3D {
     ctx.lineWidth = 12; ctx.strokeStyle = 'rgba(4,16,26,0.88)';
     ctx.strokeText(text, 192, 56); ctx.fillStyle = color; ctx.fillText(text, 192, 56);
     ps.tex.needsUpdate = true;
-    ps.age = 0; ps.dur = dur; ps.wx = wx; ps.wz = wz; ps.baseY = 6.5;
+    ps.age = 0; ps.dur = dur; ps.wx = wx; ps.wz = wz; ps.baseY = 6.5; ps.anchor = anchor;
     ps.w = Math.min(26, 8 + text.length * 2.1);
     ps.sp.position.set(wx, ps.baseY, wz);
     ps.sp.scale.set(ps.w, ps.w * (112 / 384), 1);
@@ -759,8 +815,9 @@ export class GameSync3D {
     const speed = this.state?.speed ?? 1;
     for (const [id, ps] of [...this.popupSprites]) {
       ps.age += dt * speed;
-      if (ps.age >= ps.dur) { ps.sp.visible = false; this.popupSprites.delete(id); this.popupFree.push(ps); continue; }
+      if (ps.age >= ps.dur) { ps.sp.visible = false; ps.anchor = undefined; this.popupSprites.delete(id); this.popupFree.push(ps); continue; }
       const k = ps.age / ps.dur;
+      if (ps.anchor) { ps.sp.position.x = ps.anchor.position.x; ps.sp.position.z = ps.anchor.position.z; }
       ps.sp.position.y = ps.baseY + ps.age * 3.4;
       ps.mat.opacity = ps.age < 0.1 ? ps.age / 0.1 : 1 - Math.max(0, (k - 0.55) / 0.45);
       const pop = 0.72 + 0.28 * easeOutBack(Math.min(1, ps.age / 0.18));
@@ -860,7 +917,7 @@ export class GameSync3D {
   private async reconcileStaticsInner(game: GameState) {
     // towers (parallel loads)
     const seen = new Set<number>();
-    await Promise.all(game.towers.map(async t => {
+    await Promise.all(combatTowers(game).map(async t => {
       seen.add(t.slot);
       const url = this.towerUrl(t);
       const cur = this.towers.get(t.slot);
@@ -984,7 +1041,12 @@ export class GameSync3D {
         } finally { this.placing.delete('plat-' + p.id); }
         if (this.pads.has(-100 - p.id)) { this.statics.remove(this.pads.get(-100 - p.id)!); this.pads.delete(-100 - p.id); }
       } else if (!built.has(p.id) && !has && !this.pads.has(-100 - p.id)) {
-        const glyph = glyphSprite('+', '#ffb340', 3.8);
+        const glyph = glyphSprite(ctx => {
+          ctx.beginPath(); ctx.moveTo(64, 27);
+          ctx.bezierCurveTo(58, 42, 40, 61, 40, 75);
+          ctx.bezierCurveTo(40, 107, 88, 107, 88, 75);
+          ctx.bezierCurveTo(88, 61, 71, 42, 64, 27); ctx.fill();
+        }, '#ffb340', 3.8);
         glyph.position.set(p.x, 2.6, p.z);
         glyph.userData.pick = { type: 'platform', id: p.id };
         const grp = new THREE.Group(); grp.add(glyph);
@@ -1064,6 +1126,87 @@ export class GameSync3D {
     } else if (this.targetRingMesh) this.targetRingMesh.visible = false;
   }
 
+  private syncOpeningSignals(game: GameState) {
+    if (!game.opening) {
+      if (this.openingSignals) this.openingSignals.root.visible = false;
+      return;
+    }
+    if (!this.openingSignals) {
+      const root = new THREE.Group();
+      const scanner = new THREE.Group();
+      scanner.name = 'harbor-radar';
+      // A harbor radar is scenery. It owns no tower slot, targeting or firing state.
+      scanner.position.set(83.5, groundY(this.map, 83.5, -34.6), -34.6);
+      scanner.userData.pick = {type: 'radar', id: 0};
+      const foot = new THREE.Mesh(new THREE.CylinderGeometry(0.58, 1.1, 1.15, 8), new THREE.MeshStandardMaterial({color: 0xa8a69e}));
+      foot.position.y = 0.575;
+      const mast = new THREE.Mesh(new THREE.CylinderGeometry(0.25, 0.35, 2.4, 8), new THREE.MeshStandardMaterial({color: 0x294453}));
+      mast.position.y = 2.25;
+      const antenna = new THREE.Mesh(new THREE.BoxGeometry(3.4, 0.65, 0.42), new THREE.MeshStandardMaterial({color: 0xe9c27c}));
+      antenna.position.y = 3.6;
+      scanner.add(foot, mast, antenna);
+      const ready = glyphSprite('▶', '#e6c87a', 4.4);
+      ready.position.y = 5.9;
+      scanner.add(ready);
+      const stalled = glyphSprite(ctx => {
+        ctx.fillRect(43, 39, 15, 50);
+        ctx.fillRect(70, 39, 15, 50);
+      }, '#ffc555', 5);
+      stalled.name = 'well-stalled';
+      stalled.position.set(BUILDINGS.oil.x, 10, BUILDINGS.oil.z);
+      stalled.userData.pick = {type: 'building', id: 'tank'};
+      root.add(scanner, stalled);
+      this.statics.add(root);
+      this.openingSignals = {root, scanner, antenna, ready, stalled};
+    }
+    const markers = this.openingSignals;
+    markers.root.visible = true;
+    markers.stalled.visible = game.opening.stalled;
+    markers.ready.visible = game.opening.manualWaveAt === null && game.phase === 'peace' && game.mode === 'campaign' && game.wave === 1 && canOfferOpeningWave(game.opening);
+  }
+
+  private markShip(hull: THREE.Group, kind: 'toll' | 'cargo') {
+    let template = this.shipSymbols.get(kind);
+    if (!template) { template = harborShipSymbol(kind); this.shipSymbols.set(kind, template); }
+    const symbol = template.clone();
+    symbol.name = 'harbor-' + kind;
+    symbol.position.y = kind === 'cargo' ? 6.2 : 4.4;
+    hull.add(symbol);
+  }
+
+  /** Return the current screen anchor for a player's inspection. The caller
+   * follows the rendered hull (including easing), not the simulation target. */
+  openingAnchor(landmark: OpeningLandmark, above = true): {x: number; y: number} | null {
+    if (!this.state?.opening) return null;
+    const item = landmark.kind === 'radar' ? this.openingSignals?.scanner
+      : this.ents.get(landmark.kind === 'merchant' ? `merchant-${landmark.id}` : 'tanker')?.obj;
+    if (!item) return null;
+    const position = item.getWorldPosition(this.labelPosition);
+    position.y += above ? landmark.kind === 'radar' ? 6.5 : 4.8 : 1.5;
+    position.project(this.map.camera);
+    if (Math.abs(position.x) > 1 || Math.abs(position.y) > 1 || Math.abs(position.z) > 1) return null;
+    return {x: (position.x + 1) * 50, y: (1 - position.y) * 50};
+  }
+
+  // Extend small silhouettes to a 44 CSS-pixel touch target when the ray hit
+  // empty water. A directly touched building, ship or tower always wins.
+  private nearbyOpeningLandmark(event: PointerEvent, canvas: HTMLElement): OpeningLandmark | null {
+    const state = this.state!;
+    const landmarks: OpeningLandmark[] = [{kind: 'radar'}, ...state.merchants.map(m => ({kind: 'merchant' as const, id: m.id}))];
+    if (state.idle.port.tanker) landmarks.push({kind: 'tanker', id: state.idle.port.cycles});
+    const bounds = canvas.getBoundingClientRect();
+    let nearest: OpeningLandmark | null = null;
+    let radius = 22;
+    for (const landmark of landmarks) {
+      const anchor = this.openingAnchor(landmark, false);
+      if (!anchor) continue;
+      const distance = Math.hypot(bounds.left + bounds.width * anchor.x / 100 - event.clientX,
+        bounds.top + bounds.height * anchor.y / 100 - event.clientY);
+      if (distance < radius) { nearest = landmark; radius = distance; }
+    }
+    return nearest;
+  }
+
   /** Screen position (CSS px, viewport coords) of a slot — used by the radial menu. */
   projectSlot(slotId: number): { x: number; y: number } | null {
     const slot = SLOTS.find(x => x.id === slotId);
@@ -1091,6 +1234,16 @@ export class GameSync3D {
       if (!gesture.up(e.pointerId, e.clientX, e.clientY, performance.now())) return;
       if (this.targeting) { const p = this.groundPoint(e, el); if (p) this.cb.onGroundPoint(p[0], p[1]); return; }
       const pick = this.pick(e, el);
+      if (this.state?.opening) {
+        if (pick?.type === 'merchant') { this.cb.onOpeningInspect?.({kind: 'merchant', id: Number(pick.id)}); return; }
+        if (pick?.type === 'tanker') { this.cb.onOpeningInspect?.({kind: 'tanker', id: this.state.idle.port.cycles}); return; }
+        if (pick?.type === 'radar') { this.cb.onOpeningInspect?.({kind: 'radar'}); return; }
+        if (!pick && e.pointerType === 'touch') {
+          const nearby = this.nearbyOpeningLandmark(e, el);
+          if (nearby) { this.cb.onOpeningInspect?.(nearby); return; }
+        }
+        this.cb.onOpeningInspect?.(null);
+      }
       if (!pick) return;
       if (pick.type === 'slot') this.cb.onSlot(pick.id as number);
       else if (pick.type === 'building') this.cb.onBuilding(pick.id as string);
@@ -1112,7 +1265,12 @@ export class GameSync3D {
     const hits = this.ray.intersectObjects([this.statics, this.dyn], true);
     for (const h of hits) {
       let o: THREE.Object3D | null = h.object;
-      while (o) { if (o.userData.pick) return o.userData.pick as { type: string; id: number | string }; o = o.parent; }
+      let target: {type: string; id: number | string} | null = null;
+      while (o?.visible) {
+        if (!target && o.userData.pick) target = o.userData.pick;
+        o = o.parent;
+      }
+      if (!o && target) return target;
     }
     return null;
   }
@@ -1207,6 +1365,16 @@ export class GameSync3D {
       const ent: Ent = { obj, phase: Math.random() * Math.PI * 2, bobAmp: opts.bob ?? 0, cruise: opts.cruise };
       if (opts.bar && opts.bar > 0) { ent.bar = barSprites(opts.bar); ent.bar.group.position.y = 3.4; obj.add(ent.bar.group); }
       if (opts.wake) { const w = makeWake(opts.wake.len, opts.wake.wid, opts.wake.fwd); obj.add(w); ent.wake = w; }
+      // A GLB may finish loading between frames. Put it on its live course
+      // before attaching it, otherwise it can flash at the scene origin.
+      const target = this.targets.get(key);
+      if (target) {
+        obj.position.copy(target.pos);
+        obj.rotation.y = target.heading;
+        ent.lastTx2 = target.pos.x;
+        ent.lastTz2 = target.pos.z;
+        ent.init = true;
+      }
       this.dyn.add(obj);
       this.ents.set(key, ent);
       this.entPending.delete(key);
@@ -1273,7 +1441,7 @@ export class GameSync3D {
   }
   private enemySlowed(game: GameState, e: GameState['enemies'][number]): boolean {
     const pos = enemyPosition(e, game.layout); const slots = getSlots(game.layout);
-    for (const t of game.towers) {
+    for (const t of combatTowers(game)) {
       if (t.kind !== 'ew' && !(t.kind === 'boat' && e.kind !== 'air')) continue;
       const sp = slots[t.slot]; if (sp && distance(sp, pos) < getRange(game, t)) return true;
     }
@@ -1281,7 +1449,7 @@ export class GameSync3D {
   }
   private subDetected(game: GameState, e: GameState['enemies'][number]): boolean {
     const pos = enemyPosition(e, game.layout); const slots = getSlots(game.layout);
-    for (const t of game.towers) {
+    for (const t of combatTowers(game)) {
       if (t.kind !== 'ew' && t.kind !== 'boat') continue;
       const sp = slots[t.slot]; if (sp && distance(sp, pos) <= getRange(game, t)) return true;
     }
@@ -1340,12 +1508,19 @@ export class GameSync3D {
     // the game.ts crossing time (761u / 80|70|65 s).
     for (const m of game.merchants) {
       const key = `merchant-${m.id}`; alive.add(key);
-      this.setTarget(key, 'trade', m.progress, 0, 'X');
+      this.setTarget(key, merchantLane(m), m.progress, 0, 'X');
       const spec = m.kind === 'tanker' ? { ship: 'tanker' as const, len: 18, cruise: 9.5 }
         : m.kind === 'barge' ? { ship: 'tug' as const, len: 9, cruise: 11.7 }
         : m.kind === 'container' ? { ship: 'container' as const, len: 16, cruise: 10.9 }
         : { ship: 'bulk' as const, len: 16, cruise: 10.9 };
-      this.ensureEnt(key, () => makeShip(spec.ship, { len: spec.len }), { bob: 0.1, wake: { len: spec.len, wid: spec.len * 0.3, fwd: 'X' }, cruise: spec.cruise });
+      this.ensureEnt(key, async () => {
+        const ship = await makeShip(spec.ship, {len: spec.len});
+        if (game.opening) {
+          ship.userData.pick = {type: 'merchant', id: m.id};
+          this.markShip(ship, 'toll');
+        }
+        return ship;
+      }, { bob: 0.1, wake: { len: spec.len, wid: spec.len * 0.3, fwd: 'X' }, cruise: spec.cruise });
     }
     // contraband (on trade lane, pickable) — the Kenney cargo-a hull now
     // serves ONLY this smuggler role, dark-tinted (D-022).
@@ -1440,6 +1615,7 @@ export class GameSync3D {
       this.setTarget('tanker', 'port', tanker.progress, 0, 'X', tanker.stage === 'depart');
       this.ensureEnt('tanker', async () => {
         const g = await makeShip('tanker', { len: 18 });
+        if (game.opening) { g.userData.pick = {type: 'tanker', id: 0}; this.markShip(g, 'cargo'); }
         const bar = barSprites(5.5); bar.group.position.y = 4.2; g.add(bar.group); g.userData.bar = bar;
         return g;
       }, { bob: 0.08, wake: { len: 18, wid: 5.4, fwd: 'X' }, cruise: 1.4 });
@@ -1499,7 +1675,7 @@ export class GameSync3D {
       const boss4 = game.enemies.find(e => e.kind === 'boss' && e.boss === 4 && e.hp > 0);
       const b4pos = boss4 ? enemyPosition(boss4, game.layout) : null;
       const slots = getSlots(game.layout);
-      for (const t of game.towers) {
+      for (const t of combatTowers(game)) {
         const mk = this.towerMarks.get(t.slot); if (!mk) continue;
         mk.stun.visible = (game.towerStuns?.[t.slot] ?? 0) > 0;
         const sp = slots[t.slot];
@@ -1560,7 +1736,7 @@ export class GameSync3D {
         const [x1, z1] = pctTo3d(s.x1, s.y1); const [x2, z2] = pctTo3d(s.x2, s.y2);
         // MECH-A: an EMP pulse record is an area ring at the tower, not a projectile
         if (s.modelKind === 'emp' && s.targetId === -1) {
-          const tw = game.towers.find(t2 => t2.slot === s.slot);
+          const tw = combatTowers(game).find(t2 => t2.slot === s.slot);
           this.spawnPulseRing(x1, z1, tw ? getRange(game, tw) * 6.58 : 120);
           continue;
         }
@@ -1850,7 +2026,7 @@ export class GameSync3D {
     this.towerAnims.set(slot, ta);
   }
 
-  private applyGeneric(nodes: AnimNode[], t: number, dt: number, smokeOn = true) {
+  private applyGeneric(nodes: AnimNode[], t: number, dt: number, smokeOn = true, mechanicalTime = t) {
     for (const n of nodes) {
       const o = n.obj; const ph = n.phase;
       switch (n.name) {
@@ -1864,10 +2040,10 @@ export class GameSync3D {
           break;
         }
         case 'anim:bob': o.position.y = n.by + Math.sin(t * (o.userData.bobSpeed ?? 1.4) + ph) * (o.userData.bobAmp ?? 0.05); o.rotation.z = Math.sin(t * (o.userData.bobSpeed ?? 1.4) * .7 + ph) * 0.02; break;
-        case 'anim:swing': o.rotation.z = n.brz + Math.sin(t * 1.6 + ph) * 0.28; break;
+        case 'anim:swing': o.rotation.z = n.brz + Math.sin(mechanicalTime * 1.6 + ph) * 0.28; break;
         case 'anim:trolley':
-          o.position.x = n.bx + Math.sin(t * 0.35 + ph) * (o.userData.travel ?? 1.1);
-          if (n.hook) n.hook.position.y = (n.hookBaseY ?? 0) + Math.sin(t * 0.5 + ph) * 0.5;
+          o.position.x = n.bx + Math.sin(mechanicalTime * 0.35 + ph) * (o.userData.travel ?? 1.1);
+          if (n.hook) n.hook.position.y = (n.hookBaseY ?? 0) + Math.sin(mechanicalTime * 0.5 + ph) * 0.5;
           break;
         case 'anim:flame': {
           const f = 0.85 + Math.sin(t * 11 + ph) * 0.15 + Math.sin(t * 23 + ph + 1) * 0.1;
@@ -1907,7 +2083,7 @@ export class GameSync3D {
         case 'anim:holo': o.rotation.y += dt * 0.5; o.position.y = n.by + Math.sin(t * 1.2 + ph) * 0.08; break;
         case 'anim:flag': o.rotation.y = Math.sin(t * 3 + ph) * 0.3; break;
         case 'anim:rings': o.rotation.y += dt * 1.0; o.rotation.x += dt * 0.4; break;
-        case 'anim:crane': o.rotation.y = Math.sin(t * 0.3 + ph) * 0.8; break;
+        case 'anim:crane': o.rotation.y = Math.sin(mechanicalTime * 0.3 + ph) * 0.8; break;
         case 'anim:sub': o.position.y = n.by + Math.sin(t * 0.4 + ph) * 0.22; o.position.z = n.bz + Math.sin(t * 0.25 + ph) * 0.6; break;
         case 'anim:mines':
           o.children.forEach((ch, i) => { ch.position.y = (n.childBaseY?.[i] ?? 0) + Math.sin(t * 1.5 + i * 1.7 + ph) * 0.06; ch.rotation.y += dt * 0.3; });
@@ -1937,13 +2113,21 @@ export class GameSync3D {
   private updateAnims(dt: number, nowMs: number) {
     const t = nowMs / 1000;
     const camPos = this.map.camera.position;
-    // buildings + platforms: ambient motion only
+    const opening = this.state?.opening;
+    if (opening) {
+      if (this.buildingActive.oil) this.machineryClock.oil += dt;
+      if (this.buildingActive.dock) this.machineryClock.dock += dt;
+      if (this.openingSignals) this.openingSignals.antenna.rotation.y += dt * 0.65;
+    }
+    // Only production and crane motion follow the industrial gates. Lamps,
+    // flags and floating hulls continue moving when the pump is stopped.
     for (const [key, nodes] of this.genericAnims) {
       if (!nodes.length) continue;
       const p = nodes[0].obj.getWorldPosition(this.animTmp);
       if (p.distanceToSquared(camPos) > 320 * 320) continue;
       const smokeOn = key.startsWith('bld-') ? (this.buildingActive[key.slice(4)] ?? true) : true;
-      this.applyGeneric(nodes, t, dt, smokeOn);
+      const machine = key === 'bld-oil' || key.startsWith('plat-') ? 'oil' : key === 'bld-dock' ? 'dock' : null;
+      this.applyGeneric(nodes, t, dt, smokeOn, opening && machine ? this.machineryClock[machine] : t);
     }
     // towers: ambient + weapon articulation
     for (const [slot, ta] of this.towerAnims) {

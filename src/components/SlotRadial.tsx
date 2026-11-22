@@ -9,19 +9,20 @@ import { towerModelUrl } from "./TowerModel";
 import { useDialog } from "./useDialog";
 
 /* Radial slot menu (PRD §10.2): opens ON the tapped slot — upgrade top, priority
-   left, sell bottom, details right; empty slots offer direct build in an arc. */
+   left, sell bottom, details right; empty slots preview a kind before confirming in the sheet. */
 type Props = {
   game: GameState; slot: number; dispatch: Dispatch<Action>;
   close: () => void; openSheet: () => void;
-  onBuild: (kind: TowerKind) => void;
+  onChooseKind: (kind: TowerKind) => void;
   feedback: () => void; notify: (text: string) => void;
 };
 
 type Projector = { projectSlot: (id: number) => { x: number; y: number } | null };
 
-export default function SlotRadial({ game, slot, dispatch, close, openSheet, onBuild, feedback, notify }: Props) {
+export default function SlotRadial({ game, slot, dispatch, close, openSheet, onChooseKind, feedback, notify }: Props) {
   const [pos, setPos] = useState<{ x: number; y: number } | null>(null);
   const [confirmSell, setConfirmSell] = useState(false);
+  const pressedKind = useRef<TowerKind | null>(null);
   const dialog = useDialog<HTMLDivElement>(close);
   const posRef = useRef<{ x: number; y: number } | null>(null);
 
@@ -95,8 +96,13 @@ export default function SlotRadial({ game, slot, dispatch, close, openSheet, onB
           const def = TOWERS[kind];
           const afford = game.cash >= def.cost && game.steel >= def.steel;
           return <button key={kind} className={`radial-kind ${afford ? "" : "unaffordable"}`}
-            onClick={() => { if (afford) { onBuild(kind); } else { notify("منابع کافی نیست — درآمد جمع کن یا فولاد بساز."); openSheet(); } }}
-            aria-label={`ساخت ${def.short}`} aria-describedby={`build-price-${kind}`}>
+            onPointerDown={() => { pressedKind.current = kind; }}
+            onPointerCancel={() => { pressedKind.current = null; }}
+            onClick={event => {
+              if (event.detail === 0 || pressedKind.current === kind) onChooseKind(kind);
+              pressedKind.current = null;
+            }}
+            aria-label={`انتخاب ${def.short}`} aria-describedby={`build-price-${kind}`}>
             <span className="radial-kind-model"><Image src={towerModelUrl(kind, 1)} width={105} height={105} alt="" unoptimized draggable={false} /></span>
             <strong>{def.short}</strong><TargetEmojis targets={def.targets} /><small><i className="workshop-icon wk-cash" aria-hidden="true" /> {compact(def.cost)} <i className="workshop-icon wk-steel" aria-hidden="true" /> {fa(def.steel)}</small>
             <span id={`build-price-${kind}`} hidden>{fa(def.cost)} دلار و {fa(def.steel)} فولاد{!afford && "، منابع کافی نیست"}</span>

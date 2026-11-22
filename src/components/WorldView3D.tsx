@@ -1,7 +1,9 @@
 'use client';
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
 import type { GameState, TowerKind, BuildingId } from '@/lib/game';
+import OpeningVesselReadout from './OpeningVesselReadout';
+import type { GameSync3D, OpeningLandmark } from '../three-map/gamesync';
 import type { BattleSound } from '@/lib/battle-audio';
 import { DayNightDriver, hourForNightness, type TimeMode } from '../lib/daynight';
 
@@ -40,6 +42,8 @@ type Props = {
   onSlot: (id: number) => void;
   onBuilding: (id: BuildingId) => void;
   onPlatform: (id: number) => void;
+  onStartOpeningWave?: () => void;
+  onOpeningInspectionChange?: (visible: boolean) => void;
   onHero: () => void;
   onHero2: () => void;
   onInspect: (id: number) => void;
@@ -75,6 +79,11 @@ export default function WorldView3D(props: Props) {
   useEffect(() => { propsRef.current = props; }, [props]);
 
   const [mapReady, setMapReady] = useState(false);
+  const [inspection, setInspection] = useState<{
+    target: OpeningLandmark; sync: GameSync3D; map: {onBeforeFrame(cb: () => void): () => void};
+  } | null>(null);
+  const closeInspection = useCallback(() => setInspection(null), []);
+  if (inspection && (props.paused || props.targeting || props.game.phase !== 'peace')) setInspection(null);
   const sceneAvailable = useRef(false);
   const assetsReady = useRef(false);
   const onMapAvailability = (ready: boolean) => {
@@ -187,12 +196,21 @@ export default function WorldView3D(props: Props) {
         <div style={{ width: 'min(260px, 70%)', height: 8, borderRadius: 4, background: 'rgba(147,197,253,0.18)', overflow: 'hidden' }}><div style={{ width: `${loadPct}%`, height: '100%', borderRadius: 4, background: 'linear-gradient(90deg,#53d769,#9be15d)', transition: 'width .25s' }} /></div>
         <div style={{ fontSize: 12, color: '#9fc3dd' }}>بارگذاری ناوگان و برجک‌ها · {loadPct}٪</div>
       </div>}
+      {inspection && mapReady && !props.targeting && !props.paused && (
+        <OpeningVesselReadout {...inspection} game={props.game}
+          onClose={closeInspection} onStart={props.onStartOpeningWave} onVisibilityChange={props.onOpeningInspectionChange}/>
+      )}
       <ThreeMap onReadyChange={onMapAvailability}
         onMapReady={async map => {
           mapRef.current = map;
           const { GameSync3D } = await import('../three-map/gamesync');
           if (!mounted.current || syncRef.current) return;
           const sync = new GameSync3D(map as never, {
+            onOpeningInspect: target => {
+              const current = propsRef.current;
+              setInspection(target && !current.paused && !current.targeting && current.game.phase === 'peace'
+                ? {target, sync, map: map as {onBeforeFrame(cb: () => void): () => void}} : null);
+            },
             onSound: kind => propsRef.current.playSound(kind),
             onSlot: id => propsRef.current.onSlot(id),
             onBuilding: id => propsRef.current.onBuilding(id as BuildingId),
