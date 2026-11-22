@@ -67,6 +67,7 @@ export default function Game() {
   const nativeHidden = useRef(false);
   const [exitOpen, setExitOpen] = useState(false);
   const hiddenAt = useRef<number | null>(null);
+  const [platformSite, setPlatformSite] = useState<number | null>(null);
   const [selectedSlot, setSelectedSlotState] = useState<number | null>(null);
   const [sheetSlot, setSheetSlot] = useState<number | null>(null);
   const setSelectedSlot = useCallback((slot: number | null) => { setSelectedSlotState(slot); setSheetSlot(null); }, []);
@@ -134,7 +135,7 @@ export default function Game() {
   const focus = activeBattle ? focusWar : focusPeace;
   const toggleFocus = () => { feedback(); if (activeBattle) setFocusWar(!focusWar); else setFocusPeace(!focusPeace); };
   const cycleTimeMode = () => { feedback(); setTimeMode(m => (m === "auto" ? "day" : m === "day" ? "night" : "auto")); };
-  const otherInterface = selectedSlot !== null || selectedBuilding !== null || panel !== null || moreOpen || helpOpen || progressPanel !== null;
+  const otherInterface = platformSite !== null || selectedSlot !== null || selectedBuilding !== null || panel !== null || moreOpen || helpOpen || progressPanel !== null;
   // PERF (§16.8): while any panel/sheet is open, the 3D map may cap its render
   // loop at 30fps whenever the camera is still (see hormuz-map loop).
   useEffect(() => { (window as unknown as { __hormuzCalmUi?: boolean }).__hormuzCalmUi = otherInterface; }, [otherInterface]);
@@ -190,6 +191,7 @@ export default function Game() {
     if (exitOpen) { setExitOpen(false); return; }
     if (targeting) { setTargeting(null); return; }
     if (showMapTools) { setShowMapTools(false); return; }
+    if (platformSite !== null) { setPlatformSite(null); return; }
     if (sheetSlot !== null) { setSheetSlot(null); return; }
     if (selectedSlot !== null) { setSelectedSlot(null); return; }
     if (selectedBuilding !== null) { setSelectedBuilding(null); return; }
@@ -198,7 +200,7 @@ export default function Game() {
     }
     if (!window.dispatchEvent(new Event("hormuz:close-map-inspection", {cancelable:true}))) return;
     setExitOpen(true);
-  }; }, [exitOpen, targeting, showMapTools, sheetSlot, selectedSlot, selectedBuilding, panel, progressPanel, moreOpen, helpOpen, diaryOpen, setSelectedSlot]);
+  }; }, [exitOpen, targeting, showMapTools, platformSite, sheetSlot, selectedSlot, selectedBuilding, panel, progressPanel, moreOpen, helpOpen, diaryOpen, setSelectedSlot]);
   useEffect(() => {
     if (!isNativeRuntime()) return;
     const listener = App.addListener("backButton", () => backAction.current());
@@ -692,7 +694,7 @@ export default function Game() {
     </header>
 
     <main className={`game-map ${targeting ? "aiming" : ""} ${selectedSlot !== null || selectedBuilding !== null ? "choosing-tower" : ""}`}>
-      <WorldView3D onOpeningInspectionChange={setMapInspecting} onStartOpeningWave={mainAction} onCameraReady={setCamera} onReadyChange={onWorldReady} paused={battlePaused} game={game} selectedSlot={selectedSlot} targeting={targeting} targetPreview={targetPreview} isNight={isNight} timeMode={timeMode} onSlot={chooseSlot} onBuilding={chooseBuilding} onPlatform={id => { const built = game.idle.platforms ?? []; if (built.includes(id)) return; if (game.cash < platformCost(built.length)) { notify("اعتبار بندر برای ساخت سکوی نفتی کافی نیست."); return; } dispatch({ type: "build-platform", id }); notify("سکوی نفتی ساخته شد؛ +۸ بشکه بر ثانیه"); feedback(); }} onHero={() => { setTargeting("hero"); setTargetPreview(game.hero); setSelectedSlot(null); feedback(); }} onHero2={() => { if (game.hero2) { setTargeting("hero2"); setTargetPreview(game.hero2); setSelectedSlot(null); feedback(); } }} onInspect={id => { dispatch({ type: "inspect", id }); notify("محموله کشف شد؛ ۵۰ فولاد دریافت کردید."); feedback(); }} onGroundAction={handleGroundAction} onGroundHover={handleGroundHover} playSound={playSound} />
+      <WorldView3D onOpeningInspectionChange={setMapInspecting} onStartOpeningWave={mainAction} onCameraReady={setCamera} onReadyChange={onWorldReady} paused={battlePaused} game={game} selectedSlot={selectedSlot} targeting={targeting} targetPreview={targetPreview} isNight={isNight} timeMode={timeMode} onSlot={chooseSlot} onBuilding={chooseBuilding} onPlatform={id => { if (!game.idle.platforms?.includes(id)) setPlatformSite(id); }} onHero={() => { setTargeting("hero"); setTargetPreview(game.hero); setSelectedSlot(null); feedback(); }} onHero2={() => { if (game.hero2) { setTargeting("hero2"); setTargetPreview(game.hero2); setSelectedSlot(null); feedback(); } }} onInspect={id => { dispatch({ type: "inspect", id }); notify("محموله کشف شد؛ ۵۰ فولاد دریافت کردید."); feedback(); }} onGroundAction={handleGroundAction} onGroundHover={handleGroundHover} playSound={playSound} />
 
       {!modalOpen && !targeting && <div className="quay-ledge" aria-hidden="true"/>}
       <IdleHud game={game} candidate={candidate} highlight={hint.highlight} onTank={() => chooseBuilding("tank")}
@@ -784,7 +786,10 @@ export default function Game() {
     </main>
 
     {selectedBuilding !== null && <BuildingSheet key={selectedBuilding} id={selectedBuilding} game={game} dispatch={dispatch} guided={tankGuidance} close={() => setSelectedBuilding(null)} notify={notify} feedback={feedback} onEconomy={() => openPanel(BUILDINGS[selectedBuilding].category === "city" ? "city" : "economy")} onManagers={()=>openProgress("managers")} onPower={()=>chooseBuilding("power")} />}
-    {selectedSlot !== null && sheetSlot === null && <SlotRadial key={`radial-${selectedSlot}`} game={game} slot={selectedSlot} dispatch={dispatch} close={() => setSelectedSlot(null)} openSheet={() => setSheetSlot(selectedSlot)} onBuild={buildTower} feedback={feedback} notify={notify} />}
+    {platformSite !== null && <PlatformOrder price={platformCost(game.idle.platforms?.length ?? 0)} cash={game.cash} close={() => setPlatformSite(null)} build={() => {
+      dispatch({type:"build-platform", id:platformSite}); setPlatformSite(null); feedback();
+    }} />}
+    {selectedSlot !== null && sheetSlot === null && <SlotRadial key={`radial-${selectedSlot}`} game={game} slot={selectedSlot} dispatch={dispatch} close={() => setSelectedSlot(null)} openSheet={() => setSheetSlot(selectedSlot)} onChooseKind={kind => { setPreviewKind(kind); setSheetSlot(selectedSlot); }} feedback={feedback} notify={notify} />}
     {sheetSlot !== null && <TowerSheet key={sheetSlot} game={game} slot={sheetSlot} kind={previewKind} onKindChange={setPreviewKind} dispatch={dispatch} close={() => setSheetSlot(null)} onResearch={() => openPanel("research")} onBuild={buildTower} feedback={feedback} notify={notify} />}
     {panel && <Panels panel={panel} game={game} dispatch={dispatch} close={() => setPanel(null)} notify={notify} sound={sound} setSound={setSound} vibration={vibration} setVibration={setVibration} cinematic={cinematic} setCinematic={setCinematic} onCollect={collectIncome} onSelectTower={chooseSlot} onSelectBuilding={chooseBuilding} />}
     {progressPanel && <ProgressionPanels panel={progressPanel} game={game} dispatch={dispatch} close={()=>setProgressPanel(null)} navigate={navigateMission} feedback={feedback} notify={notify} daily={daily} dailyBusy={dailyBusy} dailyError={dailyError} claimDaily={claimDaily} reloadDaily={()=>void reloadDaily()} dailyWebOnly={dailyWebOnly} />}
@@ -864,6 +869,17 @@ function QuickGuide({ close }: { close: () => void }) {
       </ol>
       <button className="primary-action command-resume" data-autofocus onClick={close}>بازگشت به بازی<ArrowLeft size={17} /></button>
       <small className="keyboard-hint">روی صفحه‌کلید، فاصله برای مکث و ۱، ۲، ۳ برای مهارت‌هاست.</small>
+    </section>
+  </div>;
+}
+
+function PlatformOrder({price, cash, close, build}: {price:number; cash:number; close:()=>void; build:()=>void}) {
+  const ref = useDialog<HTMLElement>(close);
+  return <div className="compact-dialog-backdrop command-backdrop">
+    <section className="exit-dialog command-pause" ref={ref} role="dialog" aria-modal="true" aria-label="ساخت سکوی نفتی" tabIndex={-1}>
+      <h2>ساخت سکوی نفتی</h2><p>هزینهٔ ساخت · {fa(price)} اعتبار بندر</p>
+      <button className="command-resume" disabled={cash < price} onClick={build}>{cash < price ? "اعتبار کافی نیست" : "تأیید ساخت سکو"}</button>
+      <button className="command-save" onClick={close}>انصراف</button>
     </section>
   </div>;
 }

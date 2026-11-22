@@ -132,7 +132,7 @@ export interface Pirate { id: number; progress: number; hp: number; /** VIP-even
  *  reward, destruction fines security instead. */
 export interface VipShip { progress: number; hp: number; maxHp: number; /** Seconds since spawn (frozen while paused); pirates cannot damage the ship during its first 5 s. */ age: number; }
 export interface Contraband { id: number; progress: number; /** D-022: ship-seconds since spawn (ease-in ramp); absent = underway. */ age?: number; }
-export interface Merchant { id: number; progress: number; kind: "barge" | "bulk" | "container" | "tanker"; reward: number; paid: boolean; /** D-022: ship-seconds since spawn (ease-in ramp); absent = underway. */ age?: number; }
+export interface Merchant { inbound?: boolean; id: number; progress: number; kind: "barge" | "bulk" | "container" | "tanker"; reward: number; paid: boolean; /** D-022: ship-seconds since spawn (ease-in ramp); absent = underway. */ age?: number; }
 /** One discrete shot event, emitted the moment a tower (or hero) fires.
  *  Damage is NOT applied here — it lands when the matching PendingImpact
  *  resolves after flightDur battle-seconds. Renderers (gamesync/FX) consume
@@ -430,7 +430,14 @@ export function powerBreakdown(s: GameState) {
 
 export function piratePosition(pirate: Pirate, layout: MapLayout = "landscape") { return sampleLane(getLane(layout, pirate.vipEscort ? "trade" : "pirate"), pirate.progress); }
 export function contrabandPosition(ship: Contraband, layout: MapLayout = "landscape") { return sampleLane(getLane(layout, "trade"), ship.progress); }
-export function merchantPosition(ship: Merchant, layout: MapLayout = "landscape") { return sampleLane(getLane(layout, "trade"), ship.progress); }
+export function merchantLane(ship: Merchant) {
+  // Keep vessels already underway in older saves on their original course.
+  if (ship.inbound === undefined) return "trade";
+  return ship.inbound ? "inbound" : "outbound";
+}
+export function merchantPosition(ship: Merchant, layout: MapLayout = "landscape") {
+  return sampleLane(getLane(layout, merchantLane(ship)), ship.progress);
+}
 export function vipPosition(ship: VipShip, layout: MapLayout = "landscape") { return sampleLane(getLane(layout, "trade"), ship.progress); }
 export function tankerCapacityFor(dockLevel: number) { return 500 + dockLevel * 500; }
 export function portTankerPosition(progress: number, layout: MapLayout = "landscape") { return sampleLane(getLane(layout, "port"), progress); }
@@ -738,7 +745,7 @@ export function hydrateGame(raw: unknown): { game: GameState; offline: number } 
   const MERCHANT_KINDS: readonly Merchant["kind"][] = ["barge", "bulk", "container", "tanker"];
   const sanitizeMerchant = (v: unknown): Merchant | null => {
     if (!isRec(v) || !MERCHANT_KINDS.includes(v.kind as Merchant["kind"])) return null;
-    const ship: Merchant = { id: num(v.id, 0), progress: clampNum(v.progress, 0, 0, 1), kind: v.kind as Merchant["kind"], reward: Math.max(0, num(v.reward, 0)), paid: v.paid === true };
+    const ship: Merchant = { ...(typeof v.inbound === "boolean" ? {inbound:v.inbound} : {}), id: num(v.id, 0), progress: clampNum(v.progress, 0, 0, 1), kind: v.kind as Merchant["kind"], reward: Math.max(0, num(v.reward, 0)), paid: v.paid === true };
     const age = optNum(v.age);
     if (age !== undefined) ship.age = Math.max(0, age);
     return ship;
@@ -935,6 +942,7 @@ export function hydrateGame(raw: unknown): { game: GameState; offline: number } 
   }
   for (const entity of [...game.enemies, ...game.pirates, ...game.merchants, ...game.contraband, ...game.enemyMissiles]) game.nextId = Math.max(game.nextId, entity.id + 1);
   if (game.phase === "battle" && !game.battle) { game.phase = "peace"; game.enemies = []; game.spawnRemaining = 0; game.pendingImpacts = []; }
+  if (game.phase !== "battle") game.speed = 1;
   game.challengeRule = [0, 1, 2].includes(game.challengeRule) ? game.challengeRule : 0;
   game.combo = intIn(saved.combo, 0, 0, Number.MAX_SAFE_INTEGER);
   game.comboTimer = Math.max(0, num(saved.comboTimer, 0));
@@ -1760,7 +1768,7 @@ function tick(s: GameState, delta: number, battlePaused = false, openingElapsed?
   // the opening screen, F-2). Damage inside the pirate pass runs on the
   // same scaled dt, so the fire-exchange per crossing is invariant under
   // the speed setting; at 1x every damage number is unchanged.
-  const trafficDt = dt * s.speed;
+  const trafficDt = dt * (s.phase === "battle" ? s.speed : 1);
   const easeIn = (age: number | undefined) => {
     if (age === undefined) return 1;
     const t = Math.min(1, Math.max(0, age / 3));
@@ -1859,7 +1867,7 @@ function tick(s: GameState, delta: number, battlePaused = false, openingElapsed?
     s.trafficClock -= interval; s.trafficCount++;
     const kind = s.security >= 80 && s.trafficCount % 7 === 0 ? "tanker" : s.security >= 50 && s.trafficCount % 4 === 0 ? "container" : s.security >= 20 && s.trafficCount % 2 === 0 ? "bulk" : "barge";
     const toll = kind === "tanker" ? 2500 : kind === "container" ? 500 : kind === "bulk" ? 120 : 25;
-    s.merchants.push({ id: s.nextId++, progress: 0, kind, reward: toll, paid: false, age: 0 });
+    s.merchants.push({ id: s.nextId++, progress: 0, inbound: s.trafficCount % 2 === 1, kind, reward: toll, paid: false, age: 0 });
     if (s.trafficCount % 5 === 0 && !battlePaused) s.pirates.push({ id: s.nextId++, progress: 0, hp: 100, age: 0 });
     // R5 stage one: the optical outpost building reveals contraband.
     // (Smart-customs research no longer gates the reveal — it raises the
@@ -2015,7 +2023,7 @@ function tick(s: GameState, delta: number, battlePaused = false, openingElapsed?
     }
     if (hero.route && (hero.routeIndex ?? 1) >= hero.route.length) { hero.route = undefined; hero.routeIndex = undefined; }
   }
-  const battleDt = dt * s.speed;
+  const battleDt = dt * (s.phase === "battle" ? s.speed : 1);
   s.battleTime += battleDt; // EMP weapon-down timestamps are measured on this clock (MECH-A contract)
   (Object.keys(s.cooldowns) as Spell[]).forEach(k => { s.cooldowns[k] = Math.max(0, s.cooldowns[k] - battleDt); });
   s.overdrive = Math.max(0, s.overdrive - battleDt);
@@ -2667,7 +2675,13 @@ export function gameReducer(state: GameState, action: Action | {type:"advance";s
     }
     return {...next, shots, events};
   }
-  if (action.type === "tick") { if (!Number.isFinite(action.dt) || action.dt <= 0) return state; const s = cloneForTick(state); tick(s, action.dt, action.battlePaused, action.openingElapsed); return s; }
+  if (action.type === "tick") {
+    if (!Number.isFinite(action.dt) || action.dt <= 0) return state;
+    const s = cloneForTick(state);
+    tick(s, action.dt, action.battlePaused, action.openingElapsed);
+    if (s.phase !== "battle") s.speed = 1;
+    return s;
+  }
   const s = structuredClone(state);
   // Shot records are one-render FX events: a non-tick action must not let
   // gamesync replay the previous tick's shots (and double-count telemetry).
@@ -2798,7 +2812,7 @@ export function gameReducer(state: GameState, action: Action | {type:"advance";s
       if (tech.id === "coastguard") s.security = Math.min(100, s.security + 5);
       break;
     }
-    case "speed": s.speed = (s.speed === 1 ? 2 : s.speed === 2 ? 3 : 1); break;
+    case "speed": if (s.phase !== "battle") return state; s.speed = (s.speed === 1 ? 2 : s.speed === 2 ? 3 : 1); break;
     case "start": {
       const first=s.opening && s.mode==="campaign" && s.wave===1 && s.opening.manualWaveAt===null;
       if(first && (action.source!=="player" || !openingWaveAvailable(s))) break;

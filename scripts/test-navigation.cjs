@@ -6,7 +6,7 @@ const { load } = require('./load-game.cjs');
 const nav = load('src/lib/navigation.ts');
 const game = load('src/lib/game.ts');
 for (const layout of ['landscape', 'portrait']) {
-  for (const kind of ['enemy', 'trade', 'pirate']) {
+  for (const kind of ['enemy', 'trade', 'inbound', 'outbound', 'pirate']) {
     const lane = nav.getLane(layout, kind);
     for (let i = 0; i <= 5000; i++) {
       const point = nav.sampleLane(lane, i / 5000);
@@ -34,6 +34,39 @@ for (const layout of ['landscape', 'portrait']) {
   for (let i = 0; i < 400; i++) { state = game.gameReducer(state, { type: 'tick', dt: .125 }); assert.ok(nav.isWater(state.hero, layout), `${layout} hero on land`); }
   console.log(`PASS ${layout}: all lanes, pathfinding, combat ships, merchant traffic and hero movement stay on water`);
 }
+// Inspect the bow, stern and beam as the largest merchant turns, in world units.
+const coords = load('src/three-map/coords.ts');
+const inbound = nav.getLane('portrait','inbound'), outbound = nav.getLane('portrait','outbound');
+function inWorld(path, t) {
+  const p=nav.sampleLane(path,t);
+  return coords.pctTo3d(p.x,p.y);
+}
+for (const path of [inbound,outbound]) {
+  for (let i=0;i<=2000;i++) {
+    const t=i/2000, [x,z]=inWorld(path,t);
+    const a=inWorld(path,t-.001), b=inWorld(path,t+.001);
+    const dx=b[0]-a[0], dz=b[1]-a[1], length=Math.hypot(dx,dz);
+    for(const fore of [-9,0,9]) for(const beam of [-2,2]) {
+      const [px,py]=coords.point3dToPct(x+(fore*dx-beam*dz)/length,z+(fore*dz+beam*dx)/length);
+      assert.ok(nav.isSurfaceWater({x:px,y:py},'portrait'),'merchant hull must clear land');
+    }
+  }
+}
+assert.ok(inbound[0].x>inbound.at(-1).x && outbound[0].x<outbound.at(-1).x);
+const opposite=Array.from({length:1001},(_,i)=>inWorld(outbound,i/1000));
+for(let i=0;i<=1000;i++) {
+  const [x,z]=inWorld(inbound,i/1000);
+  assert.ok(opposite.every(([ox,oz])=>Math.hypot(ox-x,oz-z)>4),'opposing hulls must stay separated');
+}
+const voyages=game.freshPortGame();
+voyages.merchants.push({...voyages.merchants[0],id:999,inbound:true,progress:.25});
+const resumed=game.hydrateGame(voyages).game;
+for(const ship of voyages.merchants) {
+  const next=resumed.merchants.find(m=>m.id===ship.id);
+  assert.equal(next.inbound,ship.inbound);
+  assert.deepEqual(game.merchantPosition(next),game.merchantPosition(ship));
+}
+console.log('PASS: opposite voyages, hull clearance, lane separation and saved route');
 const legacy = game.initialGame();
 delete legacy.layout; delete legacy.merchants;
 const restored = game.hydrateGame(legacy);

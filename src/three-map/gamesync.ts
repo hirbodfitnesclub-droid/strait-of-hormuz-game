@@ -2,20 +2,19 @@ import { combatTowers } from "../lib/opening-operations";
 import { worldLane } from './world-lane';
 import { TapGesture } from '../lib/tap-gesture';
 import * as THREE from 'three';
-import lanesData from './lanes-3d.json';
 import slotsData from './slots-3d.json';
 import buildingsData from './buildings-3d.json';
 import { loadModel, TOWER_MODEL, BRANCH_MODEL, groundY, buildingScale } from './models3d';
 import { makeShip } from './ships3d';
 import { pctTo3d, point3dToPct } from './coords';
-import { INTERCEPT_LINE, positionAt, boatPosition, getRange, getStats, getSlots, enemyMissilePosition, enemyPosition, distance, type GameState, type Shot } from '@/lib/game';
+import { INTERCEPT_LINE, positionAt, boatPosition, merchantLane, getRange, getStats, getSlots, enemyMissilePosition, enemyPosition, distance, type GameState, type Shot } from '@/lib/game';
 import type { BattleSound } from '@/lib/battle-audio';
 import { BattleFX } from './battlefx';
 import { canOfferOpeningWave } from '@/lib/opening-attention';
 import { canonicalAnimName } from './anim-names';
 
-type LaneName = 'enemy' | 'trade' | 'pirate' | 'port';
-const LANES = lanesData as Record<LaneName, [number, number][]>;
+const laneNames = ['enemy','trade','inbound','outbound','pirate','port'] as const;
+type LaneName = typeof laneNames[number];
 const SLOTS = (slotsData as { slots: { id: number; island: string; x: number; z: number }[] }).slots;
 const PLATFORMS = (slotsData as { platforms: { id: number; x: number; z: number }[] }).platforms;
 const BUILDINGS = buildingsData as Record<string, { glb: string; x: number; z: number; water: boolean }>;
@@ -511,11 +510,11 @@ export class GameSync3D {
     map.scene.add(this.root); this.root.add(this.statics); this.root.add(this.dyn); this.dyn.add(this.fx.group);
     // cheaper shadow filtering (PCF instead of PCFSoft) — same look at game scale, less GPU
     try { (map as unknown as { renderer?: THREE.WebGLRenderer }).renderer!.shadowMap.type = THREE.PCFShadowMap; } catch { /* noop */ }
-    this.curves = Object.fromEntries((Object.keys(LANES) as LaneName[]).map(n => [n, worldLane(n)])) as Record<LaneName, ReturnType<typeof worldLane>>;
+    this.curves = Object.fromEntries(laneNames.map(n => [n, worldLane(n)])) as Record<LaneName, ReturnType<typeof worldLane>>;
     // PERF: sample every lane's points + tangents ONCE into a fixed-resolution
     // cache. setTarget used to call curve.getPointAt/getTangentAt (arc-length
     // reparam each call) for every entity on every frame.
-    this.laneCache = Object.fromEntries((Object.keys(LANES) as LaneName[]).map(n => {
+    this.laneCache = Object.fromEntries(laneNames.map(n => {
       const pts: THREE.Vector3[] = []; const tans: THREE.Vector3[] = [];
       for (let i = 0; i <= LANE_SAMPLES; i++) { pts.push(this.curves[n].getPointAt(i / LANE_SAMPLES)); tans.push(this.curves[n].getTangentAt(i / LANE_SAMPLES)); }
       return [n, { pts, tans }];
@@ -544,11 +543,23 @@ export class GameSync3D {
     // lane ribbons (subtle, only enemy + trade). The enemy route is the PRD
     // §2.3 dashed red line: dim at rest, bright pulse for a few seconds when
     // a wave starts (phase transition observed in setState).
-    for (const n of ['enemy', 'trade'] as LaneName[]) {
+    for (const n of ['enemy', 'outbound', 'inbound'] as LaneName[]) {
       const pts = this.laneCache[n].pts.map(p => p.clone().setY(0.3));
       const mat = n === 'enemy'
         ? new THREE.LineDashedMaterial({ color: 0xff5040, transparent: true, opacity: 0.28, dashSize: 3.4, gapSize: 2.4 })
         : new THREE.LineBasicMaterial({ color: 0x53d769, transparent: true, opacity: 0.28 });
+      if (n !== 'enemy') {
+        // Gate marks at both ends and chevrons on the water show the voyage direction.
+        const marks: THREE.Vector3[] = [];
+        for (const u of [0, .18, .5, .82, 1]) {
+          const point = this.curves[n].getPointAt(u).setY(.33);
+          const forward = this.curves[n].getTangentAt(u);
+          const side = new THREE.Vector3(-forward.z, 0, forward.x).multiplyScalar(1.8);
+          const back = point.clone().addScaledVector(forward, u === 0 || u === 1 ? 0 : -3.8);
+          marks.push(back.clone().add(side), point, point, back.clone().sub(side));
+        }
+        this.statics.add(new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(marks), mat));
+      }
       const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), mat);
       if (n === 'enemy') { line.computeLineDistances(); this.enemyRibbonMat = mat as THREE.LineDashedMaterial; }
       this.statics.add(line);
@@ -1030,7 +1041,12 @@ export class GameSync3D {
         } finally { this.placing.delete('plat-' + p.id); }
         if (this.pads.has(-100 - p.id)) { this.statics.remove(this.pads.get(-100 - p.id)!); this.pads.delete(-100 - p.id); }
       } else if (!built.has(p.id) && !has && !this.pads.has(-100 - p.id)) {
-        const glyph = glyphSprite('+', '#ffb340', 3.8);
+        const glyph = glyphSprite(ctx => {
+          ctx.beginPath(); ctx.moveTo(64, 27);
+          ctx.bezierCurveTo(58, 42, 40, 61, 40, 75);
+          ctx.bezierCurveTo(40, 107, 88, 107, 88, 75);
+          ctx.bezierCurveTo(88, 61, 71, 42, 64, 27); ctx.fill();
+        }, '#ffb340', 3.8);
         glyph.position.set(p.x, 2.6, p.z);
         glyph.userData.pick = { type: 'platform', id: p.id };
         const grp = new THREE.Group(); grp.add(glyph);
@@ -1349,6 +1365,16 @@ export class GameSync3D {
       const ent: Ent = { obj, phase: Math.random() * Math.PI * 2, bobAmp: opts.bob ?? 0, cruise: opts.cruise };
       if (opts.bar && opts.bar > 0) { ent.bar = barSprites(opts.bar); ent.bar.group.position.y = 3.4; obj.add(ent.bar.group); }
       if (opts.wake) { const w = makeWake(opts.wake.len, opts.wake.wid, opts.wake.fwd); obj.add(w); ent.wake = w; }
+      // A GLB may finish loading between frames. Put it on its live course
+      // before attaching it, otherwise it can flash at the scene origin.
+      const target = this.targets.get(key);
+      if (target) {
+        obj.position.copy(target.pos);
+        obj.rotation.y = target.heading;
+        ent.lastTx2 = target.pos.x;
+        ent.lastTz2 = target.pos.z;
+        ent.init = true;
+      }
       this.dyn.add(obj);
       this.ents.set(key, ent);
       this.entPending.delete(key);
@@ -1482,7 +1508,7 @@ export class GameSync3D {
     // the game.ts crossing time (761u / 80|70|65 s).
     for (const m of game.merchants) {
       const key = `merchant-${m.id}`; alive.add(key);
-      this.setTarget(key, 'trade', m.progress, 0, 'X');
+      this.setTarget(key, merchantLane(m), m.progress, 0, 'X');
       const spec = m.kind === 'tanker' ? { ship: 'tanker' as const, len: 18, cruise: 9.5 }
         : m.kind === 'barge' ? { ship: 'tug' as const, len: 9, cruise: 11.7 }
         : m.kind === 'container' ? { ship: 'container' as const, len: 16, cruise: 10.9 }

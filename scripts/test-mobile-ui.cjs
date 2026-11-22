@@ -40,10 +40,53 @@ async function main() {
     await page.locator('.alternate-mode').waitFor();
     await screenshot('09-preparation.png');
     await page.locator('.preparation-tips button').first().click();
+    const assets = () => page.evaluate(() => {
+      const s=window.__gamesync3d.state;
+      return {cash:s.cash,steel:s.steel,towers:s.towers.map(t=>t.kind)};
+    });
+    const before=await assets();
+    const option=page.locator('.radial-kind:not(.unaffordable)').last();
+    await option.tap();
+    await page.locator('.tower-sheet').waitFor();
+    assert.deepEqual(await assets(),before,'preview must not buy a tower');
+    await page.locator('.workshop-cancel').tap();
+    assert.deepEqual(await assets(),before,'cancel must not spend resources');
     await page.locator('.radial-details').click();
     await page.locator('.tower-sheet').waitFor();
     await page.getByRole('button', {name:'بستن منوی برجک'}).click();
     await page.locator('.radial-close').click();
+
+    // Tap the rendered "+" at its projected position, not a substitute HUD command.
+    const site = await page.evaluate(() => {
+      const entry=[...window.__gamesync3d.pads].find(([,pad])=>pad.userData.key==='plus');
+      const point=entry[1].userData.pickRing.position;
+      window.__map3d.flyTo(point.x,point.z,55,.3);
+      return entry[0];
+    });
+    await page.waitForFunction(()=>!window.__map3d.fly);
+    const point=await page.evaluate(id=>{
+      const sync=window.__gamesync3d, map=window.__map3d;
+      const glyph=sync.pads.get(id).children.find(o=>o.isSprite);
+      const projected=glyph.getWorldPosition(glyph.position.clone()).project(map.camera);
+      const rect=map.renderer.domElement.getBoundingClientRect();
+      return {x:rect.left+(1+projected.x)*rect.width/2,y:rect.top+(1-projected.y)*rect.height/2};
+    },site);
+    const atPad=await assets();
+    await page.touchscreen.tap(point.x,point.y);
+    await page.locator('.wheel-empty').waitFor();
+    assert.deepEqual(await assets(),atPad,'tapping the 3D plus must only open the chooser');
+    const choice=page.locator('.radial-kind:not(.unaffordable)').last();
+    const index=await choice.evaluate(el=>[...el.parentElement.querySelectorAll('.radial-kind')].indexOf(el));
+    const {TOWER_KINDS,TOWERS}=require('./load-game.cjs').load('src/lib/game.ts');
+    const kind=TOWER_KINDS[index];
+    await choice.tap();
+    assert.deepEqual(await assets(),atPad,'choosing a kind must only preview it');
+    await page.locator('.build-confirm').tap();
+    await page.waitForFunction(count=>window.__gamesync3d.state.towers.length===count+1,atPad.towers.length);
+    const built=await assets();
+    assert.equal(built.towers.at(-1),kind);
+    assert.equal(built.cash,atPad.cash-TOWERS[kind].cost);
+    console.log('PASS 3D plus, choice, cancel and explicit touch confirmation for',kind);
 
     await port.click();
     await command.waitFor();

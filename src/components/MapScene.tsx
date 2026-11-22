@@ -48,7 +48,7 @@ export default function MapScene(props: Props) {
     {props.isNight && <><div className="night-overlay" /><div className="night-lights"><i /><i /><i /><i /><i /></div><div className="beacon-sweep" aria-hidden="true" /></>}
     <div className="map-shading" />
     <svg className="map-vectors" viewBox="0 0 1000 1000" preserveAspectRatio="none" aria-hidden="true">
-      <polyline className="trade-route" points={getLane(game.layout, "trade").map(p => `${p.x * 10},${p.y * 10}`).join(" ")} />
+      {(["inbound", "outbound"] as const).map(lane => <polyline key={lane} className="trade-route" points={getLane(game.layout, lane).map(p => `${p.x * 10},${p.y * 10}`).join(" ")} />)}
       <polyline className={`enemy-route ${battle ? "active" : ""} ${props.paused ? "route-paused" : ""}`} points={getLane(game.layout, "enemy").map(p => `${p.x * 10},${p.y * 10}`).join(" ")} />
       {selectedPosition && <><ellipse className="range-next" cx={selectedPosition.x * 10} cy={selectedPosition.y * 10} rx={nextRange * 10} ry={nextRange / 0.72 * 10} /><ellipse className="range-current" cx={selectedPosition.x * 10} cy={selectedPosition.y * 10} rx={currentRange * 10} ry={currentRange / 0.72 * 10} /></>}
       {targeting === "strike" && <g className="target-area"><ellipse cx={targetPreview.x * 10} cy={targetPreview.y * 10} rx="170" ry="236" /><ellipse cx={targetPreview.x * 10} cy={targetPreview.y * 10} rx="155" ry="215" /></g>}

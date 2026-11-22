@@ -56,7 +56,7 @@ export function initializeReopening(s:GameState) {
   s.idle.bank=opening.bank;
   s.idle.port={tanker:{stage:"loading",progress:1,load:opening.tanker_load},nextIn:0,cycles:0,exportedDollars:0};
   s.trafficCount=1;
-  s.merchants=[{id:1,kind:"barge",progress:trade.receipt_progress-trade.first_receipt_sec/trade.standard_crossing_s.barge,
+  s.merchants=[{id:1,kind:"barge",inbound:false,progress:trade.receipt_progress-trade.first_receipt_sec/trade.standard_crossing_s.barge,
     reward:trade.duty.barge,paid:false}];
   s.opening=newOpeningIndustry(s.rngState);
   return s;
@@ -197,7 +197,7 @@ function commerceSecond(s:GameState,o:OpeningIndustry,bankCap:number,position:(s
   if(o.activeSeconds>=o.nextPassage) {
     const n=++s.trafficCount;
     const kind=s.security>=80&&n%7===0?"tanker":s.security>=50&&n%4===0?"container":s.security>=20&&n%2===0?"bulk":"barge";
-    s.merchants.push({id:s.nextId++,progress:0,kind,reward:trade.duty[kind],paid:false});
+    s.merchants.push({id:s.nextId++,progress:0,inbound:n%2===0,kind,reward:trade.duty[kind],paid:false});
     o.nextPassage=o.activeSeconds+Math.ceil(75-.45*s.security);
   }
 }

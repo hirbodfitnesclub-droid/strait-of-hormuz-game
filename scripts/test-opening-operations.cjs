@@ -109,7 +109,18 @@ function repairChecks(state) {
 }
 
 if(require.main===module) {
-  const {damaged,three,cleared}=campaignSaves();
+  const {damaged,damagedThree,three,cleared}=campaignSaves();
+  // Leave defense at 3× on both outcomes and restore a pre-fix intermission save.
+  for (const [port, victory] of [[three,true],[damagedThree,false]]) {
+    let fast=run(run(start(port),{type:'speed'}),{type:'speed'});
+    assert.equal(fast.speed,3);
+    assert.equal(restore(fast).speed,3);
+    for(let i=0;i<1440 && fast.phase==='battle';i++) fast=tick(fast);
+    assert.equal(fast.idle.lastBattle.victory,victory);
+    assert.equal(fast.speed,1);
+    assert.equal(restore({...fast,speed:3}).speed,1);
+    assert.equal(run(fast,{type:'speed'}).speed,1);
+  }
   repairChecks(damaged);
   const replay=run(claim(cleared[2]),{type:'select-operation',wave:3});
   const repeat=complete(start(replay));

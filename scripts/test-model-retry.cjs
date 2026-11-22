@@ -6,6 +6,7 @@ const {GameSync3D} = load('src/three-map/gamesync.ts');
 const nextTurn = () => new Promise(resolve => setImmediate(resolve));
 async function main() {
   const sync = Object.assign(Object.create(GameSync3D.prototype), {
+    targets: new Map([['merchant',{pos:new THREE.Vector3(12,0,35),heading:.8}]]),
     ents: new Map(), entPending: new Map(), placementRetryAt: new Map(), dyn: new THREE.Group(), alive: true
   });
   let tries = 0;
@@ -21,6 +22,8 @@ async function main() {
   await nextTurn();
   assert.equal(tries, 2);
   assert.equal(sync.ents.size, 1);
+  assert.deepEqual(sync.ents.get('merchant').obj.position.toArray(), [12,0,35]);
+  assert.equal(sync.ents.get('merchant').obj.rotation.y, .8);
   const late = Promise.withResolvers(), replacement = new THREE.Group();
   sync.ensureEnt('hero', () => late.promise);
   sync.dropEnt('hero');

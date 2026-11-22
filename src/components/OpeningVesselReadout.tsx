@@ -63,6 +63,7 @@ export default function OpeningVesselReadout({target, game, sync, map, onClose, 
     const toll = opening.lastToll;
     detail = toll?.shipId === ship.id ? `${fa.format(toll.amount)} اعتبار بندر به خزانه رسید.`
       : ship.paid ? 'عوارض این عبور ثبت شد.' : `تعرفهٔ این عبور ${fa.format(ship.reward)} اعتبار بندر است.`;
+    detail += ship.inbound ? ' · از دریای عمان به خلیج فارس' : ' · از خلیج فارس به دریای عمان';
   } else if (target.kind === 'tanker') {
     const port = game.idle.port;
     const tanker = port.tanker;
