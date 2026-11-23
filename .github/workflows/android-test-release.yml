@@ -149,7 +149,7 @@ jobs:
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v5
         with:
-          name: coast-${{ matrix.level }}-${{ needs.publish-debug-apk.outputs.tag }}
+          name: coast-${{ matrix.level }}-${{ needs.publish-debug-apk.outputs.tag }}-attempt-${{ github.run_attempt }}
           path: ${{ runner.temp }}/hormuz-coast/
           if-no-files-found: warn
 

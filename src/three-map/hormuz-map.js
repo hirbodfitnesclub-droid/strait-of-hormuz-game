@@ -2155,11 +2155,14 @@ class HormuzMap {
     this.setTime(this.hours);
     this.applyLayers();
     this.freezeStaticScene();
+    // Restoring an established port attaches many GLBs and lights. Drawing after
+    // each attachment recompiles lighting variants and stalls Android WebView.
+    await this.cb.onReady?.();
+    if (this.disposed) return;
     this.initialized = true;
     document.addEventListener('visibilitychange', this.syncFrameLoop);
     window.addEventListener(nativeVisibilityEvent, this.syncFrameLoop);
     this.syncFrameLoop();
-    await this.cb.onReady?.();
   }
 
   /* PERF2 (D-020): the built world is ~3,000 objects whose local matrices

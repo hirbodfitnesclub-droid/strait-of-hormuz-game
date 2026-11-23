@@ -17,7 +17,7 @@ function checkpoint(level) {
 function inspect({slots, buildings, level, offset}) {
   const sync = window.__gamesync3d, map = window.__map3d;
   const depot = sync?.buildings.get('arms');
-  if (!depot || depot.band !== (level === 50 ? 3 : 4) || sync.buildings.size !== 11 ||
+  if (!depot || !map.initialized || !sync.perfInfo().calls || depot.band !== (level === 50 ? 3 : 4) || sync.buildings.size !== 11 ||
       sync.towers.size !== 1 || !slots.every(slot=>sync.towers.has(slot.id) || sync.pads.has(slot.id))) return null;
   const terrain = map.scene.getObjectByName('Terrain_StraitOfHormuz');
   const ocean = map.scene.getObjectByName('Ocean_PersianGulf');
@@ -73,7 +73,7 @@ function inspect({slots, buildings, level, offset}) {
 }
 
 async function checkLevel(read,level,timeout=90000) {
-  const deadline=Date.now()+timeout;
+  let deadline=Date.now()+timeout;
   let first,latest,offset=0,sailing=false;
   const shipOrigins = new Map();
   const moved = new Set();
@@ -85,7 +85,11 @@ async function checkLevel(read,level,timeout=90000) {
       assert.ok(latest.water && latest.calls>0);
       assert.equal(latest.effects.length,6);
       assert.ok(latest.effects.every(Number.isFinite));
-      if (!first) console.log('Loaded depot and terrain at level', level);
+      if (!first) {
+        console.log('Loaded depot and terrain at level', level);
+        // Loading shaders on a cold software GPU and observing motion are separate waits.
+        deadline = Date.now() + timeout;
+      }
       first ??= latest;
       offset += 4;
       for (const [id, pos] of Object.entries(latest.ships)) {

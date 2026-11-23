@@ -232,10 +232,10 @@ async function run(apk, label, opening) {
           console.log('Reattaching to the Android WebView after reload:', error.message);
           cdp.close();
           cdp = await attach();
-          return cdp.evaluate(expression);
+          return null; // Next poll uses the live context and retains the outer deadline.
         }
       };
-      trace.depot = await checkLevel(readScene, level, 240000);
+      trace.depot = await checkLevel(readScene, level, 360000);
       screenshot('coast-depot-' + level);
       return;
     }

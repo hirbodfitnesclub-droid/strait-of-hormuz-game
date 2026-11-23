@@ -225,7 +225,8 @@ export default function WorldView3D(props: Props) {
           (window as unknown as { __gamesync3d?: unknown }).__gamesync3d = sync;
           (window as unknown as { __map3d?: unknown }).__map3d = map;
           const p = propsRef.current;
-          sync.setState(p.game, { selectedSlot: p.selectedSlot, targeting: p.targeting, targetPreview: p.targetPreview, paused: p.paused });
+          await sync.setState(p.game, { selectedSlot: p.selectedSlot, targeting: p.targeting, targetPreview: p.targetPreview, paused: p.paused });
+          if (!mounted.current || syncRef.current !== sync) return;
           const camera = map as WorldCamera;
           p.onCameraReady(camera);
           camera.flyTo(HOME_VIEW.x, HOME_VIEW.z, HOME_VIEW.distance, 1.4);

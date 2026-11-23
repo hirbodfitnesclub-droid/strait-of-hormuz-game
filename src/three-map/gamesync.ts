@@ -711,8 +711,9 @@ export class GameSync3D {
     // labels in heavy fights (>12 live enemies).
     const dens = game.enemies.length;
     if (dens !== this.lastDensity) { this.lastDensity = dens; try { this.map.setBattleDensity?.(dens); } catch { /* noop */ } }
-    this.reconcileStatics(game);
+    const placements = this.reconcileStatics(game);
     this.updateSelectionVisuals(game, opts.targetPreview);
+    return placements;
   }
 
   private sound(kind: BattleSound) {
