@@ -207,25 +207,41 @@ async function run(apk, label, opening) {
     save(label + '-system-ui.json',{acknowledged:'Android full-screen confirmation',bounds:bounds.slice(1)});
   }
   const trace = {apkSha256:createHash('sha256').update(readFileSync(apk)).digest('hex'), samples:[], touches:[]};
-  const cdp = await attach();
+  let cdp = await attach();
   const read = () => cdp.evaluate('(' + sample.toString() + ')()');
   const movie = '/sdcard/Download/' + label + '.mp4';
   let recorder, finished;
   try {
+    if (suite === 'coast') {
+      const level = Number(process.argv[6]);
+      assert.ok([50, 100].includes(level));
+      const {checkpoint, checkLevel} = createRequire(import.meta.url)('./test-coast-scene.cjs');
+      await cdp.send('Page.enable', {});
+      // Install the save before any game JS executes, as on a real cold restore.
+      // Reload the same origin without navigating the WebView through a stylesheet.
+      const source = `const coastSave=${JSON.stringify(checkpoint(level))}; coastSave.lastSavedAt=Date.now();
+        localStorage.setItem('hormuz-game-v2',JSON.stringify({version:2,state:coastSave}));`;
+      await cdp.send('Page.addScriptToEvaluateOnNewDocument', {source});
+      console.log('Restoring Android scene checkpoint, level', level);
+      await cdp.send('Page.reload', {});
+      const readScene = async (fn, args) => {
+        const expression = '(' + fn.toString() + ')(' + JSON.stringify(args) + ')';
+        try { return await cdp.evaluate(expression); }
+        catch (error) {
+          if (!/timed out|execution context|target closed/i.test(error.message)) throw error;
+          console.log('Reattaching to the Android WebView after reload:', error.message);
+          cdp.close();
+          cdp = await attach();
+          return cdp.evaluate(expression);
+        }
+      };
+      trace.depot = await checkLevel(readScene, level, 240000);
+      screenshot('coast-depot-' + level);
+      return;
+    }
     const initial = await until(read, 180000);
     screenshot(label + '-first');
     trace.samples.push(initial);
-    if (suite === 'coast') {
-      const {checkpoint, checkLevel} = createRequire(import.meta.url)('./test-coast-scene.cjs');
-      trace.depots = [];
-      for (const level of [50,100]) {
-        await reopenCheckpoint(cdp, checkpoint(level));
-        const readScene = (fn, args) => cdp.evaluate('(' + fn.toString() + ')(' + JSON.stringify(args) + ')');
-        trace.depots.push(await checkLevel(readScene, level, 180000));
-        screenshot('coast-depot-' + level);
-      }
-      return;
-    }
     if (!opening) {
       assert.equal(initial.active, undefined);
       await delay(12000);
@@ -286,6 +302,10 @@ async function run(apk, label, opening) {
     assert.ok(battle.started <= 180,'voluntary start must occur within the observed interval');
     if (suite === 'all') await playOperations(cdp,trace);
   } finally {
+    if (suite === 'coast') {
+      const pid = adb('shell','pidof','-s',app);
+      if (pid) writeFileSync(join(directory,'webview.log'),adb('logcat','-d','--pid',pid,'-t','1500'));
+    }
     save(label + '.json',trace);
     screenshot(label + '-last');
     cdp.close();

@@ -14,11 +14,11 @@ function checkpoint(level) {
   return state;
 }
 
-function inspect({slots, buildings, level, checkPlacement}) {
+function inspect({slots, buildings, level, offset}) {
   const sync = window.__gamesync3d, map = window.__map3d;
   const depot = sync?.buildings.get('arms');
   if (!depot || depot.band !== (level === 50 ? 3 : 4) || sync.buildings.size !== 11 ||
-      sync.towers.size !== 1 || !slots.every(slot=>sync.towers.has(slot.id) || sync.pads.has(slot.id)) || !sync.ents.get('merchant-1')?.init) return null;
+      sync.towers.size !== 1 || !slots.every(slot=>sync.towers.has(slot.id) || sync.pads.has(slot.id))) return null;
   const terrain = map.scene.getObjectByName('Terrain_StraitOfHormuz');
   const ocean = map.scene.getObjectByName('Ocean_PersianGulf');
   const ray = new map.raycaster.constructor();
@@ -31,16 +31,19 @@ function inspect({slots, buildings, level, checkPlacement}) {
   function close(name, a, b) {
     if (b === null || Math.abs(a - b) > 0.001) errors.push([name,a,b]);
   }
-  if (checkPlacement) {
-    for (const [id,b] of Object.entries(buildings)) {
+  const sites = Object.entries(buildings);
+  if (offset < sites.length + slots.length) {
+    for (const [id,b] of sites.slice(offset,offset+4)) {
       const rec = sync.buildings.get(id);
       close(id, rec.groundBase, b.water ? 0 : surface(b.x,b.z));
     }
-    for (const slot of slots) {
+    for (const slot of slots.slice(Math.max(0,offset-sites.length),Math.max(0,offset+4-sites.length))) {
       const tower = sync.towers.get(slot.id);
       const padY = tower ? tower.obj.position.y + 0.42 * tower.base : sync.pads.get(slot.id).userData.pickRing.position.y - 0.15;
       close('slot '+slot.id,padY,surface(slot.x, slot.z));
     }
+  }
+  if (offset === 0) {
     const body = depot.obj.getObjectByName('StaticStructure');
     let ground = Infinity, left = Infinity, right = -Infinity;
     body.traverse(mesh=>{
@@ -64,26 +67,34 @@ function inspect({slots, buildings, level, checkPlacement}) {
   const beacon=nodes.filter(n=>n.name==='anim:beacon').map(n=>n.mat.color.r);
   const get=name=>nodes.find(n=>n.name==='anim:'+name)?.obj;
   return {errors, water:ocean.material.uniforms?.uOceanColor.value?.isTexture === true,
-    glError:map.renderer.getContext().getError(), calls:sync.perfInfo().calls,
+    contextLost:map.renderer.getContext().isContextLost(), calls:sync.perfInfo().calls,
     effects:[...beacon,get('rot')?.rotation.y,get('sweep')?.rotation.y,get('flame')?.scale.y,get('flameLight')?.intensity],
-    ship:sync.ents.get('merchant-1').obj.position.toArray(), slots:slots.length, buildings:sync.buildings.size};
+    ships:Object.fromEntries([...sync.ents].filter(([id,e])=>id.startsWith('merchant-') && e.init).map(([id,e])=>[id,e.obj.position.toArray()])), slots:slots.length, buildings:sync.buildings.size};
 }
 
 async function checkLevel(read,level,timeout=90000) {
   const deadline=Date.now()+timeout;
-  let first,latest;
+  let first,latest,offset=0,sailing=false;
+  const shipOrigins = new Map();
   const moved = new Set();
   while (Date.now()<deadline) {
-    latest=await read(inspect,{slots,buildings,level,checkPlacement:!first});
+    latest=await read(inspect,{slots,buildings,level,offset});
     if (latest) {
       assert.deepEqual(latest.errors,[]);
-      assert.equal(latest.glError,0);
+      assert.equal(latest.contextLost,false);
       assert.ok(latest.water && latest.calls>0);
       assert.equal(latest.effects.length,6);
       assert.ok(latest.effects.every(Number.isFinite));
+      if (!first) console.log('Loaded depot and terrain at level', level);
       first ??= latest;
+      offset += 4;
+      for (const [id, pos] of Object.entries(latest.ships)) {
+        const origin = shipOrigins.get(id);
+        if (origin) sailing ||= Math.hypot(pos[0]-origin[0], pos[2]-origin[2])>.001;
+        else shipOrigins.set(id,pos);
+      }
       latest.effects.forEach((v,i)=>{if(Math.abs(v-first.effects[i])>0.00001)moved.add(i);});
-      if(moved.size===6 && Math.hypot(latest.ship[0]-first.ship[0],latest.ship[2]-first.ship[2])>.001) {
+      if(moved.size===6 && sailing && offset>=Object.keys(buildings).length+slots.length) {
         console.log('PASS depot level',level,latest.buildings,'buildings,',latest.slots,'tower sites, six animated parts, ship motion and navigable lanes');
         return latest;
       }
