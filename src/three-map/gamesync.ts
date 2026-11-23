@@ -993,18 +993,21 @@ export class GameSync3D {
           if (!model) return;
           model.traverse(o => { o.userData.pick = { type: 'building', id }; });
           const fit = new THREE.Box3().setFromObject(model); const size = new THREE.Vector3(); fit.getSize(size);
-          const baseScale = buildingScale(size, b.glb === 'platform');
+          // The two rigged depots have an authored foundation independent of moving FX.
+          const placement = model.userData.buildingPlacement;
+          const baseScale = placement?.scale ?? buildingScale(size, b.glb === 'platform');
           model.scale.setScalar(baseScale);
           const fit2 = new THREE.Box3().setFromObject(model);
           const groundBase = b.water ? 0 : groundY(this.map, b.x, b.z);
-          model.position.set(b.x, groundBase - fit2.min.y, b.z);
+          const minY = placement ? placement.groundY * baseScale : fit2.min.y;
+          model.position.set(b.x, groundBase - minY, b.z);
           this.attachNightLamps(model, fit, baseScale, 2);
           const ringBase = Math.max(size.x, size.z) * baseScale * 0.62;
           const ring = new THREE.Mesh(new THREE.RingGeometry(0.9, 1.02, 48), new THREE.MeshBasicMaterial({ color: BLD_BAND_COLORS[0], transparent: true, opacity: 0.5, side: THREE.DoubleSide, depthWrite: false }));
           ring.rotation.x = -Math.PI / 2; ring.position.set(b.x, groundBase + 0.22, b.z); ring.scale.setScalar(ringBase);
           if (rec) { this.unregisterModel(rec.obj); this.statics.remove(rec.obj); this.statics.remove(rec.ring); }
           this.statics.add(model); this.statics.add(ring);
-          const nrec: BldRec = { obj: model, band: -1, baseScale, groundBase, minY: fit2.min.y, local: fit.clone(), ring, ringBase, platform: b.glb === 'platform' };
+          const nrec: BldRec = { obj: model, band: -1, baseScale, groundBase, minY, local: fit.clone(), ring, ringBase, platform: b.glb === 'platform' };
           this.buildings.set(id, nrec);
           this.applyBuildingBand(nrec, buildingBand(level));
           this.genericAnims.set('bld-' + id, collectAnims(model, id).generic);

@@ -1,6 +1,8 @@
 import { RenderPacer } from '../lib/render-pacer';
 import { isRenderHidden, nativeVisibilityEvent } from '../lib/native-visibility';
 import * as THREE from 'three';
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import { terrainHeightSampler } from './terrain-surface';
 import { MapControls } from 'three/examples/jsm/controls/MapControls.js';
 import { CSS2DRenderer, CSS2DObject } from 'three/examples/jsm/renderers/CSS2DRenderer.js';
 import React, { useEffect, useRef, useState } from 'react';
@@ -107,22 +109,7 @@ function fbm(x, y, oct = 5, lac = 2.03, gain = 0.5) {
   }
   return s / n;
 }
-function ridged(x, y, oct = 5) {
-  let a = 0.5,
-    f = 1,
-    s = 0,
-    w = 1;
-  for (let i = 0; i < oct; i++) {
-    let n = 1 - Math.abs(simplex2(x * f, y * f));
-    n *= n;
-    n *= w;
-    w = Math.min(1, Math.max(0, n * 2));
-    s += n * a;
-    a *= 0.5;
-    f *= 2.1;
-  }
-  return s; // ~0..1
-}
+
 
 const smoothstep = (a, b, x) => {
   const t = Math.min(1, Math.max(0, (x - a) / (b - a)));
@@ -1099,40 +1086,8 @@ class TerrainField {
     return c < 0 ? 'sea' : this.compRegion[c];
   }
 
-  /** Terrain height (world units, vertically exaggerated). */
   height(x, z) {
-    const d = this.sample(x, z);
-    const edge = smoothstep(0, 8, Math.min(x + WIDTH / 2, WIDTH / 2 - x, z + HEIGHT / 2, HEIGHT / 2 - z));
-    if (d <= 0) return -0.12 - 2.6 * smoothstep(0, 9, -d);
-    let reg = this.region(x, z);
-    if (reg === 'sea') reg = 'island';
-    const [lat, lon] = unproject(x, z);
-    let h = 0.05 + 0.18 * smoothstep(0, 1.0, d);
-    const hn = fbm(x * 0.11 + 3.1, z * 0.11 - 1.7, 4) * 0.5 + 0.5;
-    if (reg === 'iran') {
-      h += hn * hn * 0.7 * smoothstep(0.3, 4, d);
-      const r = ridged(x * 0.028 + 10, z * 0.075 + 4, 6);
-      const big = 0.25 + 0.75 * smoothstep(-0.45, 0.5, fbm(x * 0.014 + 5, z * 0.014, 3));
-      const r2 = ridged(x * 0.05 - 3, z * 0.05 + 8, 5);
-      h += 7.0 * smoothstep(3, 30, d) * (r * 0.6 + r2 * 0.55) * big;
-    } else if (reg === 'arabia') {
-      const wM = smoothstep(55.82, 56.02, lon);
-      const r = ridged(x * 0.075 + 2, z * 0.075 - 5, 6);
-      const mount = 4.6 * smoothstep(0.2, 5, d) * r * (0.7 + 0.3 * hn);
-      const dunes = 0.18 * smoothstep(0.5, 4, d) * (Math.abs(simplex2(x * 0.35, z * 0.9)) + hn);
-      h += wM * mount + (1 - wM) * dunes;
-    } else {
-      // islands
-      h += hn * hn * 1.0 * smoothstep(0.3, 3.5, d);
-      // Hormuz salt dome
-      const [hx, hz] = project(26.94, 56.53);
-      const rr = (x - hx) ** 2 + (z - hz) ** 2;
-      h += 0.9 * Math.exp(-rr / 6) * (0.7 + 0.6 * ridged(x * 0.6, z * 0.6, 3));
-      if (lat > 26.25 && lat < 26.85 && lon > 55.05 && lon < 56.25) {
-        h += 0.9 * smoothstep(0.8, 5, d) * ridged(x * 0.12, z * 0.12, 4);
-      }
-    }
-    return h * edge + 0.05 * (1 - edge);
+    return this.surfaceHeight(x, z) ?? -0.12;
   }
   isLand(x, z) {
     return this.sample(x, z) > 0;
@@ -1168,278 +1123,14 @@ class TerrainField {
   }
 }
 
-// ---------------------------------------------------------------- terrain mesh
-function hex(c) {
-  return new THREE.Color(c);
-}
-const C = {
-  sand: hex('#e6d3a3'),
-  wetSand: hex('#c8b48a'),
-  plain: hex('#cdb286'),
-  desert: hex('#d9b47c'),
-  rock: hex('#9a7a58'),
-  darkRock: hex('#6b5443'),
-  peak: hex('#bfae95'),
-  hormuzRed: hex('#a9412b'),
-  hormuzOchre: hex('#d0913c'),
-  hormuzPurple: hex('#7e5d6a'),
-  qeshm: hex('#c3a77c'),
-  qeshmGrey: hex('#988a7a'),
-  green: hex('#5f7d3c'),
-  mangrove: hex('#3f6b3a'),
-  musandam: hex('#8b725f'),
-  musandamDark: hex('#5f4c40')
-};
-/* VIS2 (D-025): the photo-style terrain treatment that was never
- * shipped on the 3D path (audit2 team 6): until now the terrain was
- * raw vertex color (~1.1 units per sample on mobile) multiplied by a
- * 256px grey noise, which read as uniform "snow" up close and as flat
- * bands from the theater view. This canvas texture is painted
- * PROCEDURALLY from the very TerrainField the geometry is sampled
- * from — every texel is classified by field.sample(), the exact
- * function that decides land vs water for the mesh — so the paint is
- * locked inside the land/water masks BY CONSTRUCTION (paint==mask):
- * no texel can invent a coastline the geometry does not have, and no
- * island can move (geometry is untouched — the audit gate compares
- * the terrain position checksum before/after). The texture is a
- * MODULATION layer over the vertex colors, which keep the regional
- * palette: land gets sand/rock province variation, two scales of
- * grain, erosion streaks and a darkened wet band at the waterline;
- * the submerged side gets quiet seabed variation for the shoreline
- * blend strip. Stored headroom-scaled (byte 216 ≈ ×1.0) because an
- * 8-bit canvas cannot hold multipliers above 1 — the shader undoes
- * the scale. */
-const PHOTO_MOD_MAX = 1.18;
-function buildTerrainPhotoTexture(field) {
-  const TW = 2048;
-  const TH = Math.max(2, Math.round(TW * HEIGHT / WIDTH));
-  const cv = document.createElement('canvas');
-  cv.width = TW;
-  cv.height = TH;
-  const ctx = cv.getContext('2d');
-  const img = ctx.createImageData(TW, TH);
-  const data = img.data;
-  const scale = 255 / PHOTO_MOD_MAX;
-  let p = 0;
-  for (let j = 0; j < TH; j++) {
-    const z = (j / (TH - 1) - 0.5) * HEIGHT;
-    for (let i = 0; i < TW; i++) {
-      const x = (i / (TW - 1) - 0.5) * WIDTH;
-      const d = field.sample(x, z);
-      const g1 = fbm(x * 0.33, z * 0.33, 3);
-      const g2 = fbm(x * 1.35 + 9.2, z * 1.35 - 4.7, 2);
-      let r, g, b;
-      if (d > 0.05) {
-        // LAND (mask: same field.sample the mesh is built from)
-        const patch = fbm(x * 0.045 + 3.1, z * 0.045 - 1.3, 3) * 0.5 + 0.5; // 0..1 provinces
-        const streak = fbm(x * 0.5, z * 0.06, 2); // erosion streaks, stretched along x
-        const lum = 1 + g1 * 0.12 + g2 * 0.06 + streak * 0.045;
-        r = lum * (0.95 + 0.10 * patch); // warm sand provinces
-        g = lum * (0.96 + 0.05 * patch);
-        b = lum * (1.0 - 0.07 * patch); // cooler rock provinces
-        const wk = 1 - (1 - smoothstep(-0.5, 0.45, d)) * 0.22; // wet band at the waterline
-        r *= wk;
-        g *= wk;
-        b *= wk;
-      } else {
-        // SUBMERGED side — seabed variation (only the shoreline blend
-        // strip is ever visible through the water plane's alpha edge)
-        const deep = smoothstep(0, -6, d);
-        const lum = 1 + g1 * 0.08 + g2 * 0.04;
-        r = lum * (0.94 - 0.08 * deep);
-        g = lum * (1.0 - 0.03 * deep);
-        b = lum * (0.99 + 0.03 * deep);
-        const wk = 1 - (1 - smoothstep(-0.5, 0.45, d)) * 0.15;
-        r *= wk;
-        g *= wk;
-        b *= wk;
-      }
-      data[p++] = Math.round(clamp(r, 0.45, PHOTO_MOD_MAX) * scale);
-      data[p++] = Math.round(clamp(g, 0.45, PHOTO_MOD_MAX) * scale);
-      data[p++] = Math.round(clamp(b, 0.45, PHOTO_MOD_MAX) * scale);
-      data[p++] = 255;
-    }
-  }
-  ctx.putImageData(img, 0, 0);
-  const tex = new THREE.CanvasTexture(cv);
-  tex.flipY = false; // painter rows ascend with z; the shader samples by world position
-  tex.wrapS = tex.wrapT = THREE.ClampToEdgeWrapping;
-  return tex;
-}
-
-function buildTerrainMesh(field, segX = 768, maxAniso = 1) {
-  const segZ = Math.round(segX * HEIGHT / WIDTH);
-  const geo = new THREE.PlaneGeometry(WIDTH, HEIGHT, segX, segZ);
-  geo.rotateX(-Math.PI / 2);
-  const pos = geo.attributes.position;
-  const n = pos.count;
-  const sds = new Float32Array(n);
-  for (let i = 0; i < n; i++) {
-    const x = pos.getX(i),
-      z = pos.getZ(i);
-    pos.setY(i, field.height(x, z));
-    sds[i] = field.sample(x, z);
-  }
-  geo.computeVertexNormals();
-  const nor = geo.attributes.normal;
-  const colors = new Float32Array(n * 3);
-  const col = new THREE.Color();
-  const [mx, mz] = project(26.72, 55.62);
-  const [mnx, mnz] = project(27.1, 57.05);
-  const [hx, hz] = project(26.94, 56.53);
-  for (let i = 0; i < n; i++) {
-    const x = pos.getX(i),
-      y = pos.getY(i),
-      z = pos.getZ(i);
-    const d = sds[i];
-    const slope = 1 - nor.getY(i);
-    const reg = field.region(x, z);
-    const nz = fbm(x * 0.4, z * 0.4, 3);
-    const nz2 = fbm(x * 0.05 + 7, z * 0.05, 3);
-    if (d <= 0.05) {
-      col.copy(C.wetSand).lerp(hex('#8fae9e'), smoothstep(0, -1.2, d));
-    } else if (reg === 'island' && (x - hx) ** 2 + (z - hz) ** 2 < 65) {
-      const t = nz * 0.5 + 0.5;
-      col.copy(C.hormuzRed).lerp(C.hormuzOchre, smoothstep(0.35, 0.7, t));
-      col.lerp(C.hormuzPurple, smoothstep(0.55, 0.9, fbm(x * 1.3, z * 1.3, 2) * 0.5 + 0.5) * 0.6);
-      col.lerp(C.sand, 1 - smoothstep(0.2, 0.7, d));
-    } else if (reg === 'island') {
-      col.copy(C.qeshm).lerp(C.qeshmGrey, smoothstep(0.05, 0.3, slope) * 0.8 + nz * 0.15);
-      col.lerp(C.sand, 1 - smoothstep(0.25, 0.9, d));
-    } else if (reg === 'arabia') {
-      const [lat, lon] = [0, 0];
-      void lat;
-      void lon;
-      const mountain = smoothstep(0.4, 1.6, y);
-      col.copy(C.desert).lerp(hex('#e6c48e'), nz * 0.5 + 0.5);
-      const rock = C.musandam.clone().lerp(C.musandamDark, smoothstep(0.1, 0.45, slope));
-      col.lerp(rock, mountain);
-      col.lerp(C.sand, 1 - smoothstep(0.25, 0.9, d));
-    } else {
-      // iran mainland
-      const mountain = smoothstep(0.7, 2.6, y);
-      col.copy(C.plain).lerp(C.desert, nz2 * 0.5 + 0.5);
-      const rock = C.rock.clone().lerp(C.darkRock, smoothstep(0.12, 0.5, slope));
-      col.lerp(rock, mountain);
-      col.lerp(C.peak, smoothstep(4.5, 7, y) * 0.7);
-      col.lerp(C.sand, 1 - smoothstep(0.25, 1.0, d));
-      // palm groves around Minab
-      const gm = Math.exp(-((x - mnx) ** 2 + (z - mnz) ** 2) / 30);
-      col.lerp(C.green, gm * smoothstep(0.1, 0.6, nz * 0.5 + 0.5 + 0.3));
-    }
-    // Hara mangrove forest
-    const mg = Math.exp(-((x - mx) ** 2 + (z - mz) ** 2) / 60);
-    if (mg > 0.05 && d > -0.1 && d < 1.6) col.lerp(C.mangrove, mg * smoothstep(-0.2, 0.4, nz + 0.2));
-    col.multiplyScalar(0.92 + nz * 0.1);
-    colors[i * 3] = col.r;
-    colors[i * 3 + 1] = col.g;
-    colors[i * 3 + 2] = col.b;
-  }
-  geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
-
-  // detail noise texture for close-up variation
-  const nc = document.createElement('canvas');
-  nc.width = nc.height = 256;
-  const nctx = nc.getContext('2d');
-  const nd = nctx.createImageData(256, 256);
-  for (let y = 0; y < 256; y++) for (let x = 0; x < 256; x++) {
-    const v = 128 + 70 * fbm(x / 22, y / 22, 4) + 25 * (Math.random() - 0.5);
-    const i = (y * 256 + x) * 4;
-    nd.data[i] = nd.data[i + 1] = nd.data[i + 2] = v;
-    nd.data[i + 3] = 255;
-  }
-  nctx.putImageData(nd, 0, 0);
-  const detail = new THREE.CanvasTexture(nc);
-  detail.wrapS = detail.wrapT = THREE.RepeatWrapping;
-  detail.anisotropy = Math.min(4, maxAniso); // VIS2 (audit2 team 6): near-free sharpness at the map's oblique angle
-  // VIS2 (D-025): mask-locked photo-style modulation (see painter above)
-  const photo = buildTerrainPhotoTexture(field);
-  photo.anisotropy = Math.min(8, maxAniso);
-  const mat = new THREE.MeshStandardMaterial({
-    vertexColors: true,
-    roughness: 0.96,
-    metalness: 0
-  });
-  mat.onBeforeCompile = sh => {
-    sh.uniforms.uDetail = {
-      value: detail
-    };
-    sh.uniforms.uPhoto = {
-      value: photo
-    };
-    sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nvarying vec3 vWPos;').replace('#include <worldpos_vertex>', '#include <worldpos_vertex>\nvWPos = (modelMatrix * vec4(transformed,1.0)).xyz;');
-    sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nvarying vec3 vWPos;\nuniform sampler2D uDetail;\nuniform sampler2D uPhoto;').replace('#include <color_fragment>', `#include <color_fragment>
-        vec3 ph = texture2D(uPhoto, vec2((vWPos.x + ${(WIDTH / 2).toFixed(3)}) / ${WIDTH.toFixed(3)}, (vWPos.z + ${(HEIGHT / 2).toFixed(3)}) / ${HEIGHT.toFixed(3)})).rgb;
-        diffuseColor.rgb *= ph * ${PHOTO_MOD_MAX.toFixed(3)};
-        float dn = texture2D(uDetail, vWPos.xz * 0.9).r * 0.6 + texture2D(uDetail, vWPos.xz * 0.11).r * 0.4;
-        diffuseColor.rgb *= 0.88 + dn * 0.24;`);
-  };
-  // PERF2 (D-020): return the terrain as a 4×3 grid of tile meshes instead
-  // of one world-spanning mesh. The single mesh's bounding sphere covers
-  // the whole theater, so frustum culling could never drop any of its
-  // ~506k triangles — at build zoom 99.8% of them are off-frame yet still
-  // vertex-processed every frame (audit2 team 6). Tiles share the EXACT
-  // vertices/normals/colors computed above (normals were computed on the
-  // full grid before the split, so tile borders shade seamlessly); only
-  // the draw partitioning changes, so the rendered image is unchanged.
-  // Border vertices are duplicated per tile (~1% extra), draw calls +11.
-  // PERF3 (D-020 gate B-1): grid raised 4×3 → 8×6. Same faces, same shared
-  // vertices/normals/colors — only the draw partitioning gets finer, so the
-  // rendered image is identical; smaller per-tile bounding spheres let
-  // frustum culling drop far more of the terrain at the opening framing
-  // (tile simulation at the opening camera: ~454k drawn at 4×3 → ~204k at
-  // 8×6). Draw calls +36 in the worst case (all tiles on screen).
-  const TILES_X = 8, TILES_Z = 6;
-  const group = new THREE.Group();
-  group.name = 'terrain';
-  const posA = geo.attributes.position, norA = geo.attributes.normal, colA = geo.attributes.color;
-  const idxA = geo.index.array;
-  const buckets = new Map();
-  for (let f = 0; f < idxA.length; f += 3) {
-    const a = idxA[f], b = idxA[f + 1], c = idxA[f + 2];
-    // Opaque open water hides the seabed. Keep a 16-unit rim at all
-    // coasts and map boundaries for oblique views, shore blending and
-    // subpixel islands. Normals still come from the original full grid.
-    if (sds[a] < -16 && sds[b] < -16 && sds[c] < -16 &&
-        Math.abs(posA.getX(a)) < WIDTH / 2 - 16 && Math.abs(posA.getZ(a)) < HEIGHT / 2 - 16) continue;
-    const cx = (posA.getX(a) + posA.getX(b) + posA.getX(c)) / 3;
-    const cz = (posA.getZ(a) + posA.getZ(b) + posA.getZ(c)) / 3;
-    const tx = Math.min(TILES_X - 1, Math.max(0, Math.floor((cx + WIDTH / 2) / WIDTH * TILES_X)));
-    const tz = Math.min(TILES_Z - 1, Math.max(0, Math.floor((cz + HEIGHT / 2) / HEIGHT * TILES_Z)));
-    const key = tx + tz * TILES_X;
-    let bk = buckets.get(key);
-    if (!bk) { bk = { remap: new Map(), pos: [], nor: [], col: [], idx: [] }; buckets.set(key, bk); }
-    for (const vi of [a, b, c]) {
-      let ni = bk.remap.get(vi);
-      if (ni === undefined) {
-        ni = bk.pos.length / 3;
-        bk.remap.set(vi, ni);
-        bk.pos.push(posA.getX(vi), posA.getY(vi), posA.getZ(vi));
-        bk.nor.push(norA.getX(vi), norA.getY(vi), norA.getZ(vi));
-        bk.col.push(colA.getX(vi), colA.getY(vi), colA.getZ(vi));
-      }
-      bk.idx.push(ni);
-    }
-  }
-  for (const bk of buckets.values()) {
-    const tg = new THREE.BufferGeometry();
-    tg.setAttribute('position', new THREE.Float32BufferAttribute(bk.pos, 3));
-    tg.setAttribute('normal', new THREE.Float32BufferAttribute(bk.nor, 3));
-    tg.setAttribute('color', new THREE.Float32BufferAttribute(bk.col, 3));
-    tg.setIndex(bk.idx);
-    const tm = new THREE.Mesh(tg, mat);
-    tm.receiveShadow = true;
-    group.add(tm);
-  }
-  geo.dispose();
-  return group;
-}
-
-// ---------------------------------------------------------------- water
-function buildWater(field) {
-  const geo = new THREE.PlaneGeometry(WIDTH, HEIGHT, 1, 1);
-  geo.rotateX(-Math.PI / 2);
+// Keep one ocean surface. The authored color and detail UVs travel with the
+// GLB while the existing water shader supplies waves, weather and coastal foam.
+function animateOcean(ocean, field) {
+  const authored = ocean.material;
+  ocean.geometry.setAttribute('waterDetailUv', ocean.geometry.getAttribute('uv1'));
   const uniforms = {
+    uOceanColor: { value: authored.map },
+    uOceanNormal: { value: authored.normalMap },
     uSd: {
       value: field.sdTexture
     },
@@ -1471,10 +1162,11 @@ function buildWater(field) {
   const mat = new THREE.ShaderMaterial({
     uniforms,
     vertexShader: /* glsl */`
-      varying vec2 vUv; varying vec3 vWorld;
-      void main(){ vUv = uv; vec4 w = modelMatrix * vec4(position,1.0); vWorld = w.xyz; gl_Position = projectionMatrix * viewMatrix * w; }
+      attribute vec2 waterDetailUv; varying vec2 vDetail; varying vec2 vUv; varying vec3 vWorld;
+      void main(){ vDetail = waterDetailUv; vUv = uv; vec4 w = modelMatrix * vec4(position,1.0); vWorld = w.xyz; gl_Position = projectionMatrix * viewMatrix * w; }
     `,
     fragmentShader: /* glsl */`
+      uniform sampler2D uOceanColor; uniform sampler2D uOceanNormal; varying vec2 vDetail;
       uniform sampler2D uSd; uniform float uTime; uniform vec3 uSunDir; uniform vec3 uSunColor; uniform vec3 uSky;
       uniform float uNight; uniform float uStorm; uniform vec3 uFogColor; uniform float uFogDensity;
       varying vec2 vUv; varying vec3 vWorld;
@@ -1492,13 +1184,14 @@ function buildWater(field) {
         return g;
       }
       void main(){
-        float sd = sdAt(vec2(vUv.x, 1.0 - vUv.y));
-        if (sd > 0.25) discard;
+        vec2 worldUv = vWorld.xz / vec2(${WIDTH}, ${HEIGHT}) + 0.5;
+        float sd = sdAt(worldUv);
         vec3 V = normalize(cameraPosition - vWorld);
         float camD = length(cameraPosition - vWorld);
         float near = 1.0 - smoothstep(25.0, 160.0, camD);
         vec2 g = waveGrad(vWorld.xz, uTime) * (0.10 + 0.25*uStorm) * near;
         g += (vec2(vnoise(vWorld.xz*0.08 + uTime*0.03), vnoise(vWorld.xz*0.08 - uTime*0.03 + 9.0)) - 0.5) * 0.07;
+        g += (texture2D(uOceanNormal, vDetail + vec2(uTime * 0.008, -uTime * 0.004)).rg * 2.0 - 1.0) * near * 0.16;
         vec3 N = normalize(vec3(-g.x, 1.0, -g.y));
         float depth = clamp(-sd / 14.0, 0.0, 1.0);
         vec3 deep = vec3(0.025,0.17,0.30);
@@ -1508,6 +1201,7 @@ function buildWater(field) {
         vec3 col = mix(shallow, mid, smoothstep(0.0,0.25,depth));
         col = mix(col, deep, smoothstep(0.2,1.0,depth));
         col = mix(col, lagoon, smoothstep(-0.9, 0.0, sd) * 0.8);
+        col = mix(col, sRGBTransferOETF(texture2D(uOceanColor, vUv)).rgb, 0.72);
         // caustic-like variation in shallow water
         float caus = vnoise(vWorld.xz*1.6 + vec2(uTime*0.4, -uTime*0.3)) * vnoise(vWorld.xz*1.9 - uTime*0.25);
         col += vec3(0.10,0.16,0.14) * caus * (1.0 - smoothstep(0.0, 0.25, depth)) * near;
@@ -1536,18 +1230,13 @@ function buildWater(field) {
         col = mix(uFogColor * 1.2, col, smoothstep(0.0, 0.025, e));
         float fogF = 1.0 - exp(-uFogDensity*uFogDensity*camD*camD);
         col = mix(col, uFogColor, clamp(fogF, 0.0, 1.0));
-        float alpha = 1.0 - smoothstep(0.05, 0.25, sd);
-        gl_FragColor = vec4(col, alpha);
+        gl_FragColor = vec4(col, 1.0);
       }
     `,
-    transparent: true
   });
-  const mesh = new THREE.Mesh(geo, mat);
-  mesh.renderOrder = -1;
-  return {
-    mesh,
-    uniforms
-  };
+  ocean.material = mat;
+  authored.dispose();
+  return uniforms;
 }
 
 // === map/models.ts ===
@@ -2249,6 +1938,21 @@ function buildingMaterial() {
 // === map/HormuzMap.ts ===
 
 const nextFrame = () => new Promise(r => requestAnimationFrame(() => setTimeout(r, 0)));
+function disposeSceneAssets(root) {
+  const geometries = new Set(), materials = new Set(), textures = new Set();
+  root.traverse(obj => {
+    if (obj.geometry) geometries.add(obj.geometry);
+    for (const material of Array.isArray(obj.material) ? obj.material : obj.material ? [obj.material] : []) {
+      materials.add(material);
+      for (const value of Object.values(material)) if (value?.isTexture) textures.add(value);
+      for (const uniform of Object.values(material.uniforms || {})) if (uniform.value?.isTexture) textures.add(uniform.value);
+    }
+  });
+  geometries.forEach(value => value.dispose());
+  materials.forEach(value => value.dispose());
+  textures.forEach(value => value.dispose());
+}
+
 class HormuzMap {
   scene = new THREE.Scene();
   pacer = new RenderPacer();
@@ -2413,18 +2117,20 @@ class HormuzMap {
     await nextFrame();
     if (this.disposed) return;
     const mobile = /Android|iPhone|iPad/i.test(navigator.userAgent);
+    P('بارگذاری نقشه و جزیره‌های تنگه هرمز…', 25);
+    const { scene: coast } = await new GLTFLoader().loadAsync('/models/map/strait-of-hormuz.glb');
+    if (this.disposed) {
+      disposeSceneAssets(coast);
+      return;
+    }
+    this.scene.add(coast);
+    const terrain = coast.getObjectByName('Terrain_StraitOfHormuz');
+    const ocean = coast.getObjectByName('Ocean_PersianGulf');
+    terrain.receiveShadow = true;
     this.field = new TerrainField(mobile ? 1408 : 1920);
-    P('ساخت توپوگرافی ۱۷ جزیره، سواحل جنوب ایران، خلیج فارس و دریای عمان…', 25);
-    await nextFrame();
-    if (this.disposed) return;
-    const terrain = buildTerrainMesh(this.field, mobile ? 600 : 880, this.renderer.capabilities.getMaxAnisotropy());
-    this.scene.add(terrain);
-    P('شبیه‌سازی آب، عمق دریا و امواج ساحلی…', 55);
-    await nextFrame();
-    if (this.disposed) return;
-    const water = buildWater(this.field);
-    this.waterU = water.uniforms;
-    this.scene.add(water.mesh);
+    this.field.surfaceHeight = terrainHeightSampler(terrain.geometry);
+    P('آماده‌سازی آب و امواج ساحلی…', 55);
+    this.waterU = animateOcean(ocean, this.field);
     this.buildEnvironment();
     P('ترسیم مسیرهای دشمن، کریدور تجاری و مناطق عملیاتی…', 65);
     await nextFrame();
@@ -3842,19 +3548,7 @@ class HormuzMap {
     canvas.removeEventListener('pointerup', this.onUp);
     canvas.removeEventListener('pointermove', this.onMove);
     this.controls.dispose();
-    // Renderer.dispose releases renderer caches, not scene-owned GPU assets.
-    const geometries = new Set(), materials = new Set(), textures = new Set();
-    this.scene.traverse(obj => {
-      if (obj.geometry) geometries.add(obj.geometry);
-      for (const material of Array.isArray(obj.material) ? obj.material : obj.material ? [obj.material] : []) {
-        materials.add(material);
-        for (const value of Object.values(material)) if (value?.isTexture) textures.add(value);
-        for (const uniform of Object.values(material.uniforms || {})) if (uniform.value?.isTexture) textures.add(uniform.value);
-      }
-    });
-    geometries.forEach(value => value.dispose());
-    materials.forEach(value => value.dispose());
-    textures.forEach(value => value.dispose());
+    disposeSceneAssets(this.scene);
     this.renderer.dispose();
     this.renderer.forceContextLoss();
     this.renderer.domElement.remove();

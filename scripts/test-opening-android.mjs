@@ -9,7 +9,7 @@ import { setTimeout as delay } from 'node:timers/promises';
 
 const [baseline, candidate, directory, suite = 'all'] = process.argv.slice(2);
 assert.ok(directory && candidate && baseline, 'Supply baseline APK, candidate APK and evidence directory');
-assert.ok(['all','opening','operations','damage'].includes(suite));
+assert.ok(['all','opening','operations','damage','coast'].includes(suite));
 const app = 'ir.hormuz.sovereign';
 mkdirSync(directory, { recursive: true });
 const adb = (...args) => execFileSync('adb', args, { encoding: 'utf8', timeout: 90000, maxBuffer: 16000000 }).trim();
@@ -215,6 +215,17 @@ async function run(apk, label, opening) {
     const initial = await until(read, 180000);
     screenshot(label + '-first');
     trace.samples.push(initial);
+    if (suite === 'coast') {
+      const {checkpoint, checkLevel} = createRequire(import.meta.url)('./test-coast-scene.cjs');
+      trace.depots = [];
+      for (const level of [50,100]) {
+        await reopenCheckpoint(cdp, checkpoint(level));
+        const readScene = (fn, args) => cdp.evaluate('(' + fn.toString() + ')(' + JSON.stringify(args) + ')');
+        trace.depots.push(await checkLevel(readScene, level, 180000));
+        screenshot('coast-depot-' + level);
+      }
+      return;
+    }
     if (!opening) {
       assert.equal(initial.active, undefined);
       await delay(12000);

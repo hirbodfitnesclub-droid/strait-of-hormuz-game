@@ -54,7 +54,7 @@
     "tailwindcss": "4.1.17",
     "typescript": "5.9.3"
   },
-  "version": "0.7.5",
+  "version": "0.7.6",
   "overrides": {
     "@esbuild-kit/core-utils": {
       "esbuild": "0.25.12"

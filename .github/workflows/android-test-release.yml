@@ -96,6 +96,27 @@ jobs:
           printf 'tag=%s\napk=%s\nsha=%s\n' "$tag" "${apk##*/}" "$sha" >> "$GITHUB_OUTPUT"
           echo "Verified APK SHA-256: $sha"
 
+      - name: Enable the Android emulator
+        run: sudo chmod a+rw /dev/kvm
+      - name: Test the signed candidate's map, towers, depots and ship movement
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: pixel_2
+          disk-size: 4096M
+          ram-size: 3072M
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -no-snapshot
+          script: node scripts/test-opening-android.mjs - release/${{ steps.package.outputs.apk }} "$RUNNER_TEMP/hormuz-coast" coast
+      - name: Save Android scene checks and screenshots
+        if: ${{ !cancelled() && steps.package.outcome == 'success' }}
+        uses: actions/upload-artifact@v5
+        with:
+          name: coast-${{ steps.package.outputs.tag }}
+          path: ${{ runner.temp }}/hormuz-coast/
+          if-no-files-found: warn
+
       - name: Save APK as an Actions artifact
         uses: actions/upload-artifact@v5
         with:
