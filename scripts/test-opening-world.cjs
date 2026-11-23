@@ -137,11 +137,12 @@ async function runCase(browser, second) {
       },60);
     });
     await page.goto(url,{waitUntil:'domcontentloaded'});
-    await page.waitForFunction(()=>{
+    await page.waitForFunction(fresh=>{
       const s=window.__gamesync3d;
       return s?.genericAnims.get('bld-oil')?.some(a=>a.name==='anim:swing') && s.openingSignals && s.perfInfo().calls>0 &&
-        !document.querySelector('.loading-screen') && s.state?.opening && s.ents.get('tanker')?.init;
-    },null,{timeout:150000,polling:80});
+        !document.querySelector('.loading-screen') && s.state?.opening && s.ents.get('tanker')?.init &&
+        (!fresh || s.ents.get('merchant-1')?.init);
+    },!second,{timeout:150000,polling:80});
     run.frames.push(await page.evaluate(readScene));
     await page.waitForFunction(()=> {
       const b=document.querySelector('.map-view-toggle');
