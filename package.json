@@ -49,6 +49,7 @@
     "@types/react-dom": "19.2.3",
     "@types/three": "^0.187.0",
     "drizzle-kit": "0.31.10",
+    "esbuild": "0.25.12",
     "eslint": "9.39.4",
     "eslint-config-next": "16.4.6",
     "postcss": "8.5.33",

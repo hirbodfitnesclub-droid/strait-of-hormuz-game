@@ -23,6 +23,20 @@ async function run() {
       isMobile: width < 700,
       deviceScaleFactor: 1,
     });
+    if (process.env.HARBOR_SINGLE_FILE) {
+      await context.route(/^https?:/, async (route) => {
+        if (
+          route.request().isNavigationRequest() &&
+          route.request().url() === url
+        )
+          return route.continue();
+        errors.push(
+          "Unexpected network request from standalone game: " +
+            route.request().url(),
+        );
+        return route.abort();
+      });
+    }
     if (state) {
       state.port.lastSavedAt = epoch;
       const raw = encode(state, { boot: "", ms: 0, wall: epoch });
