@@ -11,13 +11,15 @@ import com.getcapacitor.annotation.CapacitorPlugin;
 
 @CapacitorPlugin(name = "HarborClock")
 public class HarborClockPlugin extends Plugin {
+    private static final String PROCESS_CLOCK = "process/" + java.util.UUID.randomUUID();
+
     @PluginMethod
     public void sample(PluginCall call) {
         JSObject value = new JSObject();
         int boot = Build.VERSION.SDK_INT >= 24
                 ? Settings.Global.getInt(getContext().getContentResolver(), Settings.Global.BOOT_COUNT, -1)
                 : -1;
-        value.put("boot", boot >= 0 ? "android/" + boot : "");
+        value.put("boot", boot >= 0 ? "android/" + boot : PROCESS_CLOCK);
         value.put("ms", SystemClock.elapsedRealtime());
         call.resolve(value);
     }
