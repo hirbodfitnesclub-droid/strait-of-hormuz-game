@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
 import type { GameState, TowerKind, BuildingId } from '@/lib/game';
+import { ShipCue } from "./FirstShift";
 import OpeningVesselReadout from './OpeningVesselReadout';
 import type { GameSync3D, OpeningLandmark } from '../three-map/gamesync';
 import type { BattleSound } from '@/lib/battle-audio';
@@ -10,8 +11,11 @@ import { DayNightDriver, hourForNightness, type TimeMode } from '../lib/daynight
 const ThreeMap = dynamic(() => import('./ThreeMap'), { ssr: false });
 
 export const HOME_VIEW = { x: 85, z: -20, distance: 120 };
+const FIRST_SHIFT_VIEW = { x: 84, z: 0, distance: 138 };
 export type WorldCamera = {
   distance(): number;
+  releaseFocus(): void;
+  watchAttack(): void;
   zoomBy(factor: number): void;
   resetNorth(): void;
   flyTo(x: number, z: number, distance: number, duration?: number): void;
@@ -22,6 +26,8 @@ export type WorldCamera = {
 };
 type Props = {
   onCameraReady: (camera: WorldCamera) => void;
+  selectedBuilding?: BuildingId | null;
+  selectedPlatform?: number | null;
   game: GameState;
   paused?: boolean;
   onReadyChange?: (ready: boolean) => void;
@@ -42,6 +48,8 @@ type Props = {
   onSlot: (id: number) => void;
   onBuilding: (id: BuildingId) => void;
   onPlatform: (id: number) => void;
+  showOpeningCue?: boolean;
+  onSignal?: (id: number) => void;
   onStartOpeningWave?: () => void;
   onOpeningInspectionChange?: (visible: boolean) => void;
   onHero: () => void;
@@ -60,14 +68,14 @@ export default function WorldView3D(props: Props) {
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; syncRef.current?.dispose(); syncRef.current = null; }; }, []);
   const [loadPct, setLoadPct] = useState<number | null>(0);
 
-  // Preload all placeable models behind a loading veil (Phase 3): no mid-battle decode hitches.
+  const firstLoad = useRef(props.game.phase === "peace" && props.game.opening?.manualWaveAt === null);
   useEffect(() => {
     let dead = false;
     const killer = setTimeout(() => { if (!dead) { dead = true; setLoadPct(null); } }, 30000);
     (async () => {
       try {
         const { preloadModels } = await import('../three-map/models3d');
-        await preloadModels((done, total) => { if (!dead) setLoadPct(Math.round((done / total) * 100)); });
+        await preloadModels((done, total) => { if (!dead) setLoadPct(Math.round((done / total) * 100)); }, firstLoad.current);
       } catch { /* lazy loading remains as fallback */ }
       if (!dead) { clearTimeout(killer); setTimeout(() => { if (!dead) setLoadPct(null); }, 400); }
     })();
@@ -79,6 +87,26 @@ export default function WorldView3D(props: Props) {
   useEffect(() => { propsRef.current = props; }, [props]);
 
   const [mapReady, setMapReady] = useState(false);
+  const [binding,setBinding] = useState<{sync:GameSync3D; map:{onBeforeFrame(cb:()=>void):()=>void}}|null>(null);
+  const building = props.selectedBuilding, platform = props.selectedPlatform, slot = props.selectedSlot;
+  const hero = props.targeting === "hero" || props.targeting === "hero2" ? props.targeting : null;
+  useEffect(() => {
+    if (!binding) return;
+    const sync=binding.sync;
+    const site=platform != null ? {kind:"platform" as const,id:platform}
+      : building != null ? {kind:"building" as const,id:building}
+      : slot != null ? {kind:"slot" as const,id:slot} : null;
+    if (!site && !hero) return;
+    const returnToAttack=sync.focus.key === "attack";
+    if (site) sync.focusSite(site.kind,site.id);
+    else if (hero) sync.focusHull(hero,7);
+    const key = sync.focus.key;
+    return () => {
+      if (sync.focus.key !== key) return;
+      if (returnToAttack) sync.watchAttack();
+      else sync.focus.close(key);
+    };
+  },[binding,building,platform,slot,hero]);
   const [inspection, setInspection] = useState<{
     target: OpeningLandmark; sync: GameSync3D; map: {onBeforeFrame(cb: () => void): () => void};
   } | null>(null);
@@ -86,14 +114,15 @@ export default function WorldView3D(props: Props) {
   if (inspection && (props.paused || props.targeting || props.game.phase !== 'peace')) setInspection(null);
   const sceneAvailable = useRef(false);
   const assetsReady = useRef(false);
+  const syncReady = useRef(false);
   const onMapAvailability = (ready: boolean) => {
     sceneAvailable.current = ready;
-    propsRef.current.onReadyChange?.(ready && assetsReady.current);
+    propsRef.current.onReadyChange?.(ready && assetsReady.current && syncReady.current);
     setMapReady(ready);
   };
   useEffect(() => {
     assetsReady.current = loadPct === null;
-    propsRef.current.onReadyChange?.(sceneAvailable.current && assetsReady.current);
+    propsRef.current.onReadyChange?.(sceneAvailable.current && assetsReady.current && syncReady.current);
   }, [loadPct]);
   const [showMetrics] = useState(() => typeof location !== "undefined" && new URLSearchParams(location.search).has("fpslog"));
   useEffect(() => {
@@ -155,8 +184,8 @@ export default function WorldView3D(props: Props) {
   // whenever the camera is still. Game.tsx sets the complementary panel flag.
   useEffect(() => {
     (window as unknown as { __hormuzCalmPhase?: boolean }).__hormuzCalmPhase =
-      props.game.phase !== 'battle' || props.selectedSlot !== null || props.targeting !== null;
-  }, [props.game.phase, props.selectedSlot, props.targeting]);
+      (!props.game.regional?.voyage && props.game.phase !== 'battle') || props.selectedSlot !== null || props.targeting !== null;
+  }, [props.game.phase, props.game.regional?.voyage, props.selectedSlot, props.targeting]);
 
   // Phone frame-time recorder (?fpslog=1) — dynamic import keeps it at zero
   // cost for normal sessions. Evidence tool for DoD §16.1 / ticket T-001.
@@ -196,6 +225,9 @@ export default function WorldView3D(props: Props) {
         <div style={{ width: 'min(260px, 70%)', height: 8, borderRadius: 4, background: 'rgba(147,197,253,0.18)', overflow: 'hidden' }}><div style={{ width: `${loadPct}%`, height: '100%', borderRadius: 4, background: 'linear-gradient(90deg,#53d769,#9be15d)', transition: 'width .25s' }} /></div>
         <div style={{ fontSize: 12, color: '#9fc3dd' }}>بارگذاری ناوگان و برجک‌ها · {loadPct}٪</div>
       </div>}
+      {props.showOpeningCue && !inspection && mapReady && binding && props.game.merchants[0] && (props.game.opening?.activeSeconds ?? 0) < 18 &&
+        <ShipCue id={props.game.merchants[0].id} sync={binding.sync} map={binding.map}
+          paid={props.game.merchants[0].paid} inspect={target=>setInspection({target,...binding})}/>}
       {inspection && mapReady && !props.targeting && !props.paused && (
         <OpeningVesselReadout {...inspection} game={props.game}
           onClose={closeInspection} onStart={props.onStartOpeningWave} onVisibilityChange={props.onOpeningInspectionChange}/>
@@ -206,6 +238,7 @@ export default function WorldView3D(props: Props) {
           const { GameSync3D } = await import('../three-map/gamesync');
           if (!mounted.current || syncRef.current) return;
           const sync = new GameSync3D(map as never, {
+            onSignal: id => propsRef.current.onSignal?.(id),
             onOpeningInspect: target => {
               const current = propsRef.current;
               setInspection(target && !current.paused && !current.targeting && current.game.phase === 'peace'
@@ -222,14 +255,22 @@ export default function WorldView3D(props: Props) {
             onGroundHover: (x, y) => propsRef.current.onGroundHover({ x, y }),
           });
           syncRef.current = sync;
+          setBinding({sync, map: map as {onBeforeFrame(cb:()=>void):()=>void}});
           (window as unknown as { __gamesync3d?: unknown }).__gamesync3d = sync;
           (window as unknown as { __map3d?: unknown }).__map3d = map;
           const p = propsRef.current;
           await sync.setState(p.game, { selectedSlot: p.selectedSlot, targeting: p.targeting, targetPreview: p.targetPreview, paused: p.paused });
           if (!mounted.current || syncRef.current !== sync) return;
+          syncReady.current = true;
+          p.onReadyChange?.(sceneAvailable.current && assetsReady.current);
           const camera = map as WorldCamera;
+          camera.releaseFocus=sync.focus.release;
+          camera.watchAttack=()=>sync.watchAttack();
           p.onCameraReady(camera);
-          camera.flyTo(HOME_VIEW.x, HOME_VIEW.z, HOME_VIEW.distance, 1.4);
+          if (!p.game.regional?.voyage && p.game.phase !== "battle" && !sync.focus.key) {
+            const view = p.game.opening?.manualWaveAt === null ? FIRST_SHIFT_VIEW : HOME_VIEW;
+            camera.flyTo(view.x, view.z, view.distance, 0.18);
+          }
           // The VIS2 time driver (effect above) owns the map clock from
           // its first frame — no setTime snap here anymore.
         }}

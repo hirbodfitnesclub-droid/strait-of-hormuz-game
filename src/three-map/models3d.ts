@@ -83,16 +83,22 @@ function fitWidth(obj: THREE.Object3D, target: number) {
 interface FieldLike { height(x: number, z: number): number }
 
 /** Preload every model the game can place, so nothing decodes/compiles mid-battle. */
-export async function preloadModels(onProgress?: (done: number, total: number) => void): Promise<void> {
+export async function preloadModels(onProgress?: (done: number, total: number) => void, firstShift = false): Promise<void> {
   const urls: string[] = [];
   for (const base of Object.values(TOWER_MODEL)) for (const st of [1]) urls.push(`/models/towers/${base}-L${st}.glb`);
   for (const b of ['platform', 'tankfarm', 'dock', 'refinery', 'steel', 'ammo', 'power', 'desal', 'town', 'welfare', 'customs']) urls.push(`/models/buildings/${b}-T1.glb`);
   urls.push('/models/kenney/ship-cargo-a.glb', '/models/kenney/boat-tug-a.glb', '/models/kenney/boat-speed-a.glb');
   // D-022 ship hulls (Innerscene CC0, flat-baked + decimated — CREDITS.md)
   urls.push('/models/ships/frigate.glb', '/models/ships/carrier.glb', '/models/ships/tanker.glb', '/models/ships/container.glb', '/models/ships/bulk.glb', '/models/ships/submarine.glb', '/models/ships/pilot.glb', '/models/ships/research.glb', '/models/ships/supply.glb', '/models/ships/ferry.glb');
-  const total = urls.length;
+  // The first shift needs its dock, production buildings and two working vessels.
+  // Other hulls and towers use the same cache when their game objects appear.
+  const queue = firstShift ? [
+    '/models/kenney/boat-tug-a.glb', '/models/ships/tanker.glb',
+    '/models/buildings/dock-T1.glb', '/models/buildings/tankfarm-T1.glb',
+    '/models/buildings/platform-T1.glb', '/models/buildings/power-T1.glb',
+  ] : urls;
+  const total = queue.length;
   let done = 0;
-  const queue = [...urls];
   const worker = async () => {
     while (queue.length) {
       const u = queue.shift()!;

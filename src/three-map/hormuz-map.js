@@ -3015,6 +3015,7 @@ class HormuzMap {
   distance() {
     return this.camera.position.distanceTo(this.controls.target);
   }
+  cancelFly() { this.fly = null; }
   flyTo(x, z, dist, dur = 1.4) {
     this.fly = {
       t: 0,

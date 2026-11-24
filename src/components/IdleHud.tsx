@@ -6,6 +6,7 @@ import { currentChapter, rankInfo } from "@/lib/progression";
 import { scenarioForWave } from "@/lib/news";
 import { scenarioContextFor } from "@/lib/scenario-mechanics";
 import { compact, fa } from "./game-ui";
+import { FirstShift } from "./FirstShift";
 import HarborGlyph from "./HarborGlyph";
 import { canOfferOpeningWave, openingAttentionRules, type OpeningFocus } from "@/lib/opening-attention";
 import { openingNextTollIn } from "@/lib/opening-industry";
@@ -69,6 +70,8 @@ export default function IdleHud(props:Props){
   /* Expanded peace only: the next wave's composition (moved here from the
      removed wave-hud card; focus mode keeps only the essential set). */
   const previewUnits = !props.focus && !battle ? waveComposition(game.wave, scenarioForWave(game.wave, game.mode, scenarioContextFor(game))) : [];
+  if (firstShift && props.focus && !props.hidden) return <FirstShift game={game} focus={props.candidate} highlight={props.highlight}
+    onTank={props.onTank} onCollect={props.onCollect} onBattle={props.onBattle} onHelp={props.onHelp} onSkip={props.onSkip} onDismissHint={props.onDismissHint}/>;
   return <>
     {!props.focus&&<div className="commander-progress"><button className="rank-medal" onClick={props.onJournal} title={rank.title} aria-label={`رتبه ${rank.title}`}><Award size={26}/><strong>{fa(rank.level)}</strong></button><div><span className="chapter-label">فصل {fa(chapter.index+1)} <i/> {chapter.title}</span><h1>{rank.title}</h1><div className="commander-xp"><i style={{width:`${rank.progress*100}%`}}/></div><small><span>{fa(game.idle.xp)} / {fa(rank.next)} تجربه</span></small></div></div>}
     {!props.hidden&&<>

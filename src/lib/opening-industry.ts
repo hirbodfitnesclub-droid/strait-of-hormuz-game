@@ -209,6 +209,7 @@ function commerceSecond(s:GameState,o:OpeningIndustry,bankCap:number,position:(s
     if(!ship.paid && ship.progress+1e-10>=trade.receipt_progress) {
       ship.paid=true;
       const credited=money(Math.max(0,Math.min(ship.reward*(o.priceFactor ?? 1),bankCap-s.idle.bank)));
+      ship.receivedToll=credited;
       s.idle.bank=money(s.idle.bank+credited);
       s.idle.lifetimeIncome=money(s.idle.lifetimeIncome+credited);
       o.ledger.tolls=money(o.ledger.tolls+credited);

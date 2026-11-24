@@ -1,5 +1,8 @@
 import { combatTowers } from "../lib/opening-operations";
+import { SceneFocus } from './scene-focus';
+import { RegionalWaterway, type PortScene } from './regional-waterway';
 import { worldLane } from './world-lane';
+import { trafficFraction, merchantProgress, berthProgress } from './traffic-motion';
 import { TapGesture } from '../lib/tap-gesture';
 import * as THREE from 'three';
 import slotsData from './slots-3d.json';
@@ -22,6 +25,7 @@ const BUILDINGS = buildingsData as Record<string, { glb: string; x: number; z: n
 export type OpeningLandmark = {kind: 'merchant' | 'tanker'; id: number} | {kind: 'radar'};
 
 export interface SyncCallbacks {
+  onSignal?(id: number): void;
   onOpeningInspect?(target: OpeningLandmark | null): void;
   onSound?(kind: BattleSound): void;
   onSlot(id: number): void;
@@ -34,10 +38,7 @@ export interface SyncCallbacks {
   onGroundHover(xPct: number, yPct: number): void;
 }
 
-interface MapLike {
-  scene: THREE.Scene;
-  camera: THREE.Camera;
-  renderer?: { domElement: HTMLCanvasElement };
+interface MapLike extends PortScene {
   field?: { height(x: number, z: number): number; sample(x: number, z: number): number };
   onBeforeFrame(callback: (now: number, dt: number) => void): () => void;
   setLayer(name: string, on: boolean): void;
@@ -408,6 +409,9 @@ export class GameSync3D {
   private lanePosTmp = new THREE.Vector3();
   private laneTanTmp = new THREE.Vector3();
   private lastDensity = -1;
+  private regionalWater: RegionalWaterway | null = null;
+  private lastPortSample = 0;
+  private portSampleAt = 0;
   private towers = new Map<number, { url: string; obj: THREE.Object3D; born: number; base: number }>();
   private buildings = new Map<string, BldRec>();
   private towerMarks = new Map<number, { grp: THREE.Group; jam: THREE.Sprite; stun: THREE.Sprite }>();
@@ -499,10 +503,12 @@ export class GameSync3D {
   private alive = true;
   private ray = new THREE.Raycaster();
   private downPos: { x: number; y: number; t: number } | null = null;
+  readonly focus: SceneFocus;
   private detachFns: (() => void)[] = [];
 
   constructor(map: MapLike, cb: SyncCallbacks) {
     this.map = map; this.cb = cb;
+    this.focus = new SceneFocus(map);
     for (const n of ['enemy', 'trade', 'slots', 'ships', 'zones'] as const) { try { map.setLayer(n, false); } catch { /* layer may not exist */ } }
     this.interceptMarker.rotation.x = -Math.PI / 2; this.interceptMarker.renderOrder = 10;
     this.statics.add(this.interceptMarker);
@@ -585,7 +591,7 @@ export class GameSync3D {
     };
     (window as unknown as { __telemetry?: unknown }).__telemetry = this.telemetry;
     this.bindPointer();
-    this.detachFns.push(map.onBeforeFrame((now, dt) => this.loop(now, dt)));
+    this.detachFns.push(map.onBeforeFrame((now, dt) => { this.loop(now, dt); this.focus.frame(now, dt); }));
   }
 
   /* PERF2 (D-020): release one pooled popup's GPU resources. Pool members
@@ -599,7 +605,9 @@ export class GameSync3D {
   }
 
   dispose() {
+    this.focus.dispose();
     this.alive = false;
+    this.regionalWater?.dispose();
     const debug = window as { __telemetry?: unknown; __gamesync3d?: unknown };
     if (debug.__telemetry === this.telemetry) delete debug.__telemetry;
     if (debug.__gamesync3d === this) delete debug.__gamesync3d;
@@ -695,8 +703,23 @@ export class GameSync3D {
     }
     // wave-start signal for the enemy-route ribbon pulse: the phase edge
     // into battle (peace/intermission -> battle) is the wave launch moment.
-    if (this.state && this.state.phase !== 'battle' && game.phase === 'battle') this.wavePulseAt = performance.now();
+    if (game.phase === 'battle' && (this.state?.phase !== 'battle' || this.state.wave !== game.wave)) {
+      this.wavePulseAt = performance.now();
+      this.watchAttack();
+    } else if (this.state?.phase === 'battle' && game.phase !== 'battle') {
+      this.focus.close();
+    }
+    if (!this.state?.regional?.voyage && game.regional?.voyage) this.focus.release();
+    const portTime = game.opening ? game.opening.activeSeconds + game.opening.remainder : 0;
+    if (!this.state || this.lastPortSample !== portTime) {
+      this.lastPortSample = portTime;
+      this.portSampleAt = performance.now();
+    }
     this.state = game; this.selectedSlot = opts.selectedSlot; this.targeting = opts.targeting;
+    if (game.regional?.voyage && !this.regionalWater) {
+      this.regionalWater = new RegionalWaterway(this.map);
+    }
+    this.regionalWater?.setVoyage(game.regional?.voyage ?? null, performance.now());
     this.syncTelemetry(game);
     this.consumePopups(game);
     this.detectStateEvents(game);
@@ -1039,6 +1062,7 @@ export class GameSync3D {
           const fit2 = new THREE.Box3().setFromObject(model);
           model.position.set(p.x, -fit2.min.y, p.z);
           this.attachNightLamps(model, fit, pScale, 1);
+          model.userData.pick = {type:'platform',id:p.id};
           this.statics.add(model); this.platforms.set(p.id, model); this.genericAnims.set('plat-' + p.id, collectAnims(model, 'plat' + p.id).generic);
           this.registerModel(model);
           this.freezeStatic(model, true);
@@ -1178,6 +1202,51 @@ export class GameSync3D {
     hull.add(symbol);
   }
 
+  watchAttack(id?: number) {
+    let tracked = id;
+    this.focus.track('attack', 7, out => {
+      const game = this.state;
+      if (!game || game.phase !== 'battle') return false;
+      const live = game.enemies.find(e => e.id === tracked && e.hp > 0)
+        ?? game.enemies.find(e => e.hp > 0 && this.ents.get('enemy-' + e.id)?.init);
+      if (!live) return false;
+      tracked = live.id;
+      const ent = this.ents.get('enemy-' + tracked);
+      if (!ent?.init) return false;
+      out.copy(ent.obj.position); out.y += 1.7;
+      return true;
+    });
+  }
+
+  focusSite(kind: 'building' | 'slot' | 'platform', id: string | number) {
+    const site = kind === 'building' ? BUILDINGS[String(id)]
+      : (kind === 'slot' ? SLOTS : PLATFORMS).find(s => s.id === id);
+    if (!site) return;
+    this.focus.track(kind + ':' + id, kind === 'slot' ? 5.2 : 6.8, out => {
+      out.set(site.x, groundY(this.map,site.x,site.z) + 1.6, site.z);
+      return true;
+    });
+  }
+
+  focusHull(key: string, radius: number) {
+    this.focus.track(key, radius, out => {
+      const entity = this.ents.get(key);
+      if (!entity?.init) return false;
+      out.copy(entity.obj.position); out.y+=1.3; return true;
+    });
+  }
+
+  followVessel(target: OpeningLandmark) {
+    const key=target.kind === 'merchant' ? 'merchant-' + target.id : target.kind;
+    if (target.kind === 'radar') {
+      this.focus.track(key,6,out => {
+        if (!this.openingSignals) return false;
+        this.openingSignals.scanner.getWorldPosition(out); return true;
+      });
+    } else this.focusHull(key,target.kind === 'tanker' ? 9 : 6.6);
+    return () => this.focus.close(key);
+  }
+
   /** Return the current screen anchor for a player's inspection. The caller
    * follows the rendered hull (including easing), not the simulation target. */
   openingAnchor(landmark: OpeningLandmark, above = true): {x: number; y: number} | null {
@@ -1192,7 +1261,7 @@ export class GameSync3D {
     return {x: (position.x + 1) * 50, y: (1 - position.y) * 50};
   }
 
-  // Extend small silhouettes to a 44 CSS-pixel touch target when the ray hit
+  // Extend small silhouettes to a 48 CSS-pixel touch target when the ray hit
   // empty water. A directly touched building, ship or tower always wins.
   private nearbyOpeningLandmark(event: PointerEvent, canvas: HTMLElement): OpeningLandmark | null {
     const state = this.state!;
@@ -1200,7 +1269,7 @@ export class GameSync3D {
     if (state.idle.port.tanker) landmarks.push({kind: 'tanker', id: state.idle.port.cycles});
     const bounds = canvas.getBoundingClientRect();
     let nearest: OpeningLandmark | null = null;
-    let radius = 22;
+    let radius = 24;
     for (const landmark of landmarks) {
       const anchor = this.openingAnchor(landmark, false);
       if (!anchor) continue;
@@ -1237,6 +1306,11 @@ export class GameSync3D {
     const up = (e: PointerEvent) => {
       if (!gesture.up(e.pointerId, e.clientX, e.clientY, performance.now())) return;
       if (this.targeting) { const p = this.groundPoint(e, el); if (p) this.cb.onGroundPoint(p[0], p[1]); return; }
+      if (this.state?.regional?.voyage) {
+        const signal = this.regionalWater?.hit(e.clientX, e.clientY);
+        if (!this.combatPaused && signal != null) this.cb.onSignal?.(signal);
+        return;
+      }
       const pick = this.pick(e, el);
       if (this.state?.opening) {
         if (pick?.type === 'merchant') { this.cb.onOpeningInspect?.({kind: 'merchant', id: Number(pick.id)}); return; }
@@ -1249,7 +1323,8 @@ export class GameSync3D {
         this.cb.onOpeningInspect?.(null);
       }
       if (!pick) return;
-      if (pick.type === 'slot') this.cb.onSlot(pick.id as number);
+      if (pick.type === 'attacker') this.watchAttack(Number(pick.id));
+      else if (pick.type === 'slot') this.cb.onSlot(pick.id as number);
       else if (pick.type === 'building') this.cb.onBuilding(pick.id as string);
       else if (pick.type === 'platform') this.cb.onPlatform(pick.id as number);
       else if (pick.type === 'hero') this.cb.onHero();
@@ -1333,10 +1408,10 @@ export class GameSync3D {
         o.rotation.x = Math.sin(now / 810 + ent.phase * 0.6) * 0.012;
       } else o.position.y = t.y;
       if (ent.wake) {
-        const dx = t.pos.x - (ent.lastTx ?? t.pos.x), dz = t.pos.z - (ent.lastTz ?? t.pos.z);
+        const dx = o.position.x - (ent.lastTx ?? o.position.x), dz = o.position.z - (ent.lastTz ?? o.position.z);
         const inst = Math.hypot(dx, dz) / Math.max(dt, 0.001);
         ent.speed = (ent.speed ?? 0) + (inst - (ent.speed ?? 0)) * Math.min(1, dt * 3);
-        ent.lastTx = t.pos.x; ent.lastTz = t.pos.z;
+        ent.lastTx = o.position.x; ent.lastTz = o.position.z;
         const wm = ((ent.wake as unknown as THREE.Group).children[0] as THREE.Mesh).material as THREE.MeshBasicMaterial;
         wm.opacity = Math.min(1, (ent.speed ?? 0) / 5) * (0.24 + Math.sin(now / 320 + ent.phase) * 0.05);
       }
@@ -1478,6 +1553,7 @@ export class GameSync3D {
       this.ensureEnt(key, () => e.kind === 'air' ? enemyModel(e.kind, e.boss) : enemyShip(e.kind, e.boss), { bar: e.kind === 'boss' ? 10 : 5, bob: e.kind === 'air' ? 0 : 0.09, wake: wakeLen ? { len: wakeLen, wid: wakeLen * 0.34, fwd: 'X' } : undefined });
       const ent = this.ents.get(key);
       if (ent) {
+        ent.obj.userData.pick ??= {type:'attacker',id:e.id};
         if (ent.bar) setBar(ent.bar, e.hp / e.maxHp);
         if (e.hitFlash && e.hitFlash > 0) {
           ent.obj.scale.setScalar(1.07);
@@ -1510,9 +1586,10 @@ export class GameSync3D {
     // cargo-a at four scales is gone): Aframax tanker / container ship /
     // bulk carrier / Kenney tug for the barge. Cruise = lane length over
     // the game.ts crossing time (761u / 80|70|65 s).
+    const fraction = game.opening ? trafficFraction(game.opening.remainder, now - this.portSampleAt) : 0;
     for (const m of game.merchants) {
       const key = `merchant-${m.id}`; alive.add(key);
-      this.setTarget(key, merchantLane(m), m.progress, 0, 'X');
+      this.setTarget(key, merchantLane(m), game.opening ? merchantProgress(m, fraction) : m.progress, 0, 'X');
       const spec = m.kind === 'tanker' ? { ship: 'tanker' as const, len: 18, cruise: 9.5 }
         : m.kind === 'barge' ? { ship: 'tug' as const, len: 9, cruise: 11.7 }
         : m.kind === 'container' ? { ship: 'container' as const, len: 16, cruise: 10.9 }
@@ -1616,7 +1693,8 @@ export class GameSync3D {
     const tanker = game.idle.port?.tanker;
     if (tanker) {
       alive.add('tanker');
-      this.setTarget('tanker', 'port', tanker.progress, 0, 'X', tanker.stage === 'depart');
+      const progress = game.opening ? berthProgress(tanker.stage, tanker.progress, fraction) : tanker.progress;
+      this.setTarget('tanker', 'port', progress, 0, 'X', tanker.stage === 'depart');
       this.ensureEnt('tanker', async () => {
         const g = await makeShip('tanker', { len: 18 });
         if (game.opening) { g.userData.pick = {type: 'tanker', id: 0}; this.markShip(g, 'cargo'); }
@@ -1722,6 +1800,7 @@ export class GameSync3D {
       this.targets.delete(key); this.prevFlash.delete(key); this.entKinds.delete(key);
     }
     this.stepMotion(dt, now);
+    this.regionalWater?.frame(now, this.combatPaused);
     this.updateAnims(dt, now);
     // The map caps ambient-motion dt for visual stability. Flights use
     // battle seconds, including 2/3× speed and the fixed clock's stall budget.

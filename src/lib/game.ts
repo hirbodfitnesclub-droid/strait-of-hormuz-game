@@ -132,7 +132,7 @@ export interface Pirate { id: number; progress: number; hp: number; /** VIP-even
  *  reward, destruction fines security instead. */
 export interface VipShip { progress: number; hp: number; maxHp: number; /** Seconds since spawn (frozen while paused); pirates cannot damage the ship during its first 5 s. */ age: number; }
 export interface Contraband { id: number; progress: number; /** D-022: ship-seconds since spawn (ease-in ramp); absent = underway. */ age?: number; }
-export interface Merchant { inbound?: boolean; id: number; progress: number; kind: "barge" | "bulk" | "container" | "tanker"; reward: number; paid: boolean; /** D-022: ship-seconds since spawn (ease-in ramp); absent = underway. */ age?: number; }
+export interface Merchant { inbound?: boolean; id: number; progress: number; kind: "barge" | "bulk" | "container" | "tanker"; reward: number; paid: boolean; receivedToll?: number; /** D-022: ship-seconds since spawn (ease-in ramp); absent = underway. */ age?: number; }
 /** One discrete shot event, emitted the moment a tower (or hero) fires.
  *  Damage is NOT applied here — it lands when the matching PendingImpact
  *  resolves after flightDur battle-seconds. Renderers (gamesync/FX) consume
@@ -230,6 +230,7 @@ export interface BattleEvent {
  *  visual only and are deliberately NOT counted here. */
 export interface FireStat { shots: number; hits: number; fizzled: number; }
 export interface GameState {
+  regional?: import("../harbor/restored").RegionalBook;
   /** Absent on pre-reopening saves. Their running economy and progression remain intact. */
   opening?: OpeningIndustry;
   version: number;
@@ -746,6 +747,7 @@ export function hydrateGame(raw: unknown, now = Date.now()): { game: GameState; 
   const sanitizeMerchant = (v: unknown): Merchant | null => {
     if (!isRec(v) || !MERCHANT_KINDS.includes(v.kind as Merchant["kind"])) return null;
     const ship: Merchant = { ...(typeof v.inbound === "boolean" ? {inbound:v.inbound} : {}), id: num(v.id, 0), progress: clampNum(v.progress, 0, 0, 1), kind: v.kind as Merchant["kind"], reward: Math.max(0, num(v.reward, 0)), paid: v.paid === true };
+    if (ship.paid && typeof v.receivedToll === "number" && Number.isFinite(v.receivedToll) && v.receivedToll >= 0) ship.receivedToll = v.receivedToll;
     const age = optNum(v.age);
     if (age !== undefined) ship.age = Math.max(0, age);
     return ship;

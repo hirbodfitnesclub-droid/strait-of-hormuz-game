@@ -5,7 +5,7 @@
   left: clamp(95px, var(--ship-x, 50%), calc(100% - 95px));
   top: clamp(148px, var(--ship-y, 50%), calc(100% - 64px));
   transform: translate(-50%, -100%);
-  padding: 6px 9px 6px 35px;
+  padding: 6px 9px 6px 48px;
   border: 1px solid #d3b775;
   border-radius: 8px;
   background: #143542f5;
@@ -21,8 +21,8 @@
   position: absolute;
   top: 0;
   left: 0;
-  width: 40px;
-  height: 44px;
+  width: 48px;
+  height: 48px;
   border: 0;
   background: transparent;
   color: inherit;
@@ -32,7 +32,7 @@
 .start {
   display: block;
   width: 100%;
-  min-height: 44px;
+  min-height: 48px;
   margin-top: 5px;
   border: 1px solid #e1b85e;
   border-radius: 7px;

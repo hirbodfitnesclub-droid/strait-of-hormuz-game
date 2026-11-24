@@ -42,6 +42,7 @@ android {
         preview {
             initWith release
             applicationIdSuffix '.preview'
+            debuggable true
             matchingFallbacks = ['release']
             signingConfig signingConfigs.debug
         }

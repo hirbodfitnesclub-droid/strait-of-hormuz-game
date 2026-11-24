@@ -254,3 +254,8 @@
 .opening-result-notes p, .opening-dock-order p { margin: .2rem 0; }
 .opening-dock-order strong { display: inline-flex; align-items: center; gap: .4rem; }
 .opening-result-notes summary { cursor: pointer; text-decoration: underline; }
+
+.game-shell.workshop.first-shift .quick-build-button,
+.game-shell.workshop.first-shift .quay-ledge { display:none; }
+.game-shell.workshop.regional-voyage > header { display:none; }
+.shipping-access { width:calc(100% - 24px);display:flex;align-items:center;justify-content:center;gap:8px;margin:5px auto;min-height:48px;border:1px solid #ab9065;border-radius:8px;background:#193d49;color:#ffe6b5;font:inherit; }

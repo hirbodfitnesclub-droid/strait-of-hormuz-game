@@ -1,0 +1,188 @@
+.instruments {
+  position: absolute;
+  z-index: 8;
+  inset-inline: 10px;
+  bottom: max(9px, env(safe-area-inset-bottom));
+  margin: auto;
+  max-width: 455px;
+  color: #fdf3d4;
+  pointer-events: none;
+  font-size: 13px;
+  direction: rtl;
+}
+.log,
+.deck {
+  background: linear-gradient(125deg, #173e48f5, #092732f7);
+  border: 1px solid #8f8b65;
+  box-shadow: 0 3px 14px #061c2370;
+}
+.log {
+  display: flex;
+  gap: 7px;
+  align-items: center;
+  padding: 0 10px;
+  border-radius: 10px 10px 0 0;
+  min-height: 39px;
+  border-bottom: 0;
+  color: #f2e3b8;
+}
+.log span {
+  flex: 1;
+  font-weight: 600;
+}
+.instruments button,
+.pin {
+  pointer-events: auto;
+  cursor: pointer;
+  font-family: inherit;
+}
+.deck {
+  display: flex;
+  align-items: stretch;
+  gap: 7px;
+  padding: 7px;
+  border-radius: 0 0 12px 12px;
+}
+.deck button,
+.cargo {
+  flex: 1;
+  min-width: 0;
+  min-height: 48px;
+  color: inherit;
+  border-radius: 7px;
+  background: #284b4f;
+  border: 1px solid #708682;
+  padding: 5px 9px;
+}
+.gauge span,
+.cargo span {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: #c5dfd9;
+}
+.gauge {
+  display: grid;
+  text-align: start;
+  gap: 1px;
+}
+.gauge bdi {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  font-size: 14px;
+  font-weight: 800;
+}
+.gauge > i {
+  height: 3px;
+  display: block;
+  direction: ltr;
+  background: #506666;
+  border-radius: 2px;
+  overflow: hidden;
+}
+.gauge > i > i {
+  display: block;
+  background: #f3c269;
+  height: 100%;
+}
+.deck .order,
+.deck .sail {
+  position: static;
+  transform: none;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-content: center;
+  align-items: center;
+  gap: 0 5px;
+  box-shadow: none;
+  margin: 0;
+  width: auto;
+  font: inherit;
+  color: #29271a;
+  background: linear-gradient(115deg, #ffe1a1, #dba85b);
+  border: 1px solid #fdd591;
+}
+.order svg,
+.sail svg {
+  grid-row: span 2;
+  width: 20px;
+}
+.order strong,
+.sail strong {
+  font-size: 13px;
+  white-space: normal;
+}
+.order small {
+  color: #5a481f;
+  font-size: 11px;
+}
+.cargo {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-content: center;
+  gap: 0 6px;
+  align-items: center;
+}
+.cargo svg {
+  grid-row: span 2;
+}
+.cargo b {
+  font-size: 13px;
+}
+.instruments .skip,
+.instruments .dismiss,
+.help {
+  border: 0;
+  background: transparent;
+  color: #c6e3df;
+  min-width: 48px;
+  min-height: 48px;
+  font-size: 11px;
+}
+.instruments .dismiss {
+  min-width: 48px;
+}
+.help {
+  border-radius: 8px;
+  background: #133842;
+  position: absolute;
+  bottom: 100%;
+  left: 0;
+  padding: 0 10px;
+}
+.instruments [data-opening-highlight] {
+  outline: 2px solid #ffe09b;
+  outline-offset: 1px;
+}
+.pin {
+  position: absolute;
+  z-index: 4;
+  transform: translate(-50%, -100%);
+  height: 48px;
+  min-width: 48px;
+  padding: 0 3px 10px;
+  background: transparent;
+  border: 0;
+  color: #fff3c9;
+}
+.pin span {
+  padding: 4px 9px;
+  background: #143b44eb;
+  border: 1px solid #d9bb77;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.pin i {
+  display: block;
+  position: absolute;
+  left: 50%;
+  bottom: 2px;
+  height: 11px;
+  border-inline-start: 1px solid #ffe2a3;
+}
+.pin[hidden] {
+  display: none;
+}

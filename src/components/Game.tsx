@@ -9,7 +9,7 @@ import {
   Shield, ShieldCheck, Ship, Sparkles, Sun, SunMoon, Swords, Volume2,
   X, Zap, Star, UsersRound, ClipboardList, Gift, Save, LogOut, ChevronsRight, ChevronDown,
 } from "lucide-react";
-import { SLOTS, BUILDINGS, TOWERS, gameReducer, getStats, buildingUpgradeQuote, hydrateGame, freshPortGame, enemyPosition, waveComposition, bossEnemy, antiAirWarning, interceptWarning, type BuildingId, type GameState, type Spell, type TowerKind, platformCost, INTERCEPT_LINE } from "@/lib/game";
+import { SLOTS, BUILDINGS, TOWERS, getStats, buildingUpgradeQuote, hydrateGame, freshPortGame, enemyPosition, waveComposition, bossEnemy, antiAirWarning, interceptWarning, type BuildingId, type GameState, type Spell, type TowerKind, platformCost, INTERCEPT_LINE } from "@/lib/game";
 import { BattleAudio, type BattleSound } from "@/lib/battle-audio";
 import { isWater, nearestWater } from "@/lib/navigation";
 import { compact, fa } from "./game-ui";
@@ -50,8 +50,14 @@ const spells: { id: Spell; name: string; short: string; cooldown: number; key: s
   { id: "emp", name: "پالس الکترومغناطیسی", short: "پالس EMP", cooldown: 90, key: "2" },
   { id: "overdrive", name: "اورکلاک دفاع", short: "اورکلاک", cooldown: 120, key: "3" },
 ];
+import { refreshServiceClock, serviceClock } from "@/harbor/service-clock";
+import type { ClockSample } from "@/harbor/storage";
+import { snapshotPort, serviceGap, restoredReducer, restorePort, priorPreview, IMPORTED_PREVIEW } from "@/harbor/restored";
+import type { Intent } from "@/harbor/session";
+import { RegionalDesk, VoyageControls, VoyageReport } from "./RegionalDesk";
+
 export default function Game() {
-  const [game, rawDispatch] = useReducer(gameReducer, undefined, freshPortGame);
+  const [game, rawDispatch] = useReducer(restoredReducer, undefined, freshPortGame);
   const gameRef = useRef(game);
   const [loaded, setLoaded] = useState(false);
   const [saveIssue, setSaveIssue] = useState<"newer" | "corrupt" | null>(null);
@@ -67,6 +73,7 @@ export default function Game() {
   const nativeHidden = useRef(false);
   const [exitOpen, setExitOpen] = useState(false);
   const hiddenAt = useRef<number | null>(null);
+  const hiddenClock = useRef<ClockSample | null>(null);
   const [platformSite, setPlatformSite] = useState<number | null>(null);
   const [selectedSlot, setSelectedSlotState] = useState<number | null>(null);
   const [sheetSlot, setSheetSlot] = useState<number | null>(null);
@@ -93,9 +100,11 @@ export default function Game() {
   const onWorldReady = useCallback((ready: boolean) => {
     worldAvailable.current = ready;
     setWorldReady(ready);
-    if (!ready && worldHasBeenReady.current && gameRef.current.phase === "battle") setPaused(true);
+    if (!ready && worldHasBeenReady.current && (gameRef.current.phase === "battle" || gameRef.current.regional?.voyage)) setPaused(true);
     if (ready) worldHasBeenReady.current = true;
   }, []);
+  const [shippingDesk, setShippingDesk] = useState(false);
+  const voyage = game.regional?.voyage;
   const [moreOpen, setMoreOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
   const [mapInspecting, setMapInspecting] = useState(false);
@@ -135,12 +144,12 @@ export default function Game() {
   const focus = activeBattle ? focusWar : focusPeace;
   const toggleFocus = () => { feedback(); if (activeBattle) setFocusWar(!focusWar); else setFocusPeace(!focusPeace); };
   const cycleTimeMode = () => { feedback(); setTimeMode(m => (m === "auto" ? "day" : m === "day" ? "night" : "auto")); };
-  const otherInterface = platformSite !== null || selectedSlot !== null || selectedBuilding !== null || panel !== null || moreOpen || helpOpen || progressPanel !== null;
+  const otherInterface = shippingDesk || !!game.regional?.result || platformSite !== null || selectedSlot !== null || selectedBuilding !== null || panel !== null || moreOpen || helpOpen || progressPanel !== null;
   // PERF (§16.8): while any panel/sheet is open, the 3D map may cap its render
   // loop at 30fps whenever the camera is still (see hormuz-map loop).
   useEffect(() => { (window as unknown as { __hormuzCalmUi?: boolean }).__hormuzCalmUi = otherInterface; }, [otherInterface]);
   const pendingReport = game.idle.lastBattle && !game.idle.lastBattle.claimed ? game.idle.lastBattle : null;
-  const rewardInterface = !otherInterface && (!!game.idle.offline || game.idle.rewards.length>0 || !!pendingReport);
+  const rewardInterface = !voyage && !otherInterface && (!!game.idle.offline || game.idle.rewards.length>0 || !!pendingReport);
   const interfacePaused = otherInterface || rewardInterface;
   // Bulletin gate (SCEN, audit finding): an open war bulletin — briefing
   // included — FREEZES the battle, and the bulletin queue never overlaps
@@ -148,7 +157,7 @@ export default function Game() {
   // the bulletin waits in state until the report is claimed).
   const battlePaused = !worldReady || exitOpen || paused || interfacePaused || bulletin !== null || diaryOpen;
   const pauseRef = useRef(battlePaused);
-  const shortcutsBlocked = interfacePaused || !!bulletin || exitOpen || diaryOpen || !!targeting || showMapTools || mapInspecting || !loaded || !worldReady || !foreground;
+  const shortcutsBlocked = !!voyage || interfacePaused || !!bulletin || exitOpen || diaryOpen || !!targeting || showMapTools || mapInspecting || !loaded || !worldReady || !foreground;
   const interfaceRef = useRef(shortcutsBlocked);
   useEffect(() => { interfaceRef.current = shortcutsBlocked; }, [shortcutsBlocked]);
   useEffect(() => { gameRef.current = game; soundRef.current = sound; vibrationRef.current = vibration; pauseRef.current = battlePaused; }, [game, sound, vibration, battlePaused]);
@@ -167,6 +176,7 @@ export default function Game() {
     if (action.type === "reset") {
       const oldId = playerRef.current;
       try {
+        localStorage.setItem(IMPORTED_PREVIEW, "1");
         resetSaveSlots(localStorage);
         localStorage.removeItem(DIARY_KEY);
         localStorage.removeItem(PLAYER_KEY);
@@ -183,12 +193,15 @@ export default function Game() {
         void fetch(`/api/save?id=${encodeURIComponent(oldId)}`, { method: "DELETE", keepalive: true }).catch(() => {});
       }
     }
-    if (action.type === "hydrate") setPaused(action.game.phase === "battle");
+    if (action.type === "hydrate") setPaused(action.game.phase === "battle" || !!action.game.regional?.voyage);
     rawDispatch(action);
   }, []);
   const backAction = useRef(() => {});
   useEffect(() => { backAction.current = () => {
     if (exitOpen) { setExitOpen(false); return; }
+    if (shippingDesk) { setShippingDesk(false); return; }
+    if (game.regional?.result) { dispatch({type:"regional", intent:{type:"close-report",id:game.regional.result.id}}); return; }
+    if (voyage) { setPaused(p => !p); return; }
     if (targeting) { setTargeting(null); return; }
     if (showMapTools) { setShowMapTools(false); return; }
     if (platformSite !== null) { setPlatformSite(null); return; }
@@ -275,7 +288,7 @@ export default function Game() {
     let cancelled = false;
     const restore = (raw: unknown) => {
       let saved: ReturnType<typeof hydrateGame>;
-      try { saved = hydrateGame(raw); } catch { return false; }
+      try { const now = serviceClock(); saved = restorePort(raw, now.wall, now); } catch { return false; }
       if (!saved) return false;
       dispatch({ type: "hydrate", game: saved.game });
       previousPhase.current = saved.game.phase; previousWave.current = saved.game.wave;
@@ -283,6 +296,8 @@ export default function Game() {
       try { writeSnapshot(localStorage, saved.game); } catch { notify("ذخیرهٔ دستگاه در دسترس نیست؛ پیشرفت فعلاً فقط در حافظه است."); }
       return true;
     };
+    const load = () => {
+    if (cancelled) return;
     let id = "";
     try {
       id = localStorage.getItem(PLAYER_KEY) ?? crypto.randomUUID();
@@ -292,6 +307,15 @@ export default function Game() {
       setHintProfile(id);
       serverVersionRef.current = Number(localStorage.getItem(`hormuz-save-version-${id}`)) || 0;
       const candidates = saveCandidates(localStorage);
+      const canonical = candidates[0]?.state as GameState | undefined;
+      if (!canonical?.regional) {
+        const preview = priorPreview(localStorage);
+        if (preview && restore(preview)) {
+          // Seal only after a verified canonical slot exists. Leave both source slots intact.
+          if ((saveCandidates(localStorage)[0]?.state as GameState)?.regional) localStorage.setItem(IMPORTED_PREVIEW, "1");
+          setLoaded(true); return;
+        }
+      }
       for (const local of candidates) if (restore(local.state)) {
         if (local.recovered) notify("پیشرفت از نسخهٔ پشتیبان بازیابی شد.");
         // One-time local save hydration after SSR.
@@ -309,6 +333,8 @@ export default function Game() {
       if (typeof data.version === "number") serverVersionRef.current = data.version;
       if (data.state) restore(data.state);
     }).catch(() => {}).finally(() => { if (!cancelled) setLoaded(true); });
+    };
+    void refreshServiceClock().then(load);
     return () => { cancelled = true; };
   }, [notify, dispatch]);
 
@@ -363,7 +389,7 @@ export default function Game() {
     if(!loaded)return;
     // Persist external storage; notify only on a storage failure.
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    try { writeSnapshot(localStorage,{...gameRef.current,shots:[],popups:[],lastSavedAt:hiddenAt.current ?? Date.now()}); } catch { notify("ذخیره انجام نشد؛ فضای خالی دستگاه را بررسی کنید."); }
+    try { writeSnapshot(localStorage,snapshotPort(gameRef.current, hiddenClock.current ?? serviceClock())); } catch { notify("ذخیره انجام نشد؛ فضای خالی دستگاه را بررسی کنید."); }
   },[loaded,game.idle.revision,notify]);
 
   useEffect(() => {
@@ -378,7 +404,7 @@ export default function Game() {
 
   // Foreground decision time continues while reading a sheet. Sample visibility
   // at the event as Android can suspend WebView timers before the next tick.
-  const openingRunning = loaded && worldReady && !exitOpen && !(activeBattle && paused);
+  const openingRunning = loaded && worldReady && !exitOpen && !((activeBattle || voyage) && paused);
   useEffect(() => {
     const clock = openingClock.current;
     const sync = () => {
@@ -412,7 +438,7 @@ export default function Game() {
 
   useEffect(() => {
     if (!loaded) return;
-    const snapshot = () => ({ ...gameRef.current, shots: [], popups: [], lastSavedAt: hiddenAt.current ?? Date.now() });
+    const snapshot = () => snapshotPort(gameRef.current, hiddenClock.current ?? serviceClock());
     const saveLocal = () => { try { writeSnapshot(localStorage, snapshot()); } catch { notify("ذخیره انجام نشد؛ فضای خالی دستگاه را بررسی کنید."); } };
     let saving = false, conflicted = false;
     function saveAll() {
@@ -448,14 +474,18 @@ export default function Game() {
     const onVisibility = () => {
       if (document.hidden || nativeHidden.current) {
         if (hiddenAt.current !== null) return;
-        hiddenAt.current = Date.now();
+        hiddenClock.current = serviceClock();
+        hiddenAt.current = hiddenClock.current.wall;
         audioRef.current?.suspend();
         saveAll();
-        if (gameRef.current.phase === "battle") setPaused(true);
+        if (gameRef.current.phase === "battle" || gameRef.current.regional?.voyage) setPaused(true);
       } else if (hiddenAt.current !== null) {
         const now = Date.now();
         const seconds = (now - hiddenAt.current) / 1000;
+        const before = hiddenClock.current;
+        hiddenClock.current = null;
         hiddenAt.current = null;
+        if (before) void refreshServiceClock().then(current => dispatch({type:"service-elapsed", seconds:serviceGap(before,current)}));
         audioRef.current?.resume();
         if (seconds > 30) dispatch({type:"offline-elapsed", seconds, now});
         void reloadDaily();
@@ -548,7 +578,12 @@ export default function Game() {
       announce(spell === "emp" ? "پالس الکترومغناطیسی" : "قدرت دوبرابر", spell === "emp" ? "دشمنان ۶ ثانیه متوقف می‌شوند" : "۱۰ ثانیه شلیک بدون مصرف مهمات", "power");
     }
   };
+  const regionalCommand = (intent: Intent) => {
+    if (intent.type === "launch") { setPaused(false); setMapInspecting(false); }
+    dispatch({type:"regional", intent});
+  };
   const mainAction = () => {
+    if (game.phase === "victory" && game.highestWave >= 25) { setShippingDesk(true); return; }
     feedback(); setTargeting(null);
     if (activeBattle) { setPaused(!paused); return; }
     if (!canOfferOpeningWave(game.opening)) return;
@@ -641,7 +676,7 @@ export default function Game() {
 
   const saveCommand = () => {
     try {
-      writeSnapshot(localStorage, { ...gameRef.current, shots: [], popups: [], lastSavedAt: hiddenAt.current ?? Date.now() });
+      writeSnapshot(localStorage, snapshotPort(gameRef.current, hiddenClock.current ?? serviceClock()));
       notify("پیشرفت بازی روی دستگاه ذخیره شد.");
       return true;
     } catch {
@@ -672,7 +707,7 @@ export default function Game() {
     <button onClick={() => window.location.reload()}>تلاش دوباره</button>
     {toast && <p role="status">{toast}</p>}
   </main>;
-  return <div data-opening-active-s={opening?.activeSeconds} data-opening-target={opening ? candidate ?? "none" : undefined} className={`game-shell workshop ${modalOpen ? "workshop-modal-open" : ""} ${activeBattle ? "in-battle" : ""} ${focus ? "focus-on" : "focus-off"} ${cinematic ? "cinematic" : "effects-light"} ${reducedMotion ? "reduce-motion" : ""} ${coachTarget ? `coach-${coachTarget}` : ""} ${coachStep === 3 ? "coach-spell" : ""} ${game.hearts <= 5 && activeBattle ? "danger-low" : ""}`} dir="rtl">
+  return <div data-opening-active-s={opening?.activeSeconds} data-opening-target={opening ? candidate ?? "none" : undefined} className={`game-shell workshop ${opening?.manualWaveAt === null && focus ? "first-shift" : ""} ${voyage ? "regional-voyage" : ""} ${modalOpen ? "workshop-modal-open" : ""} ${activeBattle ? "in-battle" : ""} ${focus ? "focus-on" : "focus-off"} ${cinematic ? "cinematic" : "effects-light"} ${reducedMotion ? "reduce-motion" : ""} ${coachTarget ? `coach-${coachTarget}` : ""} ${coachStep === 3 ? "coach-spell" : ""} ${game.hearts <= 5 && activeBattle ? "danger-low" : ""}`} dir="rtl">
     {exitOpen && <ExitDialog close={() => setExitOpen(false)} save={saveCommand} exit={() => {
       if (saveCommand()) void App.exitApp().catch(() => notify("بازی ذخیره شد. برای خروج از دکمهٔ دستگاه استفاده کنید."));
     }} />}
@@ -694,8 +729,10 @@ export default function Game() {
     </header>
 
     <main className={`game-map ${targeting ? "aiming" : ""} ${selectedSlot !== null || selectedBuilding !== null ? "choosing-tower" : ""}`}>
-      <WorldView3D onOpeningInspectionChange={setMapInspecting} onStartOpeningWave={mainAction} onCameraReady={setCamera} onReadyChange={onWorldReady} paused={battlePaused} game={game} selectedSlot={selectedSlot} targeting={targeting} targetPreview={targetPreview} isNight={isNight} timeMode={timeMode} onSlot={chooseSlot} onBuilding={chooseBuilding} onPlatform={id => { if (!game.idle.platforms?.includes(id)) setPlatformSite(id); }} onHero={() => { setTargeting("hero"); setTargetPreview(game.hero); setSelectedSlot(null); feedback(); }} onHero2={() => { if (game.hero2) { setTargeting("hero2"); setTargetPreview(game.hero2); setSelectedSlot(null); feedback(); } }} onInspect={id => { dispatch({ type: "inspect", id }); notify("محموله کشف شد؛ ۵۰ فولاد دریافت کردید."); feedback(); }} onGroundAction={handleGroundAction} onGroundHover={handleGroundHover} playSound={playSound} />
+      <WorldView3D selectedBuilding={selectedBuilding} selectedPlatform={platformSite} showOpeningCue={!!opening && !coachDismissed && !attentionCovered && opening.manualWaveAt === null && !voyage} onSignal={id=>regionalCommand({type:"tap",id})} onOpeningInspectionChange={setMapInspecting} onStartOpeningWave={mainAction} onCameraReady={setCamera} onReadyChange={onWorldReady} paused={battlePaused} game={game} selectedSlot={selectedSlot} targeting={targeting} targetPreview={targetPreview} isNight={isNight} timeMode={timeMode} onSlot={chooseSlot} onBuilding={chooseBuilding} onPlatform={id => { setSelectedSlot(null); setSelectedBuilding(null); setPlatformSite(id); }} onHero={() => { setTargeting("hero"); setTargetPreview(game.hero); setSelectedSlot(null); feedback(); }} onHero2={() => { if (game.hero2) { setTargeting("hero2"); setTargetPreview(game.hero2); setSelectedSlot(null); feedback(); } }} onInspect={id => { dispatch({ type: "inspect", id }); notify("محموله کشف شد؛ ۵۰ فولاد دریافت کردید."); feedback(); }} onGroundAction={handleGroundAction} onGroundHover={handleGroundHover} playSound={playSound} />
 
+      {voyage && game.regional && <VoyageControls h={{...game.regional,port:game}} command={regionalCommand} paused={paused || !worldReady} pause={()=>setPaused(p=>!p)}/>}
+      {!voyage && <>
       {!modalOpen && !targeting && <div className="quay-ledge" aria-hidden="true"/>}
       <IdleHud game={game} candidate={candidate} highlight={hint.highlight} onTank={() => chooseBuilding("tank")}
         onDismissHint={hint.canDismiss ? hint.dismiss : undefined} onSkip={loaded && preferencesLoaded && worldReady && !coachDismissed ? () => setCoachDismissed(true) : undefined} onHelp={() => { dispatch({type:"opening-help"}); chooseBuilding("tank"); }}
@@ -716,6 +753,7 @@ export default function Game() {
           <span className="war-hearts" aria-label={`سلامت بندر ${fa(game.hearts)} از ۲۰`}><HarborGlyph symbol="heart"/><strong>{fa(game.hearts)}</strong></span>
           <span className="war-wave"><HarborGlyph symbol="ship"/> موج {fa(game.wave)}</span>
           <button className={`main-battle-action battle-running ${paused ? "is-paused" : ""}`} onClick={mainAction} aria-label={actionLabel} title={actionLabel}><HarborGlyph symbol={paused ? "play" : "pause"}/></button>
+          <button className="battle-camera" onClick={()=>camera?.watchAttack()} aria-label="دنبال‌کردن کشتی حمله‌کننده" title="دنبال‌کردن کشتی"><Crosshair size={18}/></button>
           <button className="battle-speed" onClick={() => { dispatch({ type: "speed" }); feedback(); }} aria-label={`تغییر سرعت نبرد؛ ${game.speed} برابر`} title="سرعت نبرد"><HarborGlyph symbol="speed"/><strong>{fa(game.speed)}×</strong></button>
         </div>
         <div className="war-status">
@@ -735,10 +773,10 @@ export default function Game() {
           onClick={() => setShowMapTools(!showMapTools)} aria-label="کنترل نمای نقشه" aria-expanded={showMapTools} aria-controls="port-view-tools" />
         {showMapTools && <div className="view-options" id="port-view-tools" role="group" aria-label="ابزارهای نقشه">
           <div className="camera-row">
-            <button onClick={() => camera?.zoomBy(1 / 1.5)} aria-label="بزرگ‌نمایی"><Plus size={20}/></button>
+            <button onClick={() => {camera?.releaseFocus(); camera?.zoomBy(1 / 1.5);}} aria-label="بزرگ‌نمایی"><Plus size={20}/></button>
             <span ref={zoomLabel} aria-label="بزرگ‌نمایی فعلی"/>
-            <button onClick={() => camera?.zoomBy(1.5)} aria-label="کوچک‌نمایی"><Minus size={20}/></button>
-            <button onClick={() => { camera?.resetNorth(); camera?.flyTo(HOME_VIEW.x, HOME_VIEW.z, HOME_VIEW.distance); }} aria-label="بازنشانی نما"><Navigation size={19}/></button>
+            <button onClick={() => {camera?.releaseFocus(); camera?.zoomBy(1.5);}} aria-label="کوچک‌نمایی"><Minus size={20}/></button>
+            <button onClick={() => { camera?.releaseFocus(); camera?.resetNorth(); camera?.flyTo(HOME_VIEW.x, HOME_VIEW.z, HOME_VIEW.distance); }} aria-label="بازنشانی نما"><Navigation size={19}/></button>
           </div>
           <button className="focus-toggle-btn" onClick={toggleFocus} aria-pressed={focus}>
             {focus ? <EyeOff size={17}/> : <Eye size={17}/>} {focus ? "نمایش جزئیات" : "حالت تمرکز"}
@@ -783,25 +821,29 @@ export default function Game() {
         })}{!focus && <button className={`support-button boost-button ${game.idle.boostRemaining > 0 ? "ready" : ""}`} onClick={activateProduction} disabled={game.idle.boostCharges <= 0 && game.idle.boostRemaining <= 0} aria-label="تقویت تولید؛ ۶۰ ثانیه تولید دوبرابر" title="تقویت تولید · ۶۰ ثانیه ×۲"><span className="support-icon"><Zap size={21} /></span><span>{game.idle.boostRemaining > 0 ? `تولید ×۲ · ${fa(Math.ceil(game.idle.boostRemaining))}ث` : `تقویت تولید · ${fa(game.idle.boostCharges)} شارژ`}</span></button>}</div>
       </div>}
       {targeting && <div className="targeting-prompt" role="status"><span className={targeting}><Crosshair size={22} /></span><div><strong>{targeting === "strike" ? "کجا را هدف بگیریم؟" : "ناو به کجا برود؟"}</strong><p>{targeting === "strike" ? "روی محدودهٔ دلخواه در آبراه بزنید." : "یک نقطه روی آب انتخاب کنید."}</p></div><button onClick={() => setTargeting(null)} aria-label="لغو هدف‌گیری"><X size={19} /></button></div>}
+     </>}
     </main>
 
+    {shippingDesk && !voyage && <RegionalDesk game={game} command={regionalCommand} close={()=>setShippingDesk(false)}/>}
+    {game.regional?.result && !voyage && <VoyageReport h={{...game.regional,port:game}} close={()=>regionalCommand({type:"close-report",id:game.regional!.result!.id})}/>}
     {selectedBuilding !== null && <BuildingSheet key={selectedBuilding} id={selectedBuilding} game={game} dispatch={dispatch} guided={tankGuidance} close={() => setSelectedBuilding(null)} notify={notify} feedback={feedback} onEconomy={() => openPanel(BUILDINGS[selectedBuilding].category === "city" ? "city" : "economy")} onManagers={()=>openProgress("managers")} onPower={()=>chooseBuilding("power")} />}
-    {platformSite !== null && <PlatformOrder price={platformCost(game.idle.platforms?.length ?? 0)} cash={game.cash} close={() => setPlatformSite(null)} build={() => {
+    {platformSite !== null && <PlatformOrder built={!!game.idle.platforms?.includes(platformSite)} price={platformCost(game.idle.platforms?.length ?? 0)} cash={game.cash} close={() => setPlatformSite(null)} build={() => {
       dispatch({type:"build-platform", id:platformSite}); setPlatformSite(null); feedback();
     }} />}
     {selectedSlot !== null && sheetSlot === null && <SlotRadial key={`radial-${selectedSlot}`} game={game} slot={selectedSlot} dispatch={dispatch} close={() => setSelectedSlot(null)} openSheet={() => setSheetSlot(selectedSlot)} onChooseKind={kind => { setPreviewKind(kind); setSheetSlot(selectedSlot); }} feedback={feedback} notify={notify} />}
     {sheetSlot !== null && <TowerSheet key={sheetSlot} game={game} slot={sheetSlot} kind={previewKind} onKindChange={setPreviewKind} dispatch={dispatch} close={() => setSheetSlot(null)} onResearch={() => openPanel("research")} onBuild={buildTower} feedback={feedback} notify={notify} />}
     {panel && <Panels panel={panel} game={game} dispatch={dispatch} close={() => setPanel(null)} notify={notify} sound={sound} setSound={setSound} vibration={vibration} setVibration={setVibration} cinematic={cinematic} setCinematic={setCinematic} onCollect={collectIncome} onSelectTower={chooseSlot} onSelectBuilding={chooseBuilding} />}
     {progressPanel && <ProgressionPanels panel={progressPanel} game={game} dispatch={dispatch} close={()=>setProgressPanel(null)} navigate={navigateMission} feedback={feedback} notify={notify} daily={daily} dailyBusy={dailyBusy} dailyError={dailyError} claimDaily={claimDaily} reloadDaily={()=>void reloadDaily()} dailyWebOnly={dailyWebOnly} />}
-    {moreOpen && <MoreMenu game={game} close={() => setMoreOpen(false)} open={openPanel} openProgress={openProgress} goMap={goMap} openGuide={() => { if (opening) dispatch({type:"opening-help"}); setMoreOpen(false); setHelpOpen(true); }} />}
-    {!otherInterface && (game.idle.offline ? <OfflineView game={game} dispatch={dispatch} feedback={feedback}/> : game.idle.rewards[0] ? <RewardView key={game.idle.rewards[0].id} reward={game.idle.rewards[0]} dispatch={dispatch} feedback={feedback}/> : pendingReport ? <BattleResultView game={game} report={pendingReport} dispatch={dispatch} autoBattle={game.idle.autoBattle} feedback={feedback} onDevelop={()=>openPanel("defense")}/> : null)}
+    {moreOpen && <MoreMenu openShipping={()=>{setMoreOpen(false);setShippingDesk(true);}} game={game} close={() => setMoreOpen(false)} open={openPanel} openProgress={openProgress} goMap={goMap} openGuide={() => { if (opening) dispatch({type:"opening-help"}); setMoreOpen(false); setHelpOpen(true); }} />}
+    {!voyage && !otherInterface && (game.idle.offline ? <OfflineView game={game} dispatch={dispatch} feedback={feedback}/> : game.idle.rewards[0] ? <RewardView key={game.idle.rewards[0].id} reward={game.idle.rewards[0]} dispatch={dispatch} feedback={feedback}/> : pendingReport ? <BattleResultView game={game} report={pendingReport} dispatch={dispatch} autoBattle={game.idle.autoBattle} feedback={feedback} onDevelop={()=>openPanel("defense")}/> : null)}
     {incomeBurst && !interfacePaused && <div className="income-burst" key={incomeBurst.id} aria-hidden="true"><strong>+{opening ? `${compact(incomeBurst.cash)} اعتبار` : `$${compact(incomeBurst.cash)}`}</strong>{Array.from({length:9},(_,i)=><span key={i} style={{"--coin-i":i} as React.CSSProperties}><Coins size={19}/></span>)}</div>}
     {helpOpen && <QuickGuide close={() => setHelpOpen(false)} />}
     {toast && <div className="toast" role="status"><span><Check size={15} /></span>{toast}<button onClick={() => setToast("")} aria-label="بستن پیام"><X size={14} /></button></div>}
   </div>;
 }
 
-function MoreMenu({ game, close, open, openProgress, goMap, openGuide }: {
+function MoreMenu({ game, close, open, openProgress, goMap, openGuide, openShipping }: {
+  openShipping: () => void;
   game: GameState;
   close: () => void;
   open: (panel: PanelName) => void;
@@ -844,6 +886,7 @@ function MoreMenu({ game, close, open, openProgress, goMap, openGuide }: {
         <button onClick={() => open("war")} aria-label="عملیات"><span className="command-shortcut-art shortcut-war" aria-hidden="true" />عملیات</button>
         <button onClick={() => openProgress("daily")}><span className="command-shortcut-art shortcut-gift" aria-hidden="true" />هدیهٔ روزانه</button>
       </div>
+      {game.phase !== "battle" && <button className="shipping-access" onClick={openShipping}><Ship size={18}/>دفتر کشتیرانی منطقه‌ای</button>}
       <details className="command-other">
         <summary>دیگر بخش‌های بندر<ChevronDown size={17} aria-hidden="true" /></summary>
         <div className="command-stations">{stations.map(({ title, icon: Icon, act, badge }) =>
@@ -873,13 +916,14 @@ function QuickGuide({ close }: { close: () => void }) {
   </div>;
 }
 
-function PlatformOrder({price, cash, close, build}: {price:number; cash:number; close:()=>void; build:()=>void}) {
+function PlatformOrder({built, price, cash, close, build}: {built:boolean; price:number; cash:number; close:()=>void; build:()=>void}) {
   const ref = useDialog<HTMLElement>(close);
-  return <div className="compact-dialog-backdrop command-backdrop">
-    <section className="exit-dialog command-pause" ref={ref} role="dialog" aria-modal="true" aria-label="ساخت سکوی نفتی" tabIndex={-1}>
-      <h2>ساخت سکوی نفتی</h2><p>هزینهٔ ساخت · {fa(price)} اعتبار بندر</p>
-      <button className="command-resume" disabled={cash < price} onClick={build}>{cash < price ? "اعتبار کافی نیست" : "تأیید ساخت سکو"}</button>
-      <button className="command-save" onClick={close}>انصراف</button>
+  const title=built ? "سکوی نفتی فعال" : "ساخت سکوی نفتی";
+  return <div className="compact-dialog-backdrop command-backdrop world-platform-backdrop">
+    <section className="exit-dialog command-pause world-platform-details" ref={ref} role="dialog" aria-modal="true" aria-label={title} tabIndex={-1}>
+      <h2>{title}</h2><p>{built ? "تولید این سکو به مخزن بندر می‌رسد." : `هزینهٔ ساخت · ${fa(price)} اعتبار بندر`}</p>
+      {!built && <button className="command-resume" disabled={cash < price} onClick={build}>{cash < price ? "اعتبار کافی نیست" : "تأیید ساخت سکو"}</button>}
+      <button className="command-save" onClick={close}>{built ? "بازگشت به نقشه" : "انصراف"}</button>
     </section>
   </div>;
 }

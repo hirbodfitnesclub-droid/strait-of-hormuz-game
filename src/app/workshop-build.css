@@ -365,3 +365,13 @@
   .workshop-wheel.wheel-empty .radial-close { grid-row: 3; grid-column: 3; }
   .workshop-wheel.wheel-empty .radial-center { display: none; }
 }
+
+.game-shell.workshop .workshop-sheet { max-height: min(56dvh, 600px); }
+.game-shell.workshop .world-platform-backdrop { align-items: flex-end; justify-content: center; padding-bottom: max(10px,env(safe-area-inset-bottom)); background: linear-gradient(transparent 45%,#132b3390); }
+.game-shell.workshop .workshop-wheel { left: 50%; top: auto; bottom: max(8px,env(safe-area-inset-bottom)); transform: translateX(-50%); }
+.game-shell.workshop .battle-camera { display: grid; place-items: center; flex: 0 0 48px; min-height: 48px; border: 1px solid #bcab78; border-radius: 8px; background: #16353e; color: #ffdf9e; }
+@media (max-height: 490px) and (orientation: landscape) {
+  .game-shell.workshop .workshop-sheet-backdrop { align-items: center; justify-content: flex-start; }
+  .game-shell.workshop .workshop-sheet { max-width: 48%; max-height: 95dvh; }
+  .game-shell.workshop .workshop-wheel { left: 24%; max-width: 47%; }
+}

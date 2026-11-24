@@ -1,0 +1,204 @@
+.backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 85;
+  display: grid;
+  align-items: end;
+  justify-items: center;
+  background: #062029a8;
+  color: #f4f5e5;
+}
+.sheet {
+  width: min(100%, 490px);
+  max-height: 87dvh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: #0c3038;
+  border: 1px solid #b49a64;
+  border-radius: 18px 18px 0 0;
+  box-shadow: 0 -10px 40px #10272ab3;
+}
+.sheet header,
+.instrument,
+.row,
+.actions,
+.sheet nav {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.sheet header {
+  justify-content: space-between;
+  padding: 14px 18px 7px;
+}
+.sheet small,
+.instrument small {
+  color: #b9d1c9;
+  font-size: 12px;
+  display: block;
+}
+.sheet h2,
+.sheet h3 {
+  margin: 0;
+  color: #fff2cb;
+  line-height: 1.55;
+}
+.sheet h2 {
+  font-size: 21px;
+}
+.sheet h3 {
+  font-size: 16px;
+}
+.sheet button,
+.instrument button,
+.voyageBottom button,
+.sheet select {
+  min-height: 48px;
+  padding: 7px 12px;
+  background: #22484f;
+  color: #f8f8e9;
+  border: 1px solid #637e78;
+  border-radius: 9px;
+  font: inherit;
+  cursor: pointer;
+}
+.sheet button svg,
+.voyage button svg {
+  vertical-align: middle;
+  flex: none;
+}
+.sheet button,
+.voyage button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+}
+.sheet button:disabled,
+.voyage button:disabled {
+  opacity: 0.52;
+  cursor: default;
+}
+.sheet nav {
+  margin: 7px 16px;
+  border-bottom: 1px solid #486660;
+}
+.sheet nav button {
+  flex: 1;
+  background: transparent;
+  border: 0;
+  border-bottom: 3px solid transparent;
+  border-radius: 0;
+  padding: 4px;
+}
+.sheet nav button[aria-pressed="true"] {
+  color: #ffdb8c;
+  border-bottom-color: #e6bb68;
+}
+.body {
+  overflow: auto;
+  padding: 12px 18px max(18px, env(safe-area-inset-bottom));
+  line-height: 1.65;
+}
+.body article,
+.body section {
+  padding: 12px 0;
+  border-top: 1px solid #49615b;
+}
+.body label {
+  display: block;
+  margin: 9px 0;
+  color: #c5d8cf;
+}
+.body select {
+  width: 100%;
+  margin-top: 4px;
+}
+.body p {
+  font-size: 14px;
+  margin: 6px 0 12px;
+}
+.body .row {
+  background: #183c43;
+  border-radius: 8px;
+  padding: 8px;
+  margin: 8px 0;
+  flex-wrap: wrap;
+}
+.body .row b {
+  color: #ffdf98;
+}
+.actions {
+  flex-wrap: wrap;
+  margin: 8px 0;
+}
+.note {
+  color: #d9cda8;
+}
+.sheet button.primary,
+.voyage button.primary {
+  color: #2a2517;
+  background: #f1c67d;
+  border-color: #ffdd9c;
+  font-weight: 800;
+}
+.voyage {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 14;
+  color: #f6f4db;
+}
+.instrument,
+.voyageBottom {
+  pointer-events: auto;
+  position: absolute;
+  background: #10343df0;
+  border: 1px solid #aa9265;
+  border-radius: 13px;
+  box-shadow: 0 3px 12px #102a3680;
+}
+.instrument {
+  top: max(9px, env(safe-area-inset-top));
+  left: 10px;
+  right: 10px;
+  padding: 6px 12px;
+  justify-content: space-between;
+}
+.instrument strong {
+  display: block;
+}
+.instrument button {
+  min-width: 48px;
+}
+.voyageBottom {
+  bottom: max(10px, env(safe-area-inset-bottom));
+  left: 10px;
+  right: 10px;
+  padding: 8px 12px;
+}
+.voyageBottom p {
+  margin: 0;
+  font-size: 13px;
+}
+.voyageBottom .actions {
+  margin: 5px 0 0;
+}
+@media (min-width: 700px) {
+  .backdrop {
+    align-items: center;
+  }
+  .sheet {
+    border-radius: 18px;
+  }
+  .instrument,
+  .voyageBottom {
+    width: max-content;
+    max-width: 85%;
+    left: 50%;
+    right: auto;
+    transform: translateX(-50%);
+    gap: 18px;
+  }
+}

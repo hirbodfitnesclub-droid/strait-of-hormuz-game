@@ -86,6 +86,6 @@ export function resetSaveSlots(storage: StorageLike): void {
 }
 
 export function localSaveArchive(storage: StorageLike) {
-  return Object.fromEntries([SAVE_KEY, SAVE_BACKUP_KEY, LEGACY_SAVE_KEY, LEGACY_BACKUP_KEY, ...newerSlots(storage)]
+  return Object.fromEntries([SAVE_KEY, SAVE_BACKUP_KEY, LEGACY_SAVE_KEY, LEGACY_BACKUP_KEY, "hormuz-lantern-1", "hormuz-lantern-backup-1", ...newerSlots(storage)]
     .map(key => [key, storage.getItem(key)]).filter(([, raw]) => raw !== null));
 }

@@ -20,6 +20,7 @@ type Props = {
 
 export default function OpeningVesselReadout({target, game, sync, map, onClose, onStart, onVisibilityChange}: Props) {
   const card = useRef<HTMLElement>(null);
+  useEffect(() => sync.followVessel(target), [sync, target]);
   useEffect(() => {
     let visible = false;
     const place = () => {
@@ -61,7 +62,8 @@ export default function OpeningVesselReadout({target, game, sync, map, onClose, 
     if (!ship) return null;
     title = `عوارض عبور · ${ships[ship.kind]} ${fa.format(ship.id)}`;
     const toll = opening.lastToll;
-    detail = toll?.shipId === ship.id ? `${fa.format(toll.amount)} اعتبار بندر به خزانه رسید.`
+    const amount = ship.receivedToll ?? (toll?.shipId === ship.id ? toll.amount : undefined);
+    detail = amount !== undefined ? `${fa.format(amount)} اعتبار بندر به خزانه رسید.`
       : ship.paid ? 'عوارض این عبور ثبت شد.' : `تعرفهٔ این عبور ${fa.format(ship.reward)} اعتبار بندر است.`;
     detail += ship.inbound ? ' · از دریای عمان به خلیج فارس' : ' · از خلیج فارس به دریای عمان';
   } else if (target.kind === 'tanker') {
