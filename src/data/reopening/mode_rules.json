@@ -1,0 +1,176 @@
+{
+  "version": "hormuz.endgame/5.2",
+  "soft": "Rial",
+  "hard": "OilBonds",
+  "prestige": {
+    "current_run_requires_clear": 45,
+    "min_new_badges": 1,
+    "quantum_micros_per_rial": 1000000,
+    "revenue_rial_per_squared_badge": 1000000,
+    "badge_defense_step": 0.015,
+    "lifetime_eligible_revenue": "Sum accepted ordinary commercial toll and new own oil receipts, divided by their settled ordinary prestige price factor. Includes eligible offline exports, excludes store/ads/contracts/transfers/aid/grants and initial prepaid cargo. Persist micro-Rial precision and fractional carry across runs.",
+    "operation": "On voluntary confirmation after current-run M45, grant one commissioning badge keyed by the unique old run. Also grant max(0, isqrt(lifetime_micros // 10**12) - trade_badges_issued) optional trade badges. Preserve their separate counters; both contribute to ordinary defense. Retrying a confirmation or replaying M45 in the same run cannot produce a second grant.",
+    "chapter_xp_speed_by_completed_resets": [
+      1,
+      2.5,
+      3,
+      3.5,
+      4,
+      4.5,
+      5
+    ],
+    "speed_scope": "Command XP ladder only affects earned run-local XP. Separate ordinary port price schedule multiplies qualifying tolls and new own-oil sales, with no change to time or physical rates.",
+    "keep": [
+      "lifetime_revenue_micros",
+      "lifetime_badges_issued",
+      "OilBonds",
+      "purchase_entitlements",
+      "owned_cosmetics",
+      "earned_doctrines",
+      "manager_ranks",
+      "league_verified_personal_best",
+      "historic_campaign_stars",
+      "earned_contract_stamps",
+      "tutorial_mastery",
+      "account_bond_receipt_keys",
+      "pass_and_ad_limits",
+      "run_archive",
+      "lifetime_endless_material_grants",
+      "trade_badges_issued",
+      "grandfather_percent",
+      "completed_resets",
+      "commissioning_badges_issued_since_5_1",
+      "prestige_rules_version",
+      "owned_oil_bond_tool_rights",
+      "saved_tool_preferences_safe_refs",
+      "dispatch_slot_2_account_right_and_reversal_receipts"
+    ],
+    "reset": [
+      "campaign frontier and first/terminal sets",
+      "run-local local command XP",
+      "port stocks, bank, cash and health/damage to opening preset",
+      "industry building levels",
+      "industrial research tree and purchased property rights",
+      "built platforms and tower placements",
+      "normal run best and lease",
+      "pending active sheet selection"
+    ],
+    "restrictions": [
+      "explicit second confirm with exact preview; pending purchase restoration independent",
+      "no active battle, pending escrow contract or unpresented settlement; allow finish or defined refund of escrow before departure",
+      "transaction id + prev run id persisted atomically; restore old pending commands denied; monotone account high-water remains",
+      "all portfolio entitlements applied after new run base; never pay historic hard currency twice"
+    ],
+    "confirm_state": "After current-run M45 offer one guaranteed commissioning badge, income before/after, optional trade badges and actual reset inventory, including option to stay. Show optional next trade threshold as 1e6*(trade_badges_issued+1)^2 separately. No turnover requirement for a commissioning badge.",
+    "xp_scope_detail": "run command XP only, affects paid-free legacy manager XP access gates/command promotion and personal run XP track; no account pass or hard currency progress. Factor changes at most once per reset and caps at 5.",
+    "modeled_transition": "On positive confirmed reset atomically restore all current-port opening balances and prepaid cargo, run XP/frontier, construction levels and per-run completion map. Archive previous run, retain permanent receipts, goods purchased as permanent rights, lifetime earned turnover and previously issued badges. Input commands include expected run_id from creation.",
+    "commissioning_badges_per_confirmed_current_run_clear": 1,
+    "income_percent_by_completed_resets": [
+      100,
+      200,
+      225,
+      250,
+      275,
+      300
+    ],
+    "trade_badge_extra_income_points": 3,
+    "income_cap_percent": 300,
+    "income_scope": "Ordinary active tolls and physically loaded new oil, including eligible base offline oil, at time of earned receipt. Apply after nominal modifiers, before clipping to bank room. Bank capacity, ship clock, industrial rates, physical stocks, grants, contracts, withdrawal, ads, league and stores are unchanged. On offline ad doubling, the verified base statement is copied once with no new price factor or lifetime revenue.",
+    "migration_501": "On first versioned migration, reconstruct completed resets from authenticated old reset receipts/archive (or validated legacy run counter). Keep issued legacy badges as trade_badges_issued; do not grant past commissioning badges. Preserve earned turnover, purchase rights, current port and pending receipts with their originally quoted amounts. Set grandfather_percent=100+3*legacy_issued; never reduce this prior benefit. If already at M45, claim first new commissioning badge only on voluntary confirmation for current run. If a legacy account lacks a reliable counter, retain its old income floor and use verified completed resets until reconciliation. Replaying migration may not issue currency, badges or resets.",
+    "tool_preferences": "Retain export presets, pinned contract/option catalog IDs and discovered facility preferences for export_presets, contract_planner and facility_watchboard. An applied percentage, open panel, active order, prior run instance/escrow or simulation state is not a permanent preference. Filter missing IDs and revalidate each reference against current data and normal gate before opening or applying. Retained locked pins do not reveal future content or reserve stock. No second purchase."
+  },
+  "region1_first_account_bonds": {
+    "1": 3,
+    "5": 1,
+    "10": 1,
+    "15": 1,
+    "20": 1,
+    "25": 1
+  },
+  "role_access": {
+    "cannon": "M01 preparation",
+    "ew": "M05 preparation",
+    "missile": "first clear M25",
+    "air": "first clear M35"
+  },
+  "functional_mapping": {
+    "cannon": "steady",
+    "ew": "pulse",
+    "missile": "weight",
+    "air": "mixed",
+    "heavy": "uses weight only for regional stance selection; preserve saved asset and native behavior",
+    "boat": "uses mixed only for regional stance selection; preserve native asset and earned tiers"
+  },
+  "coastal_service": {
+    "unlocked_after_current_run_op": 25,
+    "starting_selected_role": "cannon",
+    "selection": "one licensed role at preparation, one free loan regional module if unowned. Never an inventory grant. The selected role changes damage response in region 2/3; cannot swap mid-attempt. Max one stance modifier applied regardless of owned count. Optional permanent asset replaces loan and retains its real stats/power.",
+    "actual_damage": "convert base mobile damage once using active role coefficient by queue token pattern; regional authored health replaces previous campaign scale, never both. Free charter installs baseline rank1 visual if the selected role is missing at the prepared port; charter power contribution is prepaid and does not count as an owned asset or a sale. Existing towers still act normally."
+  },
+  "endless": {
+    "requires_ever_clear": 45,
+    "base_rows": [
+      36,
+      37,
+      38,
+      39,
+      40,
+      41,
+      42,
+      43,
+      44,
+      45
+    ],
+    "count_per_cycle": 10,
+    "pressure_extra_per_cycle_pct": 4,
+    "pressure_extra_cap_pct": 48,
+    "start_depth": 1,
+    "checkpoint_every": 5,
+    "checkpoint_resume": "in same run, resume at last secured checkpoint+1 with full encounter HP and same economy, no retroactive rewards or real-time on closure",
+    "daily_reward_slots": 0,
+    "personal_depth_grants": {
+      "5": 3,
+      "10": 4,
+      "20": 6,
+      "30": 8,
+      "50": 10
+    },
+    "per_depth_soft_once": 8,
+    "soft_depth_grant_max": 50,
+    "account_scope": "once for lifetime by depth even after prestige. After depth 50 score, local best and cosmetic records only. No repair bill or campaign first clear and currency farms from endless retries. Cycles do not become faster."
+  },
+  "league": {
+    "fixture": "league.normalized.v1",
+    "unlocks_after_ever_clear": 35,
+    "period": "Monday 00:00 UTC inclusive to next Monday 00:00 UTC exclusive; backend time",
+    "sequence_ops": [
+      33,
+      36,
+      39
+    ],
+    "allow_modes": [
+      "normal",
+      "spaced"
+    ],
+    "allow_focus": [
+      "cannon",
+      "ew",
+      "missile",
+      "air"
+    ],
+    "readiness_pct": 100,
+    "upgrade_equivalent": 4,
+    "user_power_hooks": false,
+    "paid_hooks": false,
+    "account_prestige_hooks": false,
+    "local_offline_practice": "available, receipt disabled, no cost or payout. Attempts without server-issued weekly ticket never become ranked retrospectively. Offline game fully playable.",
+    "proof": "verified scoped pseudonymous entry; issued ticket bound to account/week/seed/ruleset; deterministic replay server validates allowed intent log and start/end week; server awards once transactionally. Account delete/unlink per published UX.",
+    "max_eligible_results_per_week": 3,
+    "entries": "at most 3 submitted verified finished attempts; same ticket may retry a network request until period end+24h; offline play remains unranked; finish timestamp signed before end; submissions without reliable finish time rejected to practice",
+    "points": "per operation = max(0, 1000*win + 20*hp_remaining + 5*(quota_achieved_pct or 0) + 10*resolved_without_escape - simulation_seconds); unspawned/unresolved tokens on a defeat receive no points. Sum 3, later rounds score zero after a loss.",
+    "rank": "best verified score for account within week, competition ranking = 1+number of strictly greater scores; exact ties same rank, sort presentation by opaque handle only. Week podium pays visual ribbon only. First verified completion per account/week pays 2 OilBonds once regardless rank. Week/board archive read-only.",
+    "localization_privacy": "region is in-game port; no inferred physical location, nation inference, contacts or raw leaderboard names; public nick or generated alias opt-in.",
+    "intent_whitelist": "one selected licensed role, one deadline/protect priority, one normal/spaced cadence per operation before start. During contest play these three choices are fixed. No economy, paid power, discretionary combat capability, pause-clock leakage, or in-wave ability. Only speed/preferences/pause with unchanged simulation ticks.",
+    "receipt_behavior": "Monday-origin UTC bucket. Accept the same verified account/ticket/replay result again as an acknowledged original receipt; zero further grants or quota. Reject mismatched account, week, result, untrusted start/finish or different replay. A delayed authenticated acknowledgement lookup does not open a new submission window."
+  }
+}

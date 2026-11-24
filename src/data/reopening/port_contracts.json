@@ -1,0 +1,724 @@
+{
+  "version": "hormuz.endgame.contracts/5.2",
+  "allows_visa": false,
+  "parallel_dispatches": 1,
+  "currency_unit": "Rial",
+  "tick": "v5.2 real elapsed wall seconds, foreground or absent at 1x, independent of offline industry caps, warps and combat fast-forward. Freeze terms/remaining on acceptance. v5.1 active receipt retains original duration, price and active-only migration semantics until closure.",
+  "repeat_cash_ratio": [
+    3,
+    4
+  ],
+  "account_first_only_bonds": true,
+  "paid_grants_do_not_advance_dispatch_clock": true,
+  "disabled_if": "Insufficient actual goods or post-commit fuel below chosen floor; display limiting resource; allow decline with no cost",
+  "contracts": [
+    {
+      "id": "S01",
+      "title_fa": "صف صبح",
+      "brief_fa": "بازکردن راه انبار",
+      "requires_op_cleared": 25,
+      "account_first_bonds": 2,
+      "options": [
+        {
+          "id": "A",
+          "label_fa": "کم‌کردن بار مخزن",
+          "manifest": {
+            "oil": 75,
+            "fuel": 16
+          },
+          "cash": 49,
+          "reserves_after": {
+            "fuel": 30
+          },
+          "service_wall_s": 37
+        },
+        {
+          "id": "B",
+          "label_fa": "تحویل جایگزین با زمان بیشتر",
+          "manifest": {
+            "steel": 12,
+            "fuel": 14
+          },
+          "cash": 71,
+          "reserves_after": {
+            "fuel": 55
+          },
+          "service_wall_s": 68
+        }
+      ]
+    },
+    {
+      "id": "S02",
+      "title_fa": "دست به شیر",
+      "brief_fa": "نفت را به مخزن یا پالایش بده",
+      "requires_op_cleared": 25,
+      "account_first_bonds": 2,
+      "options": [
+        {
+          "id": "A",
+          "label_fa": "تحویل از کارگاه",
+          "manifest": {
+            "oil": 100,
+            "steel": 8
+          },
+          "cash": 53,
+          "reserves_after": {
+            "fuel": 30
+          },
+          "service_wall_s": 39
+        },
+        {
+          "id": "B",
+          "label_fa": "تحویل جایگزین با زمان بیشتر",
+          "manifest": {
+            "fuel": 30,
+            "ammo": 12
+          },
+          "cash": 77,
+          "reserves_after": {
+            "fuel": 55
+          },
+          "service_wall_s": 71
+        }
+      ]
+    },
+    {
+      "id": "S03",
+      "title_fa": "زیر بار",
+      "brief_fa": "کسری ساخت را از یک سفارش دیگر جبران کن",
+      "requires_op_cleared": 25,
+      "account_first_bonds": 2,
+      "options": [
+        {
+          "id": "A",
+          "label_fa": "تحویل از کارگاه",
+          "manifest": {
+            "steel": 18,
+            "fuel": 10
+          },
+          "cash": 67,
+          "reserves_after": {
+            "fuel": 30
+          },
+          "service_wall_s": 300
+        },
+        {
+          "id": "B",
+          "label_fa": "تحویل جایگزین با زمان بیشتر",
+          "manifest": {
+            "oil": 100,
+            "ammo": 15
+          },
+          "cash": 101,
+          "reserves_after": {
+            "fuel": 55
+          },
+          "service_wall_s": 540
+        }
+      ]
+    },
+    {
+      "id": "S04",
+      "title_fa": "جای خالی مخزن",
+      "brief_fa": "نوبت بار را با ذخیرهٔ اضطراری بسنج",
+      "requires_op_cleared": 25,
+      "account_first_bonds": 2,
+      "options": [
+        {
+          "id": "A",
+          "label_fa": "کم‌کردن بار مخزن",
+          "manifest": {
+            "oil": 140,
+            "fuel": 8
+          },
+          "cash": 91,
+          "reserves_after": {
+            "fuel": 30
+          },
+          "service_wall_s": 900
+        },
+        {
+          "id": "B",
+          "label_fa": "تحویل جایگزین با زمان بیشتر",
+          "manifest": {
+            "steel": 20,
+            "ammo": 16
+          },
+          "cash": 133,
+          "reserves_after": {
+            "fuel": 55
+          },
+          "service_wall_s": 1320
+        }
+      ]
+    },
+    {
+      "id": "S05",
+      "title_fa": "تحویل عصر",
+      "brief_fa": "انتخاب کن کدام سفارش عصر زودتر برود",
+      "requires_op_cleared": 30,
+      "account_first_bonds": 2,
+      "options": [
+        {
+          "id": "A",
+          "label_fa": "تحویل از کارگاه",
+          "manifest": {
+            "ammo": 22,
+            "fuel": 18
+          },
+          "cash": 125,
+          "reserves_after": {
+            "fuel": 30
+          },
+          "service_wall_s": 1800
+        },
+        {
+          "id": "B",
+          "label_fa": "تحویل جایگزین با زمان بیشتر",
+          "manifest": {
+            "steel": 17,
+            "oil": 85
+          },
+          "cash": 171,
+          "reserves_after": {
+            "fuel": 55
+          },
+          "service_wall_s": 2280
+        }
+      ]
+    },
+    {
+      "id": "S06",
+      "title_fa": "سفارش دوگانه",
+      "brief_fa": "کارگاه و اسکله هر دو تقاضا دارند",
+      "requires_op_cleared": 30,
+      "account_first_bonds": 2,
+      "options": [
+        {
+          "id": "A",
+          "label_fa": "تحویل از کارگاه",
+          "manifest": {
+            "steel": 24,
+            "ammo": 20
+          },
+          "cash": 139,
+          "reserves_after": {
+            "fuel": 30
+          },
+          "service_wall_s": 2100
+        },
+        {
+          "id": "B",
+          "label_fa": "تحویل جایگزین با زمان بیشتر",
+          "manifest": {
+            "oil": 145,
+            "fuel": 18
+          },
+          "cash": 191,
+          "reserves_after": {
+            "fuel": 55
+          },
+          "service_wall_s": 2700
+        }
+      ]
+    },
+    {
+      "id": "S07",
+      "title_fa": "نور شهرک",
+      "brief_fa": "ذخیرهٔ ژنراتور را پس از بارگیری نگه دار",
+      "requires_op_cleared": 30,
+      "account_first_bonds": 2,
+      "options": [
+        {
+          "id": "A",
+          "label_fa": "استفاده از محصول پالایش",
+          "manifest": {
+            "fuel": 36,
+            "oil": 90
+          },
+          "cash": 153,
+          "reserves_after": {
+            "fuel": 30
+          },
+          "service_wall_s": 2400
+        },
+        {
+          "id": "B",
+          "label_fa": "تحویل جایگزین با زمان بیشتر",
+          "manifest": {
+            "steel": 24,
+            "ammo": 22
+          },
+          "cash": 207,
+          "reserves_after": {
+            "fuel": 55
+          },
+          "service_wall_s": 3000
+        }
+      ]
+    },
+    {
+      "id": "S08",
+      "title_fa": "پول از کجا آمد؟",
+      "brief_fa": "تفاوت این سفارش با عوارض را در رسید ببین",
+      "requires_op_cleared": 30,
+      "account_first_bonds": 2,
+      "options": [
+        {
+          "id": "A",
+          "label_fa": "کم‌کردن بار مخزن",
+          "manifest": {
+            "oil": 180,
+            "steel": 10
+          },
+          "cash": 167,
+          "reserves_after": {
+            "fuel": 30
+          },
+          "service_wall_s": 2700
+        },
+        {
+          "id": "B",
+          "label_fa": "تحویل جایگزین با زمان بیشتر",
+          "manifest": {
+            "fuel": 40,
+            "ammo": 20
+          },
+          "cash": 233,
+          "reserves_after": {
+            "fuel": 55
+          },
+          "service_wall_s": 3600
+        }
+      ]
+    },
+    {
+      "id": "S09",
+      "title_fa": "با حداقل هزینه",
+      "brief_fa": "برای تحویل از موجودیِ گران‌تر چشم‌پوشی کن",
+      "requires_op_cleared": 35,
+      "account_first_bonds": 2,
+      "options": [
+        {
+          "id": "A",
+          "label_fa": "تحویل از کارگاه",
+          "manifest": {
+            "steel": 30,
+            "fuel": 14
+          },
+          "cash": 191,
+          "reserves_after": {
+            "fuel": 30
+          },
+          "service_wall_s": 3300
+        },
+        {
+          "id": "B",
+          "label_fa": "تحویل جایگزین با زمان بیشتر",
+          "manifest": {
+            "oil": 170,
+            "ammo": 24
+          },
+          "cash": 259,
+          "reserves_after": {
+            "fuel": 55
+          },
+          "service_wall_s": 4200
+        }
+      ]
+    },
+    {
+      "id": "S10",
+      "title_fa": "نفت‌کش بعدی",
+      "brief_fa": "قبل از برداشتن بار، سفر نفت‌کش را ببین",
+      "requires_op_cleared": 35,
+      "account_first_bonds": 2,
+      "options": [
+        {
+          "id": "A",
+          "label_fa": "کم‌کردن بار مخزن",
+          "manifest": {
+            "oil": 190,
+            "fuel": 18
+          },
+          "cash": 215,
+          "reserves_after": {
+            "fuel": 30
+          },
+          "service_wall_s": 3900
+        },
+        {
+          "id": "B",
+          "label_fa": "تحویل جایگزین با زمان بیشتر",
+          "manifest": {
+            "steel": 30,
+            "ammo": 24
+          },
+          "cash": 295,
+          "reserves_after": {
+            "fuel": 55
+          },
+          "service_wall_s": 5100
+        }
+      ]
+    },
+    {
+      "id": "S11",
+      "title_fa": "خدمت منظم",
+      "brief_fa": "دو درخواست هم‌زمان یک مهلت دارند",
+      "requires_op_cleared": 35,
+      "account_first_bonds": 2,
+      "options": [
+        {
+          "id": "A",
+          "label_fa": "تحویل از کارگاه",
+          "manifest": {
+            "ammo": 35,
+            "oil": 120
+          },
+          "cash": 239,
+          "reserves_after": {
+            "fuel": 30
+          },
+          "service_wall_s": 4500
+        },
+        {
+          "id": "B",
+          "label_fa": "تحویل جایگزین با زمان بیشتر",
+          "manifest": {
+            "fuel": 44,
+            "steel": 20
+          },
+          "cash": 331,
+          "reserves_after": {
+            "fuel": 55
+          },
+          "service_wall_s": 6000
+        }
+      ]
+    },
+    {
+      "id": "S12",
+      "title_fa": "راه افتادن خط",
+      "brief_fa": "ابتدا موجودیِ نیازمند تعمیر را بررسی کن",
+      "requires_op_cleared": 35,
+      "account_first_bonds": 2,
+      "options": [
+        {
+          "id": "A",
+          "label_fa": "تحویل از کارگاه",
+          "manifest": {
+            "steel": 34,
+            "ammo": 22
+          },
+          "cash": 273,
+          "reserves_after": {
+            "fuel": 30
+          },
+          "service_wall_s": 5400
+        },
+        {
+          "id": "B",
+          "label_fa": "تحویل جایگزین با زمان بیشتر",
+          "manifest": {
+            "oil": 195,
+            "fuel": 25
+          },
+          "cash": 377,
+          "reserves_after": {
+            "fuel": 55
+          },
+          "service_wall_s": 7200
+        }
+      ]
+    },
+    {
+      "id": "S13",
+      "title_fa": "شیفت آرام",
+      "brief_fa": "نرخ پایدار یا تحویل سریع را برگزین",
+      "requires_op_cleared": 40,
+      "account_first_bonds": 2,
+      "options": [
+        {
+          "id": "A",
+          "label_fa": "استفاده از محصول پالایش",
+          "manifest": {
+            "fuel": 48,
+            "oil": 115
+          },
+          "cash": 307,
+          "reserves_after": {
+            "fuel": 30
+          },
+          "service_wall_s": 6300
+        },
+        {
+          "id": "B",
+          "label_fa": "تحویل جایگزین با زمان بیشتر",
+          "manifest": {
+            "steel": 32,
+            "ammo": 32
+          },
+          "cash": 413,
+          "reserves_after": {
+            "fuel": 55
+          },
+          "service_wall_s": 8100
+        }
+      ]
+    },
+    {
+      "id": "S14",
+      "title_fa": "اسکلهٔ اقتصادی",
+      "brief_fa": "به اثر تحویل بر سفر بعد توجه کن",
+      "requires_op_cleared": 40,
+      "account_first_bonds": 2,
+      "options": [
+        {
+          "id": "A",
+          "label_fa": "کم‌کردن بار مخزن",
+          "manifest": {
+            "oil": 225,
+            "steel": 14
+          },
+          "cash": 341,
+          "reserves_after": {
+            "fuel": 30
+          },
+          "service_wall_s": 7200
+        },
+        {
+          "id": "B",
+          "label_fa": "تحویل جایگزین با زمان بیشتر",
+          "manifest": {
+            "fuel": 52,
+            "ammo": 25
+          },
+          "cash": 459,
+          "reserves_after": {
+            "fuel": 55
+          },
+          "service_wall_s": 9300
+        }
+      ]
+    },
+    {
+      "id": "S15",
+      "title_fa": "دو بازگشت",
+      "brief_fa": "یکی از دو کارگاه را برای تحویل بعدی آماده بگذار",
+      "requires_op_cleared": 40,
+      "account_first_bonds": 2,
+      "options": [
+        {
+          "id": "A",
+          "label_fa": "تحویل از کارگاه",
+          "manifest": {
+            "steel": 36,
+            "fuel": 22
+          },
+          "cash": 375,
+          "reserves_after": {
+            "fuel": 30
+          },
+          "service_wall_s": 8100
+        },
+        {
+          "id": "B",
+          "label_fa": "تحویل جایگزین با زمان بیشتر",
+          "manifest": {
+            "ammo": 40,
+            "oil": 140
+          },
+          "cash": 515,
+          "reserves_after": {
+            "fuel": 55
+          },
+          "service_wall_s": 10800
+        }
+      ]
+    },
+    {
+      "id": "S16",
+      "title_fa": "کشیک شهر",
+      "brief_fa": "با ذخیرهٔ شهری، یکی از دو فهرست را امضا کن",
+      "requires_op_cleared": 40,
+      "account_first_bonds": 2,
+      "options": [
+        {
+          "id": "A",
+          "label_fa": "استفاده از محصول پالایش",
+          "manifest": {
+            "fuel": 56,
+            "ammo": 28
+          },
+          "cash": 409,
+          "reserves_after": {
+            "fuel": 30
+          },
+          "service_wall_s": 9000
+        },
+        {
+          "id": "B",
+          "label_fa": "تحویل جایگزین با زمان بیشتر",
+          "manifest": {
+            "steel": 38,
+            "oil": 150
+          },
+          "cash": 561,
+          "reserves_after": {
+            "fuel": 55
+          },
+          "service_wall_s": 12000
+        }
+      ]
+    },
+    {
+      "id": "S17",
+      "title_fa": "شیفت بدون کمک",
+      "brief_fa": "انتخاب امروز را با موجودی معمول انجام بده",
+      "requires_op_cleared": 45,
+      "account_first_bonds": 2,
+      "options": [
+        {
+          "id": "A",
+          "label_fa": "کم‌کردن بار مخزن",
+          "manifest": {
+            "oil": 255,
+            "fuel": 28
+          },
+          "cash": 443,
+          "reserves_after": {
+            "fuel": 30
+          },
+          "service_wall_s": 9900
+        },
+        {
+          "id": "B",
+          "label_fa": "تحویل جایگزین با زمان بیشتر",
+          "manifest": {
+            "steel": 45,
+            "ammo": 24
+          },
+          "cash": 607,
+          "reserves_after": {
+            "fuel": 55
+          },
+          "service_wall_s": 13200
+        }
+      ]
+    },
+    {
+      "id": "S18",
+      "title_fa": "تعهد پالایش",
+      "brief_fa": "پالایش را بیشتر کن یا محمولهٔ جایگزین بفرست",
+      "requires_op_cleared": 45,
+      "account_first_bonds": 2,
+      "options": [
+        {
+          "id": "A",
+          "label_fa": "استفاده از محصول پالایش",
+          "manifest": {
+            "fuel": 64,
+            "steel": 26
+          },
+          "cash": 477,
+          "reserves_after": {
+            "fuel": 30
+          },
+          "service_wall_s": 10800
+        },
+        {
+          "id": "B",
+          "label_fa": "تحویل جایگزین با زمان بیشتر",
+          "manifest": {
+            "oil": 260,
+            "ammo": 24
+          },
+          "cash": 653,
+          "reserves_after": {
+            "fuel": 55
+          },
+          "service_wall_s": 15000
+        }
+      ]
+    },
+    {
+      "id": "S19",
+      "title_fa": "نگهبانی کامل",
+      "brief_fa": "بین تدارک شیفت بعد و تحویل امروز انتخاب کن",
+      "requires_op_cleared": 45,
+      "account_first_bonds": 2,
+      "options": [
+        {
+          "id": "A",
+          "label_fa": "تحویل از کارگاه",
+          "manifest": {
+            "ammo": 50,
+            "steel": 32
+          },
+          "cash": 541,
+          "reserves_after": {
+            "fuel": 30
+          },
+          "service_wall_s": 12600
+        },
+        {
+          "id": "B",
+          "label_fa": "تحویل جایگزین با زمان بیشتر",
+          "manifest": {
+            "oil": 265,
+            "fuel": 32
+          },
+          "cash": 659,
+          "reserves_after": {
+            "fuel": 55
+          },
+          "service_wall_s": 18000
+        }
+      ]
+    },
+    {
+      "id": "S20",
+      "title_fa": "تنگه باز است",
+      "brief_fa": "آخرین امضای دفتر سه منطقه را خودت انتخاب کن",
+      "requires_op_cleared": 45,
+      "account_first_bonds": 2,
+      "options": [
+        {
+          "id": "A",
+          "label_fa": "کم‌کردن بار مخزن",
+          "manifest": {
+            "oil": 290,
+            "steel": 28
+          },
+          "cash": 605,
+          "reserves_after": {
+            "fuel": 30
+          },
+          "service_wall_s": 14400
+        },
+        {
+          "id": "B",
+          "label_fa": "تحویل جایگزین با زمان بیشتر",
+          "manifest": {
+            "fuel": 66,
+            "ammo": 40
+          },
+          "cash": 665,
+          "reserves_after": {
+            "fuel": 55
+          },
+          "service_wall_s": 21600
+        }
+      ]
+    }
+  ],
+  "escrow_capacity": "Sum open reservations from both slots in the shared industry ledger; floor for fuel tests only against unreserved spendable stock after the new manifest. Every active job independently releases or consumes its exact manifest in a single transaction.",
+  "cancel": "before a settled receipt, release exact manifest without payout, even ready but not submitted. Capacity previously reserved. Compare status atomically; settled receipt forbids cancellation.",
+  "command_scope": "Accept, cancel and settle carry the original run_id with operation_id; the active run is never inferred for a queued command. Account-wide earned bond stamps persist across resets. Use the shared industrial port ledger and reserved_returns per resource for escrow capacity.",
+  "max_parallel_with_owned_slot": 2,
+  "slot_policy": "1 gratis, second personal only after current M25 and 280-bond consent, persists through prestige. Two distinct sheets only. Losing second slot honors accepted jobs to finish/cancel; no replacement until total outstanding is under new limit.",
+  "instant_policy": "25 bonds once per job for immediate normal delivery of frozen escrow and reward while positive remaining. No fee when ready; no reroll, board refresh is free. No extra stamp on repeat, no ranked commands. Different sheet grantees can claim one lifetime pair of bonds each.",
+  "wall_clock": "Persist a monotonic high-water for trusted elapsed time, slot ids, remaining and visited intervals. Same-boot elapsed clock survives background; after reboot use trusted saved/confirmed time when available. Unknown time grants no progress for that gap; newly observed elapsed foreground/offline on a known boot resumes locally. Rollback, device clock jumps and repeated observations never add seconds. A natural due is checked before any paid command. Matured shipments wait safely for free manual delivery or cancel.",
+  "late_cash": "S03–20 incl bounded service credit min(480,2*floor(wall_s/60)), baked into the cash quote shown. Template admits no payment-dependent reward. Stamp limited to 2 once/account/sheet."
+}

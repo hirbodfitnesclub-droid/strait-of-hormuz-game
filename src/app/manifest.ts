@@ -4,11 +4,11 @@ export const dynamic = "force-static";
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: "تنگه هرمز: فرمانروایی آب‌های آزاد",
+    name: "تنگه هرمز: بازگشایی تنگه",
     short_name: "هرمز",
-    description: "اقتصاد بندر را بسازید، تنگه را حفظ کنید و فرمانروایی خود را گسترش دهید.",
+    description: "چراغ بندر را روشن نگه دارید و کاروان‌ها را به اسکله برسانید.",
     start_url: "/", scope: "/", display: "standalone", orientation: "portrait",
-    background_color: "#11282a", theme_color: "#11282a", lang: "fa", dir: "rtl",
+    background_color: "#082a32", theme_color: "#082a32", lang: "fa", dir: "rtl",
     categories: ["games", "strategy"],
     icons: [
       { src: "/app-icon-192.png", sizes: "192x192", type: "image/png", purpose: "any" },

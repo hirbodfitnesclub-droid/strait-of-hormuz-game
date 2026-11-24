@@ -1,6 +1,6 @@
 import type { Metadata, Viewport } from "next";
 
-export const viewport: Viewport = { themeColor: "#11282a", width: "device-width", initialScale: 1, viewportFit: "cover" };
+export const viewport: Viewport = { themeColor: "#082a32", width: "device-width", initialScale: 1, viewportFit: "cover" };
 import type { ReactNode } from "react";
 import "@fontsource/vazirmatn/400.css";
 import "@fontsource/vazirmatn/500.css";
@@ -8,17 +8,11 @@ import "@fontsource/vazirmatn/600.css";
 import "@fontsource/vazirmatn/700.css";
 import "@fontsource/vazirmatn/800.css";
 import "@fontsource/vazirmatn/900.css";
-import "./globals.css";
-import "./mobile-game.css";
-import "./workshop.css";
-import "./workshop-command.css";
-import "./workshop-progress.css";
-import "./workshop-panels.css";
-import "./workshop-build.css";
+import "./harbor.css";
 
 export const metadata: Metadata = {
-  title: "تنگه هرمز | فرمانروایی آب‌های آزاد",
-  description: "بندرتان را بسازید، مدیر استخدام کنید و از آبراه دفاع کنید.",
+  title: "تنگه هرمز | بازگشایی تنگه",
+  description: "بندر را بسازید و کاروان‌ها را در ۴۵ عملیات از آبراه عبور دهید.",
   appleWebApp: { capable: true, title: "هرمز", statusBarStyle: "black-translucent" },
   icons: { icon: "/app-icon-192.png", apple: "/app-icon-192.png" },
 };

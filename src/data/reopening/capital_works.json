@@ -1,0 +1,12 @@
+{
+  "version": "hormuz.portworks.5.2",
+  "currency": "Rial",
+  "scope": "Current ordinary campaign run. Each upgrade is a real change to existing infrastructure and can be bought as soon as revealed. Existing building-level prices remain intact. Keep repair, industry, regular trade and earlier cleared operations usable while saving. Spend only on player confirmation; preflight never spends. No timed construction, bonds, optional order or ad required.",
+  "migration": "Once on v5.1 to v5.2 conversion, credit works serving operations already cleared, entered, or actually unlocked in this run. Derive the entitlement from the validated frontier and any in-flight attempt. Apply the hook once and retain stocks, receipted levels and prices. A new run starts with an empty works ledger.",
+  "projects": [
+    {"id":"grid_link","fa":"اتصال شبکهٔ منطقه‌ای","reveal_after":20,"before_op":26,"cash":1250,"steel":35,"hook":"generator_mult","factor":1.10},
+    {"id":"steel_line","fa":"خط تکمیلی فولاد","reveal_after":26,"before_op":31,"cash":2300,"steel":60,"hook":"steel_mult","factor":1.15},
+    {"id":"fuel_line","fa":"نوسازی خط پالایش","reveal_after":31,"before_op":36,"cash":3400,"steel":85,"hook":"refinery_mult","factor":1.20},
+    {"id":"dock_line","fa":"توسعهٔ خط بارگیری","reveal_after":36,"before_op":41,"cash":5400,"steel":120,"hook":"dock_mult","factor":1.20}
+  ]
+}

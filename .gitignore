@@ -17,3 +17,5 @@ first-asset/**/dist/
 .DS_Store
 .vercel/
 *.log
+
+android-web/

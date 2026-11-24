@@ -562,7 +562,7 @@ function advanceOfflineTimers(s: GameState, seconds: number) {
   if(s.idle.contract)s.idle.contract.elapsed=Math.min(CONTRACTS[s.idle.contract.id].duration,s.idle.contract.elapsed+seconds);
   if(s.idle.boostCharges<3){const total=s.idle.boostRecharge+seconds;s.idle.boostCharges=Math.min(3,s.idle.boostCharges+Math.floor(total/300));s.idle.boostRecharge=s.idle.boostCharges>=3?0:total%300;}
 }
-export function hydrateGame(raw: unknown): { game: GameState; offline: number } | null {
+export function hydrateGame(raw: unknown, now = Date.now()): { game: GameState; offline: number } | null {
   if (!raw || typeof raw !== "object") return null;
   const saved = raw as GameState;
   if (saved.version !== 1 || !saved.buildings || !Array.isArray(saved.towers) || !saved.cards) return null;
@@ -955,7 +955,6 @@ export function hydrateGame(raw: unknown): { game: GameState; offline: number } 
   game.warnings = { fuel: (saved.warnings as { fuel?: unknown } | null)?.fuel === true, power: (saved.warnings as { power?: unknown } | null)?.power === true };
   const safeHero = nearestWater(game.hero, game.layout);
   game.hero = { ...game.hero, ...safeHero };
-  const now=Date.now();
   if(game.opening) {
     const from = Math.max(game.lastSavedAt,game.opening.offlineHigh);
     settleReopeningAbsence(game,from,now,openingDependencies);

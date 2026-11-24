@@ -9,6 +9,7 @@ import androidx.core.view.WindowInsetsControllerCompat;
 
 public class MainActivity extends BridgeActivity {
     @Override public void onCreate(Bundle state) {
+        registerPlugin(HarborClockPlugin.class);
         super.onCreate(state);
         enterGameMode();
     }

@@ -1,0 +1,1560 @@
+{
+  "schema": "hormuz.regional_campaign/5.1",
+  "regions": [
+    {
+      "id": 1,
+      "title": "بندرعباس",
+      "ops": [
+        1,
+        25
+      ],
+      "configuration": "../campaign/campaign.json"
+    },
+    {
+      "id": 2,
+      "title": "قشم و هنگام",
+      "ops": [
+        26,
+        35
+      ],
+      "unlock_first_clear": 25
+    },
+    {
+      "id": 3,
+      "title": "شیفت ابوموسی",
+      "ops": [
+        36,
+        45
+      ],
+      "unlock_first_clear": 35
+    }
+  ],
+  "abstract_patterns": {
+    "a": {
+      "title": "نوبت منظم",
+      "health": 80,
+      "model_work": 8,
+      "deadline_s": 10,
+      "kind_id": "speed"
+    },
+    "b": {
+      "title": "نوبت فشرده",
+      "health": 100,
+      "model_work": 10,
+      "deadline_s": 7,
+      "kind_id": "corvette"
+    },
+    "c": {
+      "title": "نشان سنگین",
+      "health": 130,
+      "model_work": 13,
+      "deadline_s": 12,
+      "kind_id": "destroyer"
+    }
+  },
+  "towers": [
+    {
+      "id": "cannon",
+      "title_fa": "توپخانه",
+      "focus_fa": "ضرب منظم",
+      "glyph": "steady",
+      "coefficient_pct_abc": [
+        125,
+        96,
+        93
+      ],
+      "base_cash": 250,
+      "base_steel": 30,
+      "mw": 5,
+      "unlocks_on_preparation_op": 1
+    },
+    {
+      "id": "ew",
+      "title_fa": "کنترل موج",
+      "focus_fa": "علامت فشرده",
+      "glyph": "pulse",
+      "coefficient_pct_abc": [
+        93,
+        133,
+        95
+      ],
+      "base_cash": 420,
+      "base_steel": 40,
+      "mw": 15,
+      "unlocks_on_preparation_op": 5
+    },
+    {
+      "id": "missile",
+      "title_fa": "برج نشان سنگین",
+      "focus_fa": "علامت سنگین",
+      "glyph": "weight",
+      "coefficient_pct_abc": [
+        91,
+        92,
+        138
+      ],
+      "unlocks_after_op": 25,
+      "base_cash": 600,
+      "base_steel": 65,
+      "mw": 10
+    },
+    {
+      "id": "air",
+      "title_fa": "نگهبان آسمان",
+      "focus_fa": "صف ترکیبی",
+      "glyph": "mixed",
+      "coefficient_pct_abc": [
+        110,
+        113,
+        110
+      ],
+      "unlocks_after_op": 35,
+      "base_cash": 500,
+      "base_steel": 50,
+      "mw": 12
+    }
+  ],
+  "role_visibility_note": "cannon available during operation 1 preparation (not gated on victory); ew on reaching operation 5. The other two on first clear of listed operation. Existing owned towers stay accessible.",
+  "reference_grid_floor": 0.55,
+  "campaign_initial_hp": 20,
+  "health_pct_rounding": "ceil(profile.health * pressure_pct / 100); signature last token +120 displayed health. Relative to QA work→base live health 10:1 for all ordinary actors and for final addition; ceil once per unit. Physical engine and design capacity still require on-phone calibration.",
+  "operations": [
+    {
+      "op": 26,
+      "region": 2,
+      "local_number": 1,
+      "title_fa": "نوبت دوم اسکله",
+      "intro_fa": "قشم جای یک شیفت تازه باز کرده است.",
+      "choice_fa": "بار کوتاه را همین حالا ببند یا تحویل آرام‌تر را انتخاب کن.",
+      "first_news_fa": "چراغ نوبت قشم روشن می‌شود.",
+      "requires_clear": 25,
+      "objective": "repel",
+      "board": "single",
+      "objective_initial": null,
+      "quota_min_pct": null,
+      "model_pressure_percent": 144,
+      "allow_cadence_choice": true,
+      "groups": [
+        {
+          "beat": 1,
+          "start_s": 4,
+          "spacing_s": 2,
+          "count": 4,
+          "pattern": "a",
+          "channel": "A",
+          "objective_live": false,
+          "final_signature": false
+        },
+        {
+          "beat": 2,
+          "start_s": 16,
+          "spacing_s": 2,
+          "count": 4,
+          "pattern": "b",
+          "channel": "B",
+          "objective_live": true,
+          "final_signature": false
+        },
+        {
+          "beat": 3,
+          "start_s": 28,
+          "spacing_s": 3,
+          "count": 5,
+          "pattern": "a",
+          "channel": "A",
+          "objective_live": false,
+          "final_signature": false
+        },
+        {
+          "beat": 4,
+          "start_s": 41,
+          "spacing_s": 2,
+          "count": 4,
+          "pattern": "a",
+          "channel": "B",
+          "objective_live": true,
+          "final_signature": false
+        }
+      ],
+      "first_cash": 73,
+      "repeat_cash": 26,
+      "first_account_bonds": 1,
+      "damage_eligible_built_facilities": [
+        "dock",
+        "tank"
+      ],
+      "required_port_projects": [
+        "grid_link"
+      ]
+    },
+    {
+      "op": 27,
+      "region": 2,
+      "local_number": 2,
+      "title_fa": "دو سفارش روی تابلو",
+      "intro_fa": "قایق خدمات برای دو سکوی بندر بسته آورده است.",
+      "choice_fa": "به علامت میانی توجه کن یا ریسک از دست‌دادن سفارش را بپذیر.",
+      "first_news_fa": "نام هر دو سکو روی دفتر بار دیده می‌شود.",
+      "requires_clear": 26,
+      "objective": "quota",
+      "board": "fan",
+      "objective_initial": null,
+      "quota_min_pct": 67,
+      "model_pressure_percent": 153,
+      "allow_cadence_choice": true,
+      "groups": [
+        {
+          "beat": 1,
+          "start_s": 4,
+          "spacing_s": 2,
+          "count": 4,
+          "pattern": "a",
+          "channel": "A",
+          "objective_live": false,
+          "final_signature": false
+        },
+        {
+          "beat": 2,
+          "start_s": 15,
+          "spacing_s": 2,
+          "count": 5,
+          "pattern": "b",
+          "channel": "B",
+          "objective_live": true,
+          "final_signature": false
+        },
+        {
+          "beat": 3,
+          "start_s": 28,
+          "spacing_s": 3,
+          "count": 4,
+          "pattern": "a",
+          "channel": "A",
+          "objective_live": false,
+          "final_signature": false
+        },
+        {
+          "beat": 4,
+          "start_s": 40,
+          "spacing_s": 2,
+          "count": 4,
+          "pattern": "c",
+          "channel": "B",
+          "objective_live": true,
+          "final_signature": false
+        }
+      ],
+      "first_cash": 76,
+      "repeat_cash": 27,
+      "first_account_bonds": 1,
+      "damage_eligible_built_facilities": [
+        "refinery",
+        "dock"
+      ],
+      "required_port_projects": [
+        "grid_link"
+      ]
+    },
+    {
+      "op": 28,
+      "region": 2,
+      "local_number": 3,
+      "title_fa": "بار برگشتی",
+      "intro_fa": "جعبه‌های خالی باید سالم به لنگرگاه برگردند.",
+      "choice_fa": "برای جعبه‌های علامت‌دار زمان بگذار یا ظرفیت بندر را حفظ کن.",
+      "first_news_fa": "جعبه‌های قابل استفاده در اسکله روی هم می‌نشینند.",
+      "requires_clear": 27,
+      "objective": "escort",
+      "board": "join",
+      "objective_initial": 10,
+      "quota_min_pct": null,
+      "model_pressure_percent": 155,
+      "allow_cadence_choice": true,
+      "groups": [
+        {
+          "beat": 1,
+          "start_s": 5,
+          "spacing_s": 2,
+          "count": 5,
+          "pattern": "c",
+          "channel": "A",
+          "objective_live": false,
+          "final_signature": false
+        },
+        {
+          "beat": 2,
+          "start_s": 15,
+          "spacing_s": 2,
+          "count": 4,
+          "pattern": "a",
+          "channel": "B",
+          "objective_live": true,
+          "final_signature": false
+        },
+        {
+          "beat": 3,
+          "start_s": 28,
+          "spacing_s": 3,
+          "count": 4,
+          "pattern": "b",
+          "channel": "A",
+          "objective_live": false,
+          "final_signature": false
+        },
+        {
+          "beat": 4,
+          "start_s": 39,
+          "spacing_s": 2,
+          "count": 5,
+          "pattern": "a",
+          "channel": "B",
+          "objective_live": true,
+          "final_signature": false
+        }
+      ],
+      "first_cash": 79,
+      "repeat_cash": 28,
+      "first_account_bonds": 1,
+      "damage_eligible_built_facilities": [
+        "power",
+        "dock"
+      ],
+      "required_port_projects": [
+        "grid_link"
+      ]
+    },
+    {
+      "op": 29,
+      "region": 2,
+      "local_number": 4,
+      "title_fa": "سایه‌بان تعمیرگاه",
+      "intro_fa": "کارگرها برای تعمیر جرثقیل یک سایه‌بان نصب کرده‌اند.",
+      "choice_fa": "اول سلامت تعمیرگاه را تضمین کن یا دستت را برای پایان باز بگذار.",
+      "first_news_fa": "سایه‌بان تعمیرگاه با رنگ شیفت ثبت می‌شود.",
+      "requires_clear": 28,
+      "objective": "hold",
+      "board": "fan",
+      "objective_initial": 12,
+      "quota_min_pct": null,
+      "model_pressure_percent": 160,
+      "allow_cadence_choice": true,
+      "groups": [
+        {
+          "beat": 1,
+          "start_s": 4,
+          "spacing_s": 2,
+          "count": 4,
+          "pattern": "b",
+          "channel": "A",
+          "objective_live": false,
+          "final_signature": false
+        },
+        {
+          "beat": 2,
+          "start_s": 16,
+          "spacing_s": 2,
+          "count": 4,
+          "pattern": "c",
+          "channel": "B",
+          "objective_live": true,
+          "final_signature": false
+        },
+        {
+          "beat": 3,
+          "start_s": 28,
+          "spacing_s": 3,
+          "count": 5,
+          "pattern": "b",
+          "channel": "A",
+          "objective_live": false,
+          "final_signature": false
+        },
+        {
+          "beat": 4,
+          "start_s": 41,
+          "spacing_s": 2,
+          "count": 4,
+          "pattern": "a",
+          "channel": "B",
+          "objective_live": true,
+          "final_signature": false
+        }
+      ],
+      "first_cash": 82,
+      "repeat_cash": 29,
+      "first_account_bonds": 1,
+      "damage_eligible_built_facilities": [
+        "steel",
+        "power"
+      ],
+      "required_port_projects": [
+        "grid_link"
+      ]
+    },
+    {
+      "op": 30,
+      "region": 2,
+      "local_number": 5,
+      "title_fa": "روز دست‌به‌دست",
+      "intro_fa": "محموله‌های صبح با شیفت عصر هم‌زمان رسیده‌اند.",
+      "choice_fa": "دو صف را متعادل نگه دار یا امتیاز زمان را مقدم کن.",
+      "first_news_fa": "تابلوی تعویض شیفت به قشم می‌رسد.",
+      "requires_clear": 29,
+      "objective": "siege",
+      "board": "join",
+      "objective_initial": null,
+      "quota_min_pct": 60,
+      "model_pressure_percent": 165,
+      "allow_cadence_choice": true,
+      "groups": [
+        {
+          "beat": 1,
+          "start_s": 4,
+          "spacing_s": 2,
+          "count": 4,
+          "pattern": "c",
+          "channel": "A",
+          "objective_live": false,
+          "final_signature": false
+        },
+        {
+          "beat": 2,
+          "start_s": 15,
+          "spacing_s": 2,
+          "count": 5,
+          "pattern": "b",
+          "channel": "B",
+          "objective_live": true,
+          "final_signature": false
+        },
+        {
+          "beat": 3,
+          "start_s": 28,
+          "spacing_s": 3,
+          "count": 4,
+          "pattern": "a",
+          "channel": "A",
+          "objective_live": false,
+          "final_signature": false
+        },
+        {
+          "beat": 4,
+          "start_s": 40,
+          "spacing_s": 2,
+          "count": 4,
+          "pattern": "b",
+          "channel": "B",
+          "objective_live": true,
+          "final_signature": false
+        },
+        {
+          "beat": 5,
+          "start_s": 58,
+          "spacing_s": 2,
+          "count": 2,
+          "pattern": "c",
+          "channel": "B",
+          "objective_live": true,
+          "final_signature": true
+        }
+      ],
+      "first_cash": 85,
+      "repeat_cash": 30,
+      "first_account_bonds": 3,
+      "damage_eligible_built_facilities": [
+        "dock",
+        "tank"
+      ],
+      "required_port_projects": [
+        "grid_link"
+      ]
+    },
+    {
+      "op": 31,
+      "region": 2,
+      "local_number": 6,
+      "title_fa": "بار دوباره",
+      "intro_fa": "بارگیری امروز با جعبه‌های سنگین و سبک ادامه دارد.",
+      "choice_fa": "آرایش شناخته‌شده را حفظ کن یا چیدمان سنگین را امتحان کن.",
+      "first_news_fa": "نوارهای رنگی روی صندوق‌های تحویل روشن می‌شوند.",
+      "requires_clear": 30,
+      "objective": "repel",
+      "board": "single",
+      "objective_initial": null,
+      "quota_min_pct": null,
+      "model_pressure_percent": 179,
+      "allow_cadence_choice": true,
+      "groups": [
+        {
+          "beat": 1,
+          "start_s": 5,
+          "spacing_s": 2,
+          "count": 5,
+          "pattern": "c",
+          "channel": "A",
+          "objective_live": false,
+          "final_signature": false
+        },
+        {
+          "beat": 2,
+          "start_s": 15,
+          "spacing_s": 2,
+          "count": 4,
+          "pattern": "c",
+          "channel": "B",
+          "objective_live": true,
+          "final_signature": false
+        },
+        {
+          "beat": 3,
+          "start_s": 28,
+          "spacing_s": 3,
+          "count": 4,
+          "pattern": "a",
+          "channel": "A",
+          "objective_live": false,
+          "final_signature": false
+        },
+        {
+          "beat": 4,
+          "start_s": 39,
+          "spacing_s": 2,
+          "count": 5,
+          "pattern": "b",
+          "channel": "B",
+          "objective_live": true,
+          "final_signature": false
+        }
+      ],
+      "first_cash": 88,
+      "repeat_cash": 31,
+      "first_account_bonds": 1,
+      "damage_eligible_built_facilities": [
+        "refinery",
+        "dock"
+      ],
+      "required_port_projects": [
+        "grid_link",
+        "steel_line"
+      ]
+    },
+    {
+      "op": 32,
+      "region": 2,
+      "local_number": 7,
+      "title_fa": "آب برای خوابگاه",
+      "intro_fa": "یک لنج کوچک سفارش خوابگاه را همراهی می‌کند.",
+      "choice_fa": "سفارش علامت‌دار را سالم برسان یا در شروع سریع‌تر خرج کن.",
+      "first_news_fa": "چراغ خوابگاه کارکنان روشن می‌شود.",
+      "requires_clear": 31,
+      "objective": "escort",
+      "board": "fan",
+      "objective_initial": 10,
+      "quota_min_pct": null,
+      "model_pressure_percent": 183,
+      "allow_cadence_choice": true,
+      "groups": [
+        {
+          "beat": 1,
+          "start_s": 4,
+          "spacing_s": 2,
+          "count": 4,
+          "pattern": "b",
+          "channel": "A",
+          "objective_live": false,
+          "final_signature": false
+        },
+        {
+          "beat": 2,
+          "start_s": 16,
+          "spacing_s": 2,
+          "count": 4,
+          "pattern": "b",
+          "channel": "B",
+          "objective_live": true,
+          "final_signature": false
+        },
+        {
+          "beat": 3,
+          "start_s": 28,
+          "spacing_s": 3,
+          "count": 5,
+          "pattern": "c",
+          "channel": "A",
+          "objective_live": false,
+          "final_signature": false
+        },
+        {
+          "beat": 4,
+          "start_s": 41,
+          "spacing_s": 2,
+          "count": 4,
+          "pattern": "a",
+          "channel": "B",
+          "objective_live": true,
+          "final_signature": false
+        }
+      ],
+      "first_cash": 91,
+      "repeat_cash": 32,
+      "first_account_bonds": 1,
+      "damage_eligible_built_facilities": [
+        "power",
+        "dock"
+      ],
+      "required_port_projects": [
+        "grid_link",
+        "steel_line"
+      ]
+    },
+    {
+      "op": 33,
+      "region": 2,
+      "local_number": 8,
+      "title_fa": "نوبت انبار",
+      "intro_fa": "انباردار می‌خواهد بخش میانی صف را سر وقت آزاد کند.",
+      "choice_fa": "ترتیب رسیدگی و راه آرام‌تر را قبل از شروع انتخاب کن.",
+      "first_news_fa": "دریچهٔ تازهٔ انبار در تصویر باز می‌ماند.",
+      "requires_clear": 32,
+      "objective": "quota",
+      "board": "join",
+      "objective_initial": null,
+      "quota_min_pct": 67,
+      "model_pressure_percent": 185,
+      "allow_cadence_choice": true,
+      "groups": [
+        {
+          "beat": 1,
+          "start_s": 4,
+          "spacing_s": 2,
+          "count": 4,
+          "pattern": "c",
+          "channel": "A",
+          "objective_live": false,
+          "final_signature": false
+        },
+        {
+          "beat": 2,
+          "start_s": 15,
+          "spacing_s": 2,
+          "count": 5,
+          "pattern": "b",
+          "channel": "B",
+          "objective_live": true,
+          "final_signature": false
+        },
+        {
+          "beat": 3,
+          "start_s": 28,
+          "spacing_s": 3,
+          "count": 4,
+          "pattern": "b",
+          "channel": "A",
+          "objective_live": false,
+          "final_signature": false
+        },
+        {
+          "beat": 4,
+          "start_s": 40,
+          "spacing_s": 2,
+          "count": 4,
+          "pattern": "c",
+          "channel": "B",
+          "objective_live": true,
+          "final_signature": false
+        }
+      ],
+      "first_cash": 94,
+      "repeat_cash": 33,
+      "first_account_bonds": 1,
+      "damage_eligible_built_facilities": [
+        "steel",
+        "power"
+      ],
+      "required_port_projects": [
+        "grid_link",
+        "steel_line"
+      ]
+    },
+    {
+      "op": 34,
+      "region": 2,
+      "local_number": 9,
+      "title_fa": "آزمون دو شیفت",
+      "intro_fa": "گزارش صبح و عصر باید جداگانه تحویل شود.",
+      "choice_fa": "تعادل دو گروه را در گزارش بخوان و برای گروه جاافتاده آماده شو.",
+      "first_news_fa": "دو مُهر متفاوت کنار نام شیفت‌ها ثبت می‌شوند.",
+      "requires_clear": 33,
+      "objective": "siege",
+      "board": "join",
+      "objective_initial": null,
+      "quota_min_pct": 60,
+      "model_pressure_percent": 188,
+      "allow_cadence_choice": true,
+      "groups": [
+        {
+          "beat": 1,
+          "start_s": 5,
+          "spacing_s": 2,
+          "count": 5,
+          "pattern": "a",
+          "channel": "A",
+          "objective_live": false,
+          "final_signature": false
+        },
+        {
+          "beat": 2,
+          "start_s": 15,
+          "spacing_s": 2,
+          "count": 4,
+          "pattern": "b",
+          "channel": "B",
+          "objective_live": true,
+          "final_signature": false
+        },
+        {
+          "beat": 3,
+          "start_s": 28,
+          "spacing_s": 3,
+          "count": 4,
+          "pattern": "c",
+          "channel": "A",
+          "objective_live": false,
+          "final_signature": false
+        },
+        {
+          "beat": 4,
+          "start_s": 39,
+          "spacing_s": 2,
+          "count": 5,
+          "pattern": "c",
+          "channel": "B",
+          "objective_live": true,
+          "final_signature": false
+        }
+      ],
+      "first_cash": 97,
+      "repeat_cash": 34,
+      "first_account_bonds": 1,
+      "damage_eligible_built_facilities": [
+        "dock",
+        "tank"
+      ],
+      "required_port_projects": [
+        "grid_link",
+        "steel_line"
+      ]
+    },
+    {
+      "op": 35,
+      "region": 2,
+      "local_number": 10,
+      "title_fa": "دفتر دوم بندر",
+      "intro_fa": "شبِ تحویل، نشان هر دو نوبت روی آبراه دیده می‌شود.",
+      "choice_fa": "در پایان شاخص کشتی همراه مهم‌تر است یا سلامت بندر؟",
+      "first_news_fa": "دفتر قشم بسته و شیفت ابوموسی در دسترس می‌شود.",
+      "requires_clear": 34,
+      "objective": "escort",
+      "board": "fan",
+      "objective_initial": 10,
+      "quota_min_pct": null,
+      "model_pressure_percent": 203,
+      "allow_cadence_choice": true,
+      "groups": [
+        {
+          "beat": 1,
+          "start_s": 4,
+          "spacing_s": 2,
+          "count": 4,
+          "pattern": "c",
+          "channel": "A",
+          "objective_live": false,
+          "final_signature": false
+        },
+        {
+          "beat": 2,
+          "start_s": 16,
+          "spacing_s": 2,
+          "count": 4,
+          "pattern": "c",
+          "channel": "B",
+          "objective_live": true,
+          "final_signature": false
+        },
+        {
+          "beat": 3,
+          "start_s": 28,
+          "spacing_s": 3,
+          "count": 5,
+          "pattern": "a",
+          "channel": "A",
+          "objective_live": false,
+          "final_signature": false
+        },
+        {
+          "beat": 4,
+          "start_s": 41,
+          "spacing_s": 2,
+          "count": 4,
+          "pattern": "b",
+          "channel": "B",
+          "objective_live": true,
+          "final_signature": false
+        },
+        {
+          "beat": 5,
+          "start_s": 58,
+          "spacing_s": 2,
+          "count": 2,
+          "pattern": "c",
+          "channel": "B",
+          "objective_live": true,
+          "final_signature": true
+        }
+      ],
+      "first_cash": 100,
+      "repeat_cash": 35,
+      "first_account_bonds": 3,
+      "damage_eligible_built_facilities": [
+        "refinery",
+        "dock"
+      ],
+      "required_port_projects": [
+        "grid_link",
+        "steel_line"
+      ]
+    },
+    {
+      "op": 36,
+      "region": 3,
+      "local_number": 1,
+      "title_fa": "چراغ بعدی",
+      "intro_fa": "اسکلهٔ تازه، نخستین درخواست خدمتش را فرستاده است.",
+      "choice_fa": "از تجربهٔ قشم استفاده کن یا بار نخست را آهسته‌تر اداره کن.",
+      "first_news_fa": "چراغ منطقهٔ سوم روی نقشه روشن می‌شود.",
+      "requires_clear": 35,
+      "objective": "repel",
+      "board": "single",
+      "objective_initial": null,
+      "quota_min_pct": null,
+      "model_pressure_percent": 164,
+      "allow_cadence_choice": true,
+      "groups": [
+        {
+          "beat": 1,
+          "start_s": 4,
+          "spacing_s": 2,
+          "count": 5,
+          "pattern": "a",
+          "channel": "A",
+          "objective_live": false,
+          "final_signature": false
+        },
+        {
+          "beat": 2,
+          "start_s": 16,
+          "spacing_s": 2,
+          "count": 5,
+          "pattern": "a",
+          "channel": "B",
+          "objective_live": true,
+          "final_signature": false
+        },
+        {
+          "beat": 3,
+          "start_s": 28,
+          "spacing_s": 3,
+          "count": 6,
+          "pattern": "b",
+          "channel": "A",
+          "objective_live": false,
+          "final_signature": false
+        },
+        {
+          "beat": 4,
+          "start_s": 41,
+          "spacing_s": 2,
+          "count": 5,
+          "pattern": "c",
+          "channel": "B",
+          "objective_live": true,
+          "final_signature": false
+        }
+      ],
+      "first_cash": 81,
+      "repeat_cash": 26,
+      "first_account_bonds": 1,
+      "damage_eligible_built_facilities": [
+        "power",
+        "dock"
+      ],
+      "required_port_projects": [
+        "grid_link",
+        "steel_line",
+        "fuel_line"
+      ]
+    },
+    {
+      "op": 37,
+      "region": 3,
+      "local_number": 2,
+      "title_fa": "بارِ روی آب",
+      "intro_fa": "جعبه‌های حساس همراه یک کشتی کوچک روی تاب می‌افتند.",
+      "choice_fa": "هزینهٔ از دست رفتن نشان‌های میانی را پیش از حرکت ببین.",
+      "first_news_fa": "نشان محمولهٔ سالم در دفتر نصب می‌شود.",
+      "requires_clear": 36,
+      "objective": "escort",
+      "board": "fan",
+      "objective_initial": 10,
+      "quota_min_pct": null,
+      "model_pressure_percent": 171,
+      "allow_cadence_choice": true,
+      "groups": [
+        {
+          "beat": 1,
+          "start_s": 4,
+          "spacing_s": 2,
+          "count": 5,
+          "pattern": "b",
+          "channel": "A",
+          "objective_live": false,
+          "final_signature": false
+        },
+        {
+          "beat": 2,
+          "start_s": 15,
+          "spacing_s": 2,
+          "count": 6,
+          "pattern": "a",
+          "channel": "B",
+          "objective_live": true,
+          "final_signature": false
+        },
+        {
+          "beat": 3,
+          "start_s": 28,
+          "spacing_s": 3,
+          "count": 5,
+          "pattern": "c",
+          "channel": "A",
+          "objective_live": false,
+          "final_signature": false
+        },
+        {
+          "beat": 4,
+          "start_s": 40,
+          "spacing_s": 2,
+          "count": 5,
+          "pattern": "c",
+          "channel": "B",
+          "objective_live": true,
+          "final_signature": false
+        }
+      ],
+      "first_cash": 84,
+      "repeat_cash": 27,
+      "first_account_bonds": 1,
+      "damage_eligible_built_facilities": [
+        "steel",
+        "power"
+      ],
+      "required_port_projects": [
+        "grid_link",
+        "steel_line",
+        "fuel_line"
+      ]
+    },
+    {
+      "op": 38,
+      "region": 3,
+      "local_number": 3,
+      "title_fa": "پنجرهٔ تحویل",
+      "intro_fa": "پایان شیفت کوتاه است و انباردار فقط بار علامت‌دار را می‌پذیرد.",
+      "choice_fa": "پیش‌نمایش صف را بخوان و یک برنامهٔ تمرکز انتخاب کن.",
+      "first_news_fa": "تعداد صندوق‌های پذیرفته‌شده کنار سفارش می‌آید.",
+      "requires_clear": 37,
+      "objective": "quota",
+      "board": "join",
+      "objective_initial": null,
+      "quota_min_pct": 67,
+      "model_pressure_percent": 178,
+      "allow_cadence_choice": true,
+      "groups": [
+        {
+          "beat": 1,
+          "start_s": 5,
+          "spacing_s": 2,
+          "count": 6,
+          "pattern": "b",
+          "channel": "A",
+          "objective_live": false,
+          "final_signature": false
+        },
+        {
+          "beat": 2,
+          "start_s": 15,
+          "spacing_s": 2,
+          "count": 5,
+          "pattern": "c",
+          "channel": "B",
+          "objective_live": true,
+          "final_signature": false
+        },
+        {
+          "beat": 3,
+          "start_s": 28,
+          "spacing_s": 3,
+          "count": 5,
+          "pattern": "a",
+          "channel": "A",
+          "objective_live": false,
+          "final_signature": false
+        },
+        {
+          "beat": 4,
+          "start_s": 39,
+          "spacing_s": 2,
+          "count": 6,
+          "pattern": "b",
+          "channel": "B",
+          "objective_live": true,
+          "final_signature": false
+        }
+      ],
+      "first_cash": 87,
+      "repeat_cash": 28,
+      "first_account_bonds": 1,
+      "damage_eligible_built_facilities": [
+        "dock",
+        "tank"
+      ],
+      "required_port_projects": [
+        "grid_link",
+        "steel_line",
+        "fuel_line"
+      ]
+    },
+    {
+      "op": 39,
+      "region": 3,
+      "local_number": 4,
+      "title_fa": "برق چراغخانه",
+      "intro_fa": "گروه نگهداری از اتاق چراغ‌ها محافظت می‌خواهد.",
+      "choice_fa": "در میانه آمادهٔ رسیدگی به چراغخانه باش یا حاشیهٔ سلامت بیشتری نگه دار.",
+      "first_news_fa": "لوح تعمیر اتاق چراغ‌ها روشن می‌شود.",
+      "requires_clear": 38,
+      "objective": "hold",
+      "board": "fan",
+      "objective_initial": 12,
+      "quota_min_pct": null,
+      "model_pressure_percent": 183,
+      "allow_cadence_choice": true,
+      "groups": [
+        {
+          "beat": 1,
+          "start_s": 4,
+          "spacing_s": 2,
+          "count": 5,
+          "pattern": "c",
+          "channel": "A",
+          "objective_live": false,
+          "final_signature": false
+        },
+        {
+          "beat": 2,
+          "start_s": 16,
+          "spacing_s": 2,
+          "count": 5,
+          "pattern": "c",
+          "channel": "B",
+          "objective_live": true,
+          "final_signature": false
+        },
+        {
+          "beat": 3,
+          "start_s": 28,
+          "spacing_s": 3,
+          "count": 6,
+          "pattern": "b",
+          "channel": "A",
+          "objective_live": false,
+          "final_signature": false
+        },
+        {
+          "beat": 4,
+          "start_s": 41,
+          "spacing_s": 2,
+          "count": 5,
+          "pattern": "a",
+          "channel": "B",
+          "objective_live": true,
+          "final_signature": false
+        }
+      ],
+      "first_cash": 90,
+      "repeat_cash": 29,
+      "first_account_bonds": 1,
+      "damage_eligible_built_facilities": [
+        "refinery",
+        "dock"
+      ],
+      "required_port_projects": [
+        "grid_link",
+        "steel_line",
+        "fuel_line"
+      ]
+    },
+    {
+      "op": 40,
+      "region": 3,
+      "local_number": 5,
+      "title_fa": "سه بوق در غروب",
+      "intro_fa": "هر گروه ورودی با یک ضرباهنگ جدا معرفی می‌شود.",
+      "choice_fa": "گزارش دو سمت را ببین و از نتیجهٔ نابرابر درس بگیر.",
+      "first_news_fa": "دو رنگ شیفت کنار ساعت فرماندهی باقی می‌ماند.",
+      "requires_clear": 39,
+      "objective": "siege",
+      "board": "join",
+      "objective_initial": null,
+      "quota_min_pct": 60,
+      "model_pressure_percent": 185,
+      "allow_cadence_choice": true,
+      "groups": [
+        {
+          "beat": 1,
+          "start_s": 4,
+          "spacing_s": 2,
+          "count": 5,
+          "pattern": "b",
+          "channel": "A",
+          "objective_live": false,
+          "final_signature": false
+        },
+        {
+          "beat": 2,
+          "start_s": 15,
+          "spacing_s": 2,
+          "count": 6,
+          "pattern": "b",
+          "channel": "B",
+          "objective_live": true,
+          "final_signature": false
+        },
+        {
+          "beat": 3,
+          "start_s": 28,
+          "spacing_s": 3,
+          "count": 5,
+          "pattern": "a",
+          "channel": "A",
+          "objective_live": false,
+          "final_signature": false
+        },
+        {
+          "beat": 4,
+          "start_s": 40,
+          "spacing_s": 2,
+          "count": 5,
+          "pattern": "c",
+          "channel": "B",
+          "objective_live": true,
+          "final_signature": false
+        },
+        {
+          "beat": 5,
+          "start_s": 58,
+          "spacing_s": 2,
+          "count": 2,
+          "pattern": "c",
+          "channel": "B",
+          "objective_live": true,
+          "final_signature": true
+        }
+      ],
+      "first_cash": 93,
+      "repeat_cash": 30,
+      "first_account_bonds": 3,
+      "damage_eligible_built_facilities": [
+        "power",
+        "dock"
+      ],
+      "required_port_projects": [
+        "grid_link",
+        "steel_line",
+        "fuel_line"
+      ]
+    },
+    {
+      "op": 41,
+      "region": 3,
+      "local_number": 6,
+      "title_fa": "سفارش کارگاه شناور",
+      "intro_fa": "سفارش کارگاه هنگام دریافت محموله به مراقبت نیاز دارد.",
+      "choice_fa": "در چیدمان همیشگی یک نقش را برای بار سنگین عوض کن یا همان را نگه دار.",
+      "first_news_fa": "نشان کارگاه کنار اسکله موج می‌خورد.",
+      "requires_clear": 40,
+      "objective": "hold",
+      "board": "fan",
+      "objective_initial": 12,
+      "quota_min_pct": null,
+      "model_pressure_percent": 193,
+      "allow_cadence_choice": true,
+      "groups": [
+        {
+          "beat": 1,
+          "start_s": 5,
+          "spacing_s": 2,
+          "count": 6,
+          "pattern": "c",
+          "channel": "A",
+          "objective_live": false,
+          "final_signature": false
+        },
+        {
+          "beat": 2,
+          "start_s": 15,
+          "spacing_s": 2,
+          "count": 5,
+          "pattern": "c",
+          "channel": "B",
+          "objective_live": true,
+          "final_signature": false
+        },
+        {
+          "beat": 3,
+          "start_s": 28,
+          "spacing_s": 3,
+          "count": 5,
+          "pattern": "c",
+          "channel": "A",
+          "objective_live": false,
+          "final_signature": false
+        },
+        {
+          "beat": 4,
+          "start_s": 39,
+          "spacing_s": 2,
+          "count": 6,
+          "pattern": "b",
+          "channel": "B",
+          "objective_live": true,
+          "final_signature": false
+        }
+      ],
+      "first_cash": 96,
+      "repeat_cash": 31,
+      "first_account_bonds": 1,
+      "damage_eligible_built_facilities": [
+        "steel",
+        "power"
+      ],
+      "required_port_projects": [
+        "grid_link",
+        "steel_line",
+        "fuel_line",
+        "dock_line"
+      ]
+    },
+    {
+      "op": 42,
+      "region": 3,
+      "local_number": 7,
+      "title_fa": "حساب نوبت‌ها",
+      "intro_fa": "سرشیفت می‌خواهد هر دو دسته تا پایان گزارش سهم داشته باشند.",
+      "choice_fa": "راه کم‌هزینه یا روش با امتیاز سلامت بالاتر را مقایسه کن.",
+      "first_news_fa": "دو ستون گزارش با نتیجهٔ واقعی پُر می‌شوند.",
+      "requires_clear": 41,
+      "objective": "siege",
+      "board": "join",
+      "objective_initial": null,
+      "quota_min_pct": 60,
+      "model_pressure_percent": 196,
+      "allow_cadence_choice": true,
+      "groups": [
+        {
+          "beat": 1,
+          "start_s": 4,
+          "spacing_s": 2,
+          "count": 5,
+          "pattern": "a",
+          "channel": "A",
+          "objective_live": false,
+          "final_signature": false
+        },
+        {
+          "beat": 2,
+          "start_s": 16,
+          "spacing_s": 2,
+          "count": 5,
+          "pattern": "c",
+          "channel": "B",
+          "objective_live": true,
+          "final_signature": false
+        },
+        {
+          "beat": 3,
+          "start_s": 28,
+          "spacing_s": 3,
+          "count": 6,
+          "pattern": "b",
+          "channel": "A",
+          "objective_live": false,
+          "final_signature": false
+        },
+        {
+          "beat": 4,
+          "start_s": 41,
+          "spacing_s": 2,
+          "count": 5,
+          "pattern": "c",
+          "channel": "B",
+          "objective_live": true,
+          "final_signature": false
+        }
+      ],
+      "first_cash": 99,
+      "repeat_cash": 32,
+      "first_account_bonds": 1,
+      "damage_eligible_built_facilities": [
+        "dock",
+        "tank"
+      ],
+      "required_port_projects": [
+        "grid_link",
+        "steel_line",
+        "fuel_line",
+        "dock_line"
+      ]
+    },
+    {
+      "op": 43,
+      "region": 3,
+      "local_number": 8,
+      "title_fa": "کشتی به خانه",
+      "intro_fa": "آخرین لنج خدماتی بار صبح را برمی‌گرداند.",
+      "choice_fa": "می‌توانی حفاظت کشتی همراه را بر امتیاز کلی ترجیح دهی.",
+      "first_news_fa": "چراغ بازگشت لنج در بایگانی می‌ماند.",
+      "requires_clear": 42,
+      "objective": "escort",
+      "board": "fan",
+      "objective_initial": 10,
+      "quota_min_pct": null,
+      "model_pressure_percent": 199,
+      "allow_cadence_choice": true,
+      "groups": [
+        {
+          "beat": 1,
+          "start_s": 4,
+          "spacing_s": 2,
+          "count": 5,
+          "pattern": "c",
+          "channel": "A",
+          "objective_live": false,
+          "final_signature": false
+        },
+        {
+          "beat": 2,
+          "start_s": 15,
+          "spacing_s": 2,
+          "count": 6,
+          "pattern": "b",
+          "channel": "B",
+          "objective_live": true,
+          "final_signature": false
+        },
+        {
+          "beat": 3,
+          "start_s": 28,
+          "spacing_s": 3,
+          "count": 5,
+          "pattern": "c",
+          "channel": "A",
+          "objective_live": false,
+          "final_signature": false
+        },
+        {
+          "beat": 4,
+          "start_s": 40,
+          "spacing_s": 2,
+          "count": 5,
+          "pattern": "b",
+          "channel": "B",
+          "objective_live": true,
+          "final_signature": false
+        }
+      ],
+      "first_cash": 102,
+      "repeat_cash": 33,
+      "first_account_bonds": 1,
+      "damage_eligible_built_facilities": [
+        "refinery",
+        "dock"
+      ],
+      "required_port_projects": [
+        "grid_link",
+        "steel_line",
+        "fuel_line",
+        "dock_line"
+      ]
+    },
+    {
+      "op": 44,
+      "region": 3,
+      "local_number": 9,
+      "title_fa": "امضای سه بندر",
+      "intro_fa": "گزارش سه نوبت باید همراه یکدیگر پذیرفته شود.",
+      "choice_fa": "به‌رغم فشار پایان، سهم علامت‌دار را از دست نده.",
+      "first_news_fa": "دفتر هر سه شیفت برای امضای نهایی باز است.",
+      "requires_clear": 43,
+      "objective": "quota",
+      "board": "join",
+      "objective_initial": null,
+      "quota_min_pct": 67,
+      "model_pressure_percent": 201,
+      "allow_cadence_choice": true,
+      "groups": [
+        {
+          "beat": 1,
+          "start_s": 5,
+          "spacing_s": 2,
+          "count": 6,
+          "pattern": "b",
+          "channel": "A",
+          "objective_live": false,
+          "final_signature": false
+        },
+        {
+          "beat": 2,
+          "start_s": 15,
+          "spacing_s": 2,
+          "count": 5,
+          "pattern": "c",
+          "channel": "B",
+          "objective_live": true,
+          "final_signature": false
+        },
+        {
+          "beat": 3,
+          "start_s": 28,
+          "spacing_s": 3,
+          "count": 5,
+          "pattern": "b",
+          "channel": "A",
+          "objective_live": false,
+          "final_signature": false
+        },
+        {
+          "beat": 4,
+          "start_s": 39,
+          "spacing_s": 2,
+          "count": 6,
+          "pattern": "c",
+          "channel": "B",
+          "objective_live": true,
+          "final_signature": false
+        }
+      ],
+      "first_cash": 105,
+      "repeat_cash": 34,
+      "first_account_bonds": 1,
+      "damage_eligible_built_facilities": [
+        "power",
+        "dock"
+      ],
+      "required_port_projects": [
+        "grid_link",
+        "steel_line",
+        "fuel_line",
+        "dock_line"
+      ]
+    },
+    {
+      "op": 45,
+      "region": 3,
+      "local_number": 10,
+      "title_fa": "چراغی که می‌ماند",
+      "intro_fa": "اهالی بندر از روی اسکله منتظر علامت پایان خدمت‌اند.",
+      "choice_fa": "ترکیب تجربهٔ سه منطقه را برای گزارش آخر انتخاب کن.",
+      "first_news_fa": "نام بندر ثبت می‌شود؛ موج آزاد، لیگ و درخواست ارتقای درجه باز می‌شوند.",
+      "requires_clear": 44,
+      "objective": "siege",
+      "board": "join",
+      "objective_initial": null,
+      "quota_min_pct": 60,
+      "model_pressure_percent": 206,
+      "allow_cadence_choice": true,
+      "groups": [
+        {
+          "beat": 1,
+          "start_s": 4,
+          "spacing_s": 2,
+          "count": 5,
+          "pattern": "c",
+          "channel": "A",
+          "objective_live": false,
+          "final_signature": false
+        },
+        {
+          "beat": 2,
+          "start_s": 16,
+          "spacing_s": 2,
+          "count": 5,
+          "pattern": "b",
+          "channel": "B",
+          "objective_live": true,
+          "final_signature": false
+        },
+        {
+          "beat": 3,
+          "start_s": 28,
+          "spacing_s": 3,
+          "count": 6,
+          "pattern": "c",
+          "channel": "A",
+          "objective_live": false,
+          "final_signature": false
+        },
+        {
+          "beat": 4,
+          "start_s": 41,
+          "spacing_s": 2,
+          "count": 5,
+          "pattern": "c",
+          "channel": "B",
+          "objective_live": true,
+          "final_signature": false
+        },
+        {
+          "beat": 5,
+          "start_s": 58,
+          "spacing_s": 2,
+          "count": 2,
+          "pattern": "c",
+          "channel": "B",
+          "objective_live": true,
+          "final_signature": true
+        }
+      ],
+      "first_cash": 108,
+      "repeat_cash": 35,
+      "first_account_bonds": 3,
+      "damage_eligible_built_facilities": [
+        "steel",
+        "power"
+      ],
+      "required_port_projects": [
+        "grid_link",
+        "steel_line",
+        "fuel_line",
+        "dock_line"
+      ]
+    }
+  ],
+  "production_encounter": "same combat engine plus the authored A/B GUI markers and objective tracking; regional actors use ceil(pattern health * stage pressure/100), final last token +30, existing engine attack/impact/visual grammar. On escape harbor -2 (-3 final signature), marked escort/hold meter -2. Harbor starts 20; if both finish and escape same tick, settle impact before escape. No new tactical map.",
+  "display_health_note": "A regional instance creates the artistic class of the table with fixed stage-scaled maximum health, not a second scale. A signature uses the same class with separate badge, +120 health. Stops at end of authored group. These three game records are for visible variety; no real-world characteristics or coordinates.",
+  "regional_mastery_rewards": {
+    "stars": "win=1; harbor >=14 gives 2; >=19 gives 3; cap at 2 if target integrity below half of start. Fail 0; persist each op best-ever and current run independently. These do not count toward region-1 card chests.",
+    "regional_xp": "per-run first win 30+5*local_number; repeat win 5; loss 0. Apply current prestige command XP multiplier once, storing half-XP exactly. Normal grants never increase eligible revenue.",
+    "new_receipts": "if region first win or better stars, release region plaque/history; grants only these fixed cash/bonds/XP, no implied second crates."
+  }
+}

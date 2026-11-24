@@ -16,10 +16,11 @@
     "test:integrity": "node scripts/test-integrity.cjs && node scripts/test-save-storage.cjs && node scripts/test-analytics.cjs && node scripts/test-save-api.cjs",
     "test:campaign": "node scripts/test-campaign.cjs",
     "test:fresh-campaign": "node scripts/test-fresh-campaign.cjs",
-    "verify": "npm run typecheck && npm run lint && npm run test:core && npm run test:integrity && npm run test:campaign && npm run test:fresh-campaign && node scripts/audit/test-tick-immutability.cjs && node scripts/audit/test-mech-a.cjs && node scripts/audit/test-mech-b.cjs && node scripts/audit/test-scen.cjs && node scripts/audit/test-economy.cjs && node scripts/audit/test-ui-round2.cjs && node scripts/audit/probe_wave3.cjs && node scripts/audit/probe_wave4_teaching.cjs && npm run test:recovery && npm run test:opening",
+    "verify": "npm run typecheck && npm run lint && npm run test:core && npm run test:integrity && npm run test:campaign && npm run test:fresh-campaign && node scripts/audit/test-tick-immutability.cjs && node scripts/audit/test-mech-a.cjs && node scripts/audit/test-mech-b.cjs && node scripts/audit/test-scen.cjs && node scripts/audit/test-economy.cjs && node scripts/audit/test-ui-round2.cjs && node scripts/audit/probe_wave3.cjs && node scripts/audit/probe_wave4_teaching.cjs && npm run test:recovery && npm run test:opening && npm run test:harbor",
     "test:mobile": "node scripts/test-auto-resume.cjs && node scripts/test-mobile-ui.cjs && node scripts/test-workshop-ui.cjs && node scripts/test-workshop-ui.cjs --battle-only && node scripts/test-offline.cjs && node scripts/test-lifecycle.cjs && node scripts/test-input-recovery.cjs && node scripts/test-world-init.cjs",
     "test:recovery": "node scripts/test-combat-presentation.cjs && node scripts/test-model-preload.cjs && node scripts/test-frame-recorder.cjs && node scripts/test-render-pacer.cjs && node scripts/test-model-retry.cjs",
-    "test:opening": "node scripts/test-reopening-industry.cjs && node scripts/test-opening-attention.cjs && node scripts/test-opening-operations.cjs"
+    "test:opening": "node scripts/test-reopening-industry.cjs && node scripts/test-opening-attention.cjs && node scripts/test-opening-operations.cjs",
+    "test:harbor": "node scripts/test-harbor.cjs"
   },
   "dependencies": {
     "@capacitor/android": "^7.6.10",
@@ -54,7 +55,7 @@
     "tailwindcss": "4.1.17",
     "typescript": "5.9.3"
   },
-  "version": "0.7.6",
+  "version": "1.0.0",
   "overrides": {
     "@esbuild-kit/core-utils": {
       "esbuild": "0.25.12"

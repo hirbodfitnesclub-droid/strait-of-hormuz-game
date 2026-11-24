@@ -1,5 +1,2 @@
-import Game from "@/components/Game";
-
-export default function HomePage() {
-  return <Game />;
-}
+import HarborGame from "../harbor/Game";
+export default function HomePage() { return <HarborGame/>; }

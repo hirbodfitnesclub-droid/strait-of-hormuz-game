@@ -26,3 +26,11 @@ try {
   if (hadManifest && fs.existsSync(manifestAside)) fs.renameSync(manifestAside, manifest);
 }
 console.log('static export ready in out/');
+
+// Only files used by the shipping harbor enter Capacitor. Keep the separate Three.js viewer in the web export.
+const nativeRoot = 'android-web';
+fs.rmSync(nativeRoot, { recursive: true, force: true });
+fs.mkdirSync(nativeRoot);
+for (const name of ['_next', 'harbor', 'index.html', 'app-icon-192.png', 'app-icon-512.png']) {
+  fs.cpSync('out/' + name, nativeRoot + '/' + name, { recursive: true });
+}

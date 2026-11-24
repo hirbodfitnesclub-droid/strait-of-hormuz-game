@@ -1,4 +1,5 @@
 import economy from "../data/reopening/economy.json";
+import projects from "../data/reopening/capital_works.json";
 import attention from "../data/reopening/attention.json";
 import { canOfferOpeningWave } from "./opening-attention";
 import type { BuildingId, GameState, Merchant } from "./game";
@@ -14,6 +15,11 @@ type CarryKey = "well" | "export" | "exportMoney" | "burn" | "reserve" | "refine
 
 export interface OpeningIndustry {
   version: 52;
+  works?: string[];
+  wear?: Partial<Record<BuildingId,number>>;
+  reserved?: Partial<Record<"oil"|"fuel"|"steel"|"ammo",number>>;
+  stationMW?: number;
+  priceFactor?: number;
   seed:number;
   activeSeconds:number;
   /** Fractional active second, persisted independently of the capped combat frame clock. */
@@ -67,6 +73,17 @@ const valid = (v:unknown):v is number => typeof v==="number" && Number.isFinite(
 export function restoreOpeningIndustry(raw:unknown):OpeningIndustry|undefined {
   if (!record(raw) || raw.version!==52 || !valid(raw.seed)) return undefined;
   const result=newOpeningIndustry(raw.seed);
+  if (Array.isArray(raw.works)) result.works=projects.projects.map(p=>p.id).filter(id=>(raw.works as unknown[]).includes(id));
+  if (record(raw.wear)) {
+    result.wear={};
+    for (const id of ids) if (valid(raw.wear[id])) result.wear[id]=Math.min(3, Math.floor(raw.wear[id] as number));
+  }
+  if (record(raw.reserved)) {
+    result.reserved={};
+    for (const id of ["oil","fuel","steel","ammo"] as const) if (valid(raw.reserved[id])) result.reserved[id]=Math.min(1e7,raw.reserved[id] as number);
+  }
+  if(valid(raw.stationMW)) result.stationMW=Math.min(1000,raw.stationMW);
+  if(valid(raw.priceFactor)) result.priceFactor=Math.max(1,Math.min(5,raw.priceFactor));
   for (const key of ["activeSeconds","phaseAge","nextPassage","generated","lastExportedOil","lastExportIncome","lastSteel","stallEpisode","offlineHigh","inspectedEpisode"] as const) {
     const n=raw[key]; if (valid(n)) result[key]=n;
   }
@@ -112,8 +129,14 @@ export function openingPrice(id:BuildingId,fromLevel:number) {
   const num=BigInt(facilities[id].base_capex)*BigInt(112)**BigInt(early)*BigInt(105)**BigInt(late);
   return Number((num+den-BigInt(1))/den);
 }
+export function facilityCondition(s:GameState,id:BuildingId) {
+  return economy.repair.efficiency_by_points[s.opening?.wear?.[id] ?? 0];
+}
+function worksFactor(s:GameState,id:string) {
+  return s.opening?.works?.includes(id) ? projects.projects.find(p=>p.id===id)!.factor : 1;
+}
 export function openingCapacity(s:GameState) {
-  return stock.oil_tank_capacity_per_level*s.buildings.tank*(s.research.includes("tanktech")?1.2:1);
+  return stock.oil_tank_capacity_per_level*s.buildings.tank*facilityCondition(s,"tank")*(s.research.includes("tanktech")?1.2:1);
 }
 export function openingNextTollIn(s:GameState) {
   const pending=s.merchants.filter(m=>!m.paid).map(m=>Math.max(0,Math.ceil((trade.receipt_progress-m.progress)*trade.standard_crossing_s[m.kind]-1e-9)));
@@ -128,25 +151,26 @@ export function openingWaveAvailable(s:GameState) {
 export function openingStats(s:GameState,towerMW:number,dockEfficiency:number) {
   const b=s.buildings;
   const burn=power.fuel_per_s_per_level*b.power*(s.research.includes("gas")?.7:1);
-  const powerProduced=facilities.power.base_output*b.power*(s.research.includes("oilmaster")?1.15:1)*
+  const powerProduced=facilities.power.base_output*b.power*facilityCondition(s,"power")*worksFactor(s,"grid_link")*(s.research.includes("oilmaster")?1.15:1)*
     (power.emergency_fraction+(1-power.emergency_fraction)*Math.min(1,burn>0?s.fuel/burn:1));
-  const powerUsed=towerMW+ids.reduce((sum,id)=>sum+facilities[id].mw_per_level*b[id],0);
+  const powerUsed=(s.opening?.stationMW ?? towerMW)+ids.reduce((sum,id)=>sum+facilities[id].mw_per_level*b[id],0);
   const grid=Math.min(1,powerProduced/Math.max(1,powerUsed));
-  const waterProduced=facilities.water.base_output*b.water*grid*(s.research.includes("watertech")?2:1);
+  const waterProduced=facilities.water.base_output*b.water*facilityCondition(s,"water")*grid*(s.research.includes("watertech")?2:1);
   const waterUsed=power.water_usage.city*b.city+power.water_usage.refinery*b.refinery;
   const water=Math.min(1,waterProduced/Math.max(1,waterUsed));
-  const stability=Math.min(100,40*water+15*Math.min(b.city,2)+Math.min(20,4*b.welfare)+.1*s.security+
+  const stability=Math.min(100,40*water+15*Math.min(b.city*facilityCondition(s,"city"),2)+Math.min(20,4*b.welfare*facilityCondition(s,"welfare"))+.1*s.security+
     (s.research.includes("housing")?5:0)+(s.research.includes("stability")?5:0));
   const productionBoost=s.idle.boostRemaining>0?2:1;
   const multi=grid*(.8+.002*stability)*productionBoost;
   function output(id:BuildingId) {
     const milestoneBonus=upgrade.output_bonus_facilities.includes(id)?1+.12*upgrade.milestones.filter(m=>b[id]>=m).length:1;
-    return facilities[id].base_output*b[id]*milestoneBonus*multi*(id==="dock"?dockEfficiency:1);
+    const project=id==="steel"?"steel_line":id==="refinery"?"fuel_line":id==="dock"?"dock_line":"";
+    return facilities[id].base_output*b[id]*facilityCondition(s,id)*worksFactor(s,project)*milestoneBonus*multi*(id==="dock"?dockEfficiency:1);
   }
   const oilRate=output("oil")*(s.research.includes("drill")?1.25:1)*(s.research.includes("seabed")?1.1:1)*(1+.15*s.idle.managerLevels.energy)
     +(s.idle.platforms?.length??0)*8*grid;
   const exportRate=output("dock")*(s.oilSplit/100)*(s.research.includes("dockauto")?1.25:1);
-  const unitPrice=trade.oil_unit_price*(s.research.includes("trade")?1.5:1);
+  const unitPrice=trade.oil_unit_price*(s.opening?.priceFactor ?? 1)*(s.research.includes("trade")?1.5:1);
   return {powerProduced,powerUsed,waterProduced,waterUsed,grid,stability,multi,productionBoost,output,oilRate,
     exportRate,dollarRate:exportRate*unitPrice,oilCapacity:openingCapacity(s),bankCapacity:1600+375*(b.dock-1),
     realExportRate:s.opening?.lastExportIncome??0,avgExportRate:s.idle.exportWindowDollars/Math.max(60,s.idle.exportWindowTime),
@@ -184,7 +208,7 @@ function commerceSecond(s:GameState,o:OpeningIndustry,bankCap:number,position:(s
     ship.progress+=1/trade.standard_crossing_s[ship.kind];
     if(!ship.paid && ship.progress+1e-10>=trade.receipt_progress) {
       ship.paid=true;
-      const credited=money(Math.max(0,Math.min(ship.reward,bankCap-s.idle.bank)));
+      const credited=money(Math.max(0,Math.min(ship.reward*(o.priceFactor ?? 1),bankCap-s.idle.bank)));
       s.idle.bank=money(s.idle.bank+credited);
       s.idle.lifetimeIncome=money(s.idle.lifetimeIncome+credited);
       o.ledger.tolls=money(o.ledger.tolls+credited);
@@ -211,11 +235,11 @@ function quantum(s:GameState,o:OpeningIndustry,deps:Dependencies,online:boolean)
   deps.exportWindow(s,1);
   const r=deps.rates(s);
   const priorOil=s.oil;
-  o.generated=flow(o,"well",r.oilRate,r.oilCapacity-s.oil);
+  o.generated=flow(o,"well",r.oilRate,r.oilCapacity-s.oil-(o.reserved?.oil??0));
   s.oil=money(s.oil+o.generated);
   const burn=flow(o,"burn",r.burn,s.fuel);
   s.fuel=money(s.fuel-burn);
-  const fuelCap=stock.fuel_cap*(s.research.includes("reserve")?1.2:1);
+  const fuelCap=stock.fuel_cap*(s.research.includes("reserve")?1.2:1)-(o.reserved?.fuel??0);
   const guard=Math.min(fuelCap,power.normal_generator_fuel_guard_s*r.burn);
   const yieldRatio=stock.packages.refine.fuel_out/stock.packages.refine.oil*(s.research.includes("refine")?1.2:1);
   const refinery=r.output("refinery")*(.6+.4*r.water)*(s.research.includes("pipe")?1.5:1)*(1+.15*s.idle.managerLevels.energy);
@@ -223,10 +247,10 @@ function quantum(s:GameState,o:OpeningIndustry,deps:Dependencies,online:boolean)
   s.oil=money(s.oil-reserve); s.fuel=money(s.fuel+flow(o,"reserveYield",reserve*yieldRatio,fuelCap-s.fuel));
   const pack=stock.packages;
   const arms=flow(o,"ammoBatch",r.output("arms")/pack.ammo.ammo_out,
-    Math.min((s.fuel-guard)/pack.ammo.fuel,s.steel/pack.ammo.steel,(stock.initial_ammo_make_to-s.ammo)/pack.ammo.ammo_out));
+    Math.min((s.fuel-guard)/pack.ammo.fuel,s.steel/pack.ammo.steel,(Math.min(stock.initial_ammo_make_to,stock.ammo_cap-(o.reserved?.ammo??0))-s.ammo)/pack.ammo.ammo_out));
   s.fuel=money(s.fuel-arms*pack.ammo.fuel);s.steel=money(s.steel-arms*pack.ammo.steel);s.ammo=money(s.ammo+arms*pack.ammo.ammo_out);
   const steel=flow(o,"steelBatch",r.output("steel")/pack.steel.steel_out,
-    Math.min(s.oil/pack.steel.oil,(s.fuel-guard)/pack.steel.fuel,(stock.initial_steel_make_to-s.steel)/pack.steel.steel_out));
+    Math.min(s.oil/pack.steel.oil,(s.fuel-guard)/pack.steel.fuel,(Math.min(stock.initial_steel_make_to,stock.steel_cap-(o.reserved?.steel??0))-s.steel)/pack.steel.steel_out));
   s.oil=money(s.oil-steel*pack.steel.oil);s.fuel=money(s.fuel-steel*pack.steel.fuel);o.lastSteel=money(steel*pack.steel.steel_out);s.steel=money(s.steel+o.lastSteel);
   const port=s.idle.port,tanker=port.tanker;
   o.lastExportedOil=0;o.lastExportIncome=0;
@@ -258,7 +282,7 @@ function quantum(s:GameState,o:OpeningIndustry,deps:Dependencies,online:boolean)
   s.oil=money(s.oil-refined);s.fuel=money(s.fuel+flow(o,"refineYield",refined*yieldRatio,fuelCap-s.fuel));
   if(online) commerceSecond(s,o,r.bankCapacity,deps.position);
   if(s.idle.managerLevels.harbor>0 && ++o.managerClock>=10) {o.managerClock=0;openingCollect(s,false);}
-  const blocked=o.generated===0&&priorOil>=r.oilCapacity&&r.oilRate>0;
+  const blocked=o.generated===0&&priorOil+(o.reserved?.oil??0)>=r.oilCapacity&&r.oilRate>0;
   if(online && !o.stalled && blocked) {o.stallEpisode++;o.stallStartedAt=o.activeSeconds;portEvent(o,"stall");}
   if(o.stalled && !blocked && o.generated>0) {
     const p=o.pendingPurchase;
