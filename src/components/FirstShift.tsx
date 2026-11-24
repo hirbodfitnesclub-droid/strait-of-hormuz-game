@@ -169,6 +169,7 @@ export function ShipCue({
   paid: boolean;
 }) {
   const el = useRef<HTMLButtonElement>(null);
+  const pressed = useRef<{ id: number; x: number; y: number } | null>(null);
   useEffect(() => {
     const anchor = { kind: "merchant" as const, id };
     const place = () => {
@@ -188,7 +189,18 @@ export function ShipCue({
       ref={el}
       className={styles.pin}
       aria-label="بررسی کشتی عبوری"
-      onClick={() => inspect({ kind: "merchant", id })}
+      onPointerDown={e => {
+        if (!e.isPrimary) return;
+        pressed.current={id:e.pointerId,x:e.clientX,y:e.clientY};
+        e.currentTarget.setPointerCapture(e.pointerId);
+      }}
+      onPointerUp={e => {
+        const start=pressed.current;
+        pressed.current=null;
+        if (start?.id===e.pointerId && Math.hypot(e.clientX-start.x,e.clientY-start.y)<9) inspect({kind:"merchant",id});
+      }}
+      onPointerCancel={()=>{pressed.current=null;}}
+      onClick={e => { if (e.detail === 0) inspect({ kind: "merchant", id }); }}
     >
       <span>{paid ? "رسید عوارض" : "کشتی عبوری"}</span>
       <i />

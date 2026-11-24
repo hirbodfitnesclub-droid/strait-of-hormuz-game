@@ -28,10 +28,7 @@ export default function OpeningVesselReadout({target, game, sync, map, onClose, 
       if (visible !== !!anchor) { visible = !!anchor; onVisibilityChange?.(visible); }
       if (!card.current) return;
       card.current.style.visibility = anchor ? 'visible' : 'hidden';
-      if (anchor) {
-        card.current.style.setProperty('--ship-x', anchor.x + '%');
-        card.current.style.setProperty('--ship-y', anchor.y + '%');
-      }
+
     };
     place();
     const detach = map.onBeforeFrame(place);
@@ -53,7 +50,6 @@ export default function OpeningVesselReadout({target, game, sync, map, onClose, 
   }, [onClose]);
 
   const opening = game.opening;
-  if (!opening) return null;
   let title: string;
   let detail: string;
   let offer = false;
@@ -61,7 +57,7 @@ export default function OpeningVesselReadout({target, game, sync, map, onClose, 
     const ship = game.merchants.find(item => item.id === target.id);
     if (!ship) return null;
     title = `عوارض عبور · ${ships[ship.kind]} ${fa.format(ship.id)}`;
-    const toll = opening.lastToll;
+    const toll = opening?.lastToll;
     const amount = ship.receivedToll ?? (toll?.shipId === ship.id ? toll.amount : undefined);
     detail = amount !== undefined ? `${fa.format(amount)} اعتبار بندر به خزانه رسید.`
       : ship.paid ? 'عوارض این عبور ثبت شد.' : `تعرفهٔ این عبور ${fa.format(ship.reward)} اعتبار بندر است.`;
@@ -72,11 +68,11 @@ export default function OpeningVesselReadout({target, game, sync, map, onClose, 
     if (!tanker || target.id !== port.cycles) return null;
     title = 'فروش نفت · نفت‌کش بندر';
     detail = `محموله ${fa.format(tanker.load)} بشکه`;
-    if (opening.lastExportedOil > 0) detail += ` · فروش این ثانیه ${fa.format(opening.lastExportIncome)} اعتبار بندر`;
+    if (opening && opening.lastExportedOil > 0) detail += ` · فروش این ثانیه ${fa.format(opening.lastExportIncome)} اعتبار بندر`;
   } else {
     title = 'رادار بندر';
     offer = game.mode === 'campaign' && game.phase === 'peace' && game.wave === 1 &&
-      opening.manualWaveAt === null && canOfferOpeningWave(opening);
+      !!opening && opening.manualWaveAt === null && canOfferOpeningWave(opening);
     detail = offer ? 'موج اول آماده است.' : 'مسیر عبور کشتی‌ها زیر نظر است.';
   }
   return <aside ref={card} className={styles.readout} aria-label={title} dir="rtl">

@@ -156,6 +156,7 @@
   outline-offset: 1px;
 }
 .pin {
+  touch-action: manipulation;
   position: absolute;
   z-index: 4;
   transform: translate(-50%, -100%);

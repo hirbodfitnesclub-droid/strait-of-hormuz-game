@@ -1,10 +1,10 @@
 .readout {
   position: absolute;
   z-index: 6;
-  width: min(186px, 83%);
-  left: clamp(95px, var(--ship-x, 50%), calc(100% - 95px));
-  top: clamp(148px, var(--ship-y, 50%), calc(100% - 64px));
-  transform: translate(-50%, -100%);
+  width: min(244px, 78%);
+  left: 50%;
+  top: max(80px, calc(env(safe-area-inset-top) + 62px));
+  transform: translateX(-50%);
   padding: 6px 9px 6px 48px;
   border: 1px solid #d3b775;
   border-radius: 8px;

@@ -111,7 +111,12 @@ export default function WorldView3D(props: Props) {
     target: OpeningLandmark; sync: GameSync3D; map: {onBeforeFrame(cb: () => void): () => void};
   } | null>(null);
   const closeInspection = useCallback(() => setInspection(null), []);
-  if (inspection && (props.paused || props.targeting || props.game.phase !== 'peace')) setInspection(null);
+  if (inspection) {
+    const {target}=inspection;
+    if (props.paused || props.targeting || props.game.regional?.voyage ||
+        (target.kind === 'merchant' && !props.game.merchants.some(s=>s.id===target.id)) ||
+        (target.kind === 'tanker' && (!props.game.idle.port.tanker || props.game.idle.port.cycles!==target.id))) setInspection(null);
+  }
   const sceneAvailable = useRef(false);
   const assetsReady = useRef(false);
   const syncReady = useRef(false);
@@ -241,7 +246,7 @@ export default function WorldView3D(props: Props) {
             onSignal: id => propsRef.current.onSignal?.(id),
             onOpeningInspect: target => {
               const current = propsRef.current;
-              setInspection(target && !current.paused && !current.targeting && current.game.phase === 'peace'
+              setInspection(target && !current.paused && !current.targeting && !current.game.regional?.voyage
                 ? {target, sync, map: map as {onBeforeFrame(cb: () => void): () => void}} : null);
             },
             onSound: kind => propsRef.current.playSound(kind),

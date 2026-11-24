@@ -504,6 +504,8 @@ export class GameSync3D {
   private ray = new THREE.Raycaster();
   private downPos: { x: number; y: number; t: number } | null = null;
   readonly focus: SceneFocus;
+  private shipMakingAttack: string | null = null;
+  private attackingShipPinned = false;
   private detachFns: (() => void)[] = [];
 
   constructor(map: MapLike, cb: SyncCallbacks) {
@@ -705,6 +707,7 @@ export class GameSync3D {
     // into battle (peace/intermission -> battle) is the wave launch moment.
     if (game.phase === 'battle' && (this.state?.phase !== 'battle' || this.state.wave !== game.wave)) {
       this.wavePulseAt = performance.now();
+      this.shipMakingAttack=null;
       this.watchAttack();
     } else if (this.state?.phase === 'battle' && game.phase !== 'battle') {
       this.focus.close();
@@ -714,6 +717,18 @@ export class GameSync3D {
     if (!this.state || this.lastPortSample !== portTime) {
       this.lastPortSample = portTime;
       this.portSampleAt = performance.now();
+    }
+    // Only a recorded ship-origin action can move the camera from the incoming
+    // vessel to our firing ship. A tap or drag takes precedence over automatic tracking.
+    if (game.phase === 'battle' && !this.shipMakingAttack && !this.attackingShipPinned && this.focus.key === 'attack') {
+      const shot=game.shots.find(s => (s.boatId != null && s.boatId >= 0) || s.modelKind === 'hero');
+      if (shot) {
+        if (shot.boatId != null) this.shipMakingAttack='boat-'+shot.boatId;
+        else {
+          const second=game.hero2;
+          this.shipMakingAttack=second && Math.hypot(second.x-shot.x1,second.y-shot.y1) < Math.hypot(game.hero.x-shot.x1,game.hero.y-shot.y1) ? 'hero2' : 'hero';
+        }
+      }
     }
     this.state = game; this.selectedSlot = opts.selectedSlot; this.targeting = opts.targeting;
     if (game.regional?.voyage && !this.regionalWater) {
@@ -1204,9 +1219,14 @@ export class GameSync3D {
 
   watchAttack(id?: number) {
     let tracked = id;
+    this.attackingShipPinned=id != null;
     this.focus.track('attack', 7, out => {
       const game = this.state;
       if (!game || game.phase !== 'battle') return false;
+      if (id == null && this.shipMakingAttack) {
+        const own=this.ents.get(this.shipMakingAttack);
+        if (own?.init) { out.copy(own.obj.position);out.y+=1.7;return true; }
+      }
       const live = game.enemies.find(e => e.id === tracked && e.hp > 0)
         ?? game.enemies.find(e => e.hp > 0 && this.ents.get('enemy-' + e.id)?.init);
       if (!live) return false;
@@ -1250,7 +1270,7 @@ export class GameSync3D {
   /** Return the current screen anchor for a player's inspection. The caller
    * follows the rendered hull (including easing), not the simulation target. */
   openingAnchor(landmark: OpeningLandmark, above = true): {x: number; y: number} | null {
-    if (!this.state?.opening) return null;
+    if (!this.state) return null;
     const item = landmark.kind === 'radar' ? this.openingSignals?.scanner
       : this.ents.get(landmark.kind === 'merchant' ? `merchant-${landmark.id}` : 'tanker')?.obj;
     if (!item) return null;
@@ -1311,8 +1331,8 @@ export class GameSync3D {
         if (!this.combatPaused && signal != null) this.cb.onSignal?.(signal);
         return;
       }
-      const pick = this.pick(e, el);
-      if (this.state?.opening) {
+      const pick = this.pick(e, el) ?? (e.pointerType === 'touch' ? this.nearbySubject(e,el) : null);
+      if (this.state) {
         if (pick?.type === 'merchant') { this.cb.onOpeningInspect?.({kind: 'merchant', id: Number(pick.id)}); return; }
         if (pick?.type === 'tanker') { this.cb.onOpeningInspect?.({kind: 'tanker', id: this.state.idle.port.cycles}); return; }
         if (pick?.type === 'radar') { this.cb.onOpeningInspect?.({kind: 'radar'}); return; }
@@ -1333,6 +1353,30 @@ export class GameSync3D {
     };
     el.addEventListener('pointerdown', down); el.addEventListener('pointermove', move); el.addEventListener('pointerup', up); el.addEventListener('pointercancel', cancel);
     this.detachFns.push(() => { el.removeEventListener('pointerdown', down); el.removeEventListener('pointermove', move); el.removeEventListener('pointerup', up); el.removeEventListener('pointercancel', cancel); });
+  }
+
+  private nearbySubject(e: PointerEvent, canvas: HTMLElement) {
+    const rect=canvas.getBoundingClientRect(), p=this.labelPosition;
+    let found: {type:string; id:string|number} | null=null, best=24;
+    const consider=(type:string,id:string|number,x:number,y:number,z:number)=>{
+      p.set(x,y,z).project(this.map.camera);
+      if (Math.abs(p.x)>1 || Math.abs(p.y)>1 || Math.abs(p.z)>1) return;
+      const distance=Math.hypot(rect.left+(1+p.x)*rect.width/2-e.clientX,rect.top+(1-p.y)*rect.height/2-e.clientY);
+      if (distance<best) {best=distance;found={type,id};}
+    };
+    for (const b of Object.keys(BUILDINGS)) if (this.buildings.has(b)) {
+      const s=BUILDINGS[b];consider('building',b,s.x,groundY(this.map,s.x,s.z)+2,s.z);
+    }
+    for (const s of SLOTS) consider('slot',s.id,s.x,groundY(this.map,s.x,s.z)+1,s.z);
+    for (const s of PLATFORMS) consider('platform',s.id,s.x,1,s.z);
+    for (const [key,ent] of this.ents) {
+      if (!ent.init || !ent.obj.visible) continue;
+      const pos=ent.obj.position;
+      const actor=key.startsWith('enemy-')?'attacker':key.startsWith('merchant-')?'merchant':key.startsWith('contra-')?'contraband':null;
+      if (actor) consider(actor,Number(key.split('-')[1]),pos.x,pos.y+1.4,pos.z);
+      if (key==='tanker' || key==='hero' || key==='hero2') consider(key,0,pos.x,pos.y+1.4,pos.z);
+    }
+    return found as {type:string;id:string|number} | null;
   }
 
   private ndc(e: PointerEvent, el: HTMLElement): THREE.Vector2 {

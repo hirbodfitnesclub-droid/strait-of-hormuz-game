@@ -20,7 +20,7 @@
     "test:mobile": "node scripts/test-auto-resume.cjs && node scripts/test-mobile-ui.cjs && node scripts/test-workshop-ui.cjs && node scripts/test-workshop-ui.cjs --battle-only && node scripts/test-offline.cjs && node scripts/test-lifecycle.cjs && node scripts/test-input-recovery.cjs && node scripts/test-world-init.cjs",
     "test:recovery": "node scripts/test-combat-presentation.cjs && node scripts/test-model-preload.cjs && node scripts/test-frame-recorder.cjs && node scripts/test-render-pacer.cjs && node scripts/test-model-retry.cjs",
     "test:opening": "node scripts/test-reopening-industry.cjs && node scripts/test-opening-attention.cjs && node scripts/test-opening-operations.cjs",
-    "test:harbor": "node scripts/test-harbor.cjs"
+    "test:harbor": "node scripts/test-harbor.cjs && node scripts/test-restored-port.cjs"
   },
   "dependencies": {
     "@capacitor/android": "^7.6.10",
