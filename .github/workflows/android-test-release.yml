@@ -113,6 +113,10 @@ jobs:
     needs: publish-debug-apk
     runs-on: ubuntu-24.04
     timeout-minutes: 28
+    strategy:
+      fail-fast: false
+      matrix:
+        level: [50, 100]
     steps:
       - uses: actions/checkout@v5
         with:
@@ -130,7 +134,7 @@ jobs:
         run: echo "${{ needs.publish-debug-apk.outputs.sha }}  release/${{ needs.publish-debug-apk.outputs.apk }}" | sha256sum -c -
       - name: Enable the Android emulator
         run: sudo chmod a+rw /dev/kvm
-      - name: Play the harbor opening and reopen the signed candidate
+      - name: Test the signed candidate's map, towers, depots and ship movement
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 35
@@ -140,13 +144,13 @@ jobs:
           disk-size: 4096M
           ram-size: 3072M
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -no-snapshot
-          script: node scripts/test-harbor-android.mjs release/${{ needs.publish-debug-apk.outputs.apk }} "$RUNNER_TEMP/hormuz-harbor"
+          script: node scripts/test-opening-android.mjs - release/${{ needs.publish-debug-apk.outputs.apk }} "$RUNNER_TEMP/hormuz-coast" coast ${{ matrix.level }}
       - name: Save Android scene checks and screenshots
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v5
         with:
-          name: harbor-${{ needs.publish-debug-apk.outputs.tag }}-attempt-${{ github.run_attempt }}
-          path: ${{ runner.temp }}/hormuz-harbor/
+          name: coast-${{ matrix.level }}-${{ needs.publish-debug-apk.outputs.tag }}-attempt-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/hormuz-coast/
           if-no-files-found: warn
 
   publish:

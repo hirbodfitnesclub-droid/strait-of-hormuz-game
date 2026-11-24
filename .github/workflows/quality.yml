@@ -5,6 +5,10 @@ on:
     branches: [main]
   workflow_dispatch:
     inputs:
+      preview_digest:
+        description: Test the signed 1.0.1 preview release asset with this exact SHA-256
+        type: string
+        required: false
       native_apk_run:
         description: Optional existing Game quality run to retest the same APK on Android
         type: string
@@ -14,7 +18,7 @@ permissions:
   actions: read
 jobs:
   verify:
-    if: ${{ !inputs.native_apk_run }}
+    if: ${{ !inputs.native_apk_run && !inputs.preview_digest }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -50,6 +54,10 @@ jobs:
     needs: verify
     runs-on: ubuntu-latest
     timeout-minutes: 35
+    strategy:
+      fail-fast: false
+      matrix:
+        suite: [opening, operations, damage]
     steps:
       - uses: actions/checkout@v4
         with:
@@ -73,9 +81,15 @@ jobs:
           git diff --exit-code "$source_sha" "$GITHUB_SHA" -- . ':!.github/workflows/quality.yml' ':!scripts/test-opening-android.mjs' ':!strait-of-hormuz-game-docs/'
           gh run download "$SELECTED_RUN" --name "hormuz-debug-$source_sha" --dir candidate
           sha256sum candidate/app-debug.apk
-      - name: Enable hardware acceleration on the ephemeral runner
-        run: sudo chmod a+rw /dev/kvm
-      - name: Exercise the signed harbor build in Android WebView
+      - name: Fetch the verified 0.7.4 baseline for paired Android runs
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/hormuz-baseline"
+          gh release download v0.7.4-test -p hormuz-0.7.4-debug.apk -D "$RUNNER_TEMP/hormuz-baseline"
+          echo "f1cb35ffae1d093e2926dd7f23118b5ce5e55883f089343ed0c41d9e7fdf67fd  $RUNNER_TEMP/hormuz-baseline/hormuz-0.7.4-debug.apk" | sha256sum -c -
+          sudo chmod a+rw /dev/kvm
+      - name: Install both APKs and exercise the opening in Android WebView
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 35
@@ -85,21 +99,25 @@ jobs:
           disk-size: 4096M
           ram-size: 3072M
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -no-snapshot
-          script: node scripts/test-harbor-android.mjs candidate/app-debug.apk "$RUNNER_TEMP/hormuz-android"
+          script: node scripts/test-opening-android.mjs "$RUNNER_TEMP/hormuz-baseline/hormuz-0.7.4-debug.apk" candidate/app-debug.apk "$RUNNER_TEMP/hormuz-android" ${{ matrix.suite }}
       - name: Retain Android run traces, screenshots and device logs
         if: ${{ !cancelled() && github.event_name == 'workflow_dispatch' }}
         uses: actions/upload-artifact@v5
         with:
-          name: android-harbor-evidence-${{ github.sha }}
+          name: android-${{ matrix.suite }}-evidence-${{ github.sha }}
           path: ${{ runner.temp }}/hormuz-android/
           if-no-files-found: warn
           retention-days: 14
 
   mobile-regressions:
-    if: github.event_name == 'workflow_dispatch' && !inputs.native_apk_run
+    if: github.event_name == 'workflow_dispatch' && !inputs.native_apk_run && !inputs.preview_digest
     needs: verify
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        suite: [harbor, workshop, lifecycle]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -115,10 +133,51 @@ jobs:
         env:
           AUDIT_CHROMIUM: /usr/bin/google-chrome
           TEST_URL: http://127.0.0.1:3310
+          SUITE: ${{ matrix.suite }}
         run: |
           unzip -q candidate/app-debug.apk 'assets/public/*'
           mv assets/public out
           python3 -m http.server 3310 --bind 127.0.0.1 --directory out > "$RUNNER_TEMP/game-http.log" 2>&1 &
           server_pid=$!
           trap 'kill "$server_pid"' EXIT
-          npm run test:mobile
+          case "$SUITE" in
+            harbor) node scripts/test-auto-resume.cjs && node scripts/test-mobile-ui.cjs ;;
+            workshop) node scripts/test-workshop-ui.cjs && node scripts/test-workshop-ui.cjs --battle-only ;;
+            lifecycle) node scripts/test-offline.cjs && node scripts/test-lifecycle.cjs && node scripts/test-input-recovery.cjs && node scripts/test-world-init.cjs ;;
+          esac
+
+  preview-webview:
+    if: github.event_name == 'workflow_dispatch' && inputs.preview_digest
+    runs-on: ubuntu-latest
+    timeout-minutes: 22
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Download the signed preview built for this test
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DIGEST: ${{ inputs.preview_digest }}
+        run: |
+          set -euo pipefail
+          [[ "$DIGEST" =~ ^[0-9a-f]{64}$ ]]
+          gh release download v1.0.1-test -p 'Hormuz-1.0.1-3D-preview.apk' -D candidate
+          echo "$DIGEST  candidate/Hormuz-1.0.1-3D-preview.apk" | sha256sum -c -
+          sudo chmod a+rw /dev/kvm
+      - uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          target: google_apis
+          profile: pixel_2
+          disk-size: 4096M
+          ram-size: 4096M
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -no-snapshot
+          script: node scripts/test-preview-android.mjs candidate/Hormuz-1.0.1-3D-preview.apk "$RUNNER_TEMP/hormuz-3d"
+      - uses: actions/upload-artifact@v5
+        if: always()
+        with:
+          name: android-preview-evidence
+          path: ${{ runner.temp }}/hormuz-3d/
+          if-no-files-found: warn
