@@ -6,6 +6,8 @@ export const LEGACY_BACKUP_KEY = "hormuz-game-backup-v1";
 const MIGRATED = "hormuz-v1-migration-complete";
 type StorageLike = Pick<Storage, "getItem" | "setItem" | "removeItem"> & Partial<Pick<Storage, "key" | "length">>;
 
+type SlotReader = Pick<StorageLike, "getItem" | "key" | "length">;
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -31,7 +33,7 @@ export class SaveFormatError extends Error {
   }
 }
 
-function readSlots(storage: StorageLike, keys: string[], version: number) {
+function readSlots(storage: SlotReader, keys: string[], version: number) {
   return keys.map(key => {
     const raw = storage.getItem(key);
     const value = readJson(raw);
@@ -42,7 +44,7 @@ function readSlots(storage: StorageLike, keys: string[], version: number) {
   });
 }
 
-function newerSlots(storage: StorageLike): string[] {
+function newerSlots(storage: SlotReader): string[] {
   const keys: string[] = [];
   for (let i = 0; storage.key && i < (storage.length ?? 0); i++) {
     const key = storage.key(i);
@@ -52,7 +54,7 @@ function newerSlots(storage: StorageLike): string[] {
   return keys;
 }
 
-export function saveCandidates(storage: StorageLike): { state: unknown; recovered: boolean }[] {
+export function saveCandidates(storage: SlotReader): { state: unknown; recovered: boolean }[] {
   if (newerSlots(storage).length) throw new SaveFormatError("newer");
   const slots = readSlots(storage, [SAVE_KEY, SAVE_BACKUP_KEY], 2);
   if (!storage.getItem(MIGRATED)) slots.push(...readSlots(storage, [LEGACY_SAVE_KEY, LEGACY_BACKUP_KEY], 1));

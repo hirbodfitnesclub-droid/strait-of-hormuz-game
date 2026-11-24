@@ -50,7 +50,7 @@ import {
 import { Modes, Orders, Stars, type PageProps, type Sheet } from "./Pages";
 import { RadioNote } from "./World";
 import { exportJson } from "../lib/export-file";
-import { LIVE, decode } from "./storage";
+import { LIVE, readPortable } from "./storage";
 
 export function Dialog({
   close,
@@ -480,7 +480,7 @@ function Preferences({
         <b>ذخیرهٔ بازی</b>
         <p>
           پیشرفت روی همین دستگاه ذخیره می‌شود. نسخهٔ پشتیبان را می‌توان روی
-          دستگاه دیگری بازیابی کرد.
+          دستگاه دیگری بازیابی کرد. فایل پشتیبان نسخهٔ قدیمی هم پذیرفته می‌شود.
         </p>
         <div className="controls">
           <button
@@ -513,8 +513,8 @@ function Preferences({
             try {
               if (file.size > 4000000) throw Error();
               const text = await file.text(),
-                data = decode(text);
-              setImported({ text, count: clearedThrough(data.harbor) });
+                data = readPortable(text);
+              setImported({ text, count: clearedThrough(data) });
             } catch {
               toast("این فایل، ذخیرهٔ معتبر بندر نیست");
             }

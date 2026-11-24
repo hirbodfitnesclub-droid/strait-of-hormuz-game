@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent" android:layout_height="match_parent"
+    android:layoutDirection="rtl" android:gravity="center" android:orientation="vertical"
+    android:padding="32dp" android:background="#0B2C35">
+    <ImageView android:layout_width="84dp" android:layout_height="84dp"
+        android:src="@mipmap/ic_launcher" android:importantForAccessibility="no" />
+    <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:layout_marginTop="22dp" android:gravity="center" android:textSize="24sp"
+        android:textStyle="bold" android:textColor="#FFF2D5" android:text="@string/harbor_recovery_title" />
+    <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:layout_marginTop="12dp" android:gravity="center" android:textSize="16sp"
+        android:textColor="#D2DDCD" android:text="@string/harbor_recovery_body" />
+    <Button android:id="@+id/retry_harbor" android:layout_width="wrap_content" android:layout_height="wrap_content"
+        android:layout_marginTop="22dp" android:paddingHorizontal="24dp"
+        android:textColor="#0B2C35" android:backgroundTint="#F8CC83" android:text="@string/harbor_recovery_retry" />
+</LinearLayout>

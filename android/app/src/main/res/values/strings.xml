@@ -4,4 +4,7 @@
     <string name="title_activity_main">تنگه هرمز</string>
     <string name="package_name">ir.hormuz.sovereign</string>
     <string name="custom_url_scheme">ir.hormuz.sovereign</string>
+    <string name="harbor_recovery_title">نمایش بندر متوقف شد</string>
+    <string name="harbor_recovery_body">بندر را از آخرین ذخیره دوباره باز کن. اگر دوباره به این صفحه رسیدی، Android System WebView دستگاه را به‌روز کن.</string>
+    <string name="harbor_recovery_retry">بازگشت به بندر</string>
 </resources>

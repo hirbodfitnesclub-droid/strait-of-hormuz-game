@@ -12,10 +12,12 @@ Node.js 24، JDK 21، Android SDK 36 و Build Tools 35.0.0 را آماده کن�
 npm ci
 npm run verify
 npm run build:android
-bash android/gradlew -p android assembleDebug assembleRelease bundleRelease lintDebug
+bash android/gradlew -p android assembleDebug assemblePreview assembleRelease bundleRelease lintDebug
 ```
 
 بستهٔ بازی `ir.hormuz.sovereign` و کد نسخه ۱۰۰ است. فایل‌ها زیر `android/app/build/outputs/` ساخته می‌شوند. برای امضای انتشار، متغیرهای `HORMUZ_KEYSTORE`، `HORMUZ_STORE_PASSWORD`، `HORMUZ_KEY_ALIAS` و `HORMUZ_KEY_PASSWORD` را در محیط خصوصی ساخت تنظیم کنید. برای به‌روزرسانی نسخهٔ منتشرشده از کلید مورد پذیرش همان مارکت استفاده کنید.
+
+پیش‌نمایش قابل نصب با شناسهٔ جداگانهٔ `ir.hormuz.sovereign.preview` در کنار نصب قدیمی می‌ماند. فایل پشتیبان صادرشده از نسخهٔ ۰٫۷ را می‌توانید از تنظیمات وارد کنید.
 
 ## آزمون
 

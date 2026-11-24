@@ -193,6 +193,34 @@ async function run() {
     console.log(
       "PASS cash, treasury and poor paths through the upgrade card at 360×640",
     );
+    {
+      const { context, page } = await open(393, 852);
+      const legacy = load("src/lib/game.ts").initialGame();
+      legacy.cash = 4321;
+      legacy.highestWave = 4;
+      legacy.idle.modeBest.campaign = 4;
+      legacy.lastSavedAt = epoch;
+      const file = {
+        name: "hormuz-save.json",
+        mimeType: "application/json",
+        buffer: Buffer.from(
+          JSON.stringify({ format: "hormuz-save", version: 2, state: legacy }),
+        ),
+      };
+      await button(page, "تنظیمات").click();
+      const picker = page.locator('input[type="file"]');
+      await picker.setInputFiles(file);
+      await button(page, "انصراف").click();
+      assert.equal((await read(page)).port.cash, 1200);
+      await picker.setInputFiles(file);
+      await button(page, "تأیید جایگزینی").click();
+      assert.equal((await read(page)).port.cash, 4321);
+      assert.equal((await read(page)).stars[4], 1);
+      await context.close();
+      console.log(
+        "PASS legacy JSON through the file picker, cancel and confirm",
+      );
+    }
     for (const [w, h] of [
       [320, 568],
       [844, 390],

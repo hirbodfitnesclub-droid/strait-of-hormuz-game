@@ -5,7 +5,7 @@ import { App } from "@capacitor/app";
 import { Capacitor, registerPlugin } from "@capacitor/core";
 import { advance, act, type Harbor, type Intent } from "./session";
 import {
-  decode,
+  readPortable,
   loadHarbor,
   resume,
   saveHarbor,
@@ -97,7 +97,7 @@ export class HarborStore {
   import(raw: string) {
     if (!this.visible) return false;
     try {
-      const candidate = decode(raw).harbor;
+      const candidate = readPortable(raw, this.clock().wall);
       saveHarbor(localStorage, candidate, this.clock());
       this.h = candidate;
       this.paused = !!candidate.voyage;

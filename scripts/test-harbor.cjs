@@ -10,9 +10,7 @@ const {
   stationPrice,
   contractQuote,
 } = load("src/harbor/session.ts");
-const { openingCapacity } = load(
-  "src/lib/opening-industry.ts",
-);
+const { openingCapacity } = load("src/lib/opening-industry.ts");
 const { initialGame, getStats } = load("src/lib/game.ts");
 const { encode, decode, loadHarbor, saveHarbor, resume, LIVE, BACKUP } = load(
   "src/harbor/storage.ts",
@@ -155,6 +153,22 @@ old.highestWave = 4;
 old.idle.modeBest.campaign = 4;
 old.cash = 4321;
 storage.setItem(LEGACY_SAVE_KEY, JSON.stringify(old));
+const { readPortable } = load("src/harbor/storage.ts");
+const directExport = JSON.stringify({
+  format: "hormuz-save",
+  version: 2,
+  state: old,
+});
+const recoveryExport = JSON.stringify({
+  [LEGACY_SAVE_KEY]: JSON.stringify(old),
+});
+for (const input of [directExport, recoveryExport]) {
+  const recovered = readPortable(input, clock.wall);
+  assert.equal(recovered.port.cash, 4321);
+  assert.equal(clearedThrough(recovered), 4);
+}
+assert.throws(() => readPortable(JSON.stringify({ "hormuz-game-v3": "{}" })));
+assert.throws(() => readPortable('{"version":1,"body":"{}","checksum":"0"}'));
 const legacyBytes = storage.getItem(LEGACY_SAVE_KEY);
 const migrated = loadHarbor(storage, clock).harbor;
 assert.equal(migrated.port.cash, 4321);

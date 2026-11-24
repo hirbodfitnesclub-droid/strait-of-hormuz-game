@@ -1,5 +1,9 @@
 import { gameReducer, hydrateGame } from "../lib/game";
-import { saveCandidates, SaveFormatError } from "../lib/save-storage";
+import {
+  parseSnapshot,
+  saveCandidates,
+  SaveFormatError,
+} from "../lib/save-storage";
 import { newHarbor, type Harbor } from "./session";
 import { roles } from "./catalog";
 
@@ -102,6 +106,36 @@ export function resume(h: Harbor, old: ClockSample, now: ClockSample) {
     }),
   };
 }
+function migratePort(state: unknown, wall: number) {
+  const restored = hydrateGame(state, wall);
+  if (!restored) return null;
+  let port = restored.game;
+  if (port.idle.lastBattle && !port.idle.lastBattle.claimed)
+    port = gameReducer(port, { type: "claim-battle" });
+  if (port.idle.offline) port = gameReducer(port, { type: "claim-offline" });
+  return newHarbor(port, true);
+}
+
+/** Accept both generations of exported saves and the original multi-slot recovery archive. */
+export function readPortable(raw: string, wall = Date.now()): Harbor {
+  const data: unknown = JSON.parse(raw);
+  if (!record(data)) throw new SaveFormatError("corrupt");
+  if ("body" in data || "checksum" in data) return decode(raw).harbor;
+  let state = parseSnapshot(raw);
+  if (!state) {
+    const keys = Object.keys(data);
+    const reader = {
+      length: keys.length,
+      key: (index: number) => keys[index] ?? null,
+      getItem: (key: string) =>
+        typeof data[key] === "string" ? data[key] : null,
+    };
+    state = saveCandidates(reader)[0]?.state ?? null;
+  }
+  const harbor = state ? migratePort(state, wall) : null;
+  if (!harbor) throw new SaveFormatError("corrupt");
+  return harbor;
+}
 export function loadHarbor(storage: StorageLike, now: ClockSample) {
   let broken = false;
   for (const key of [LIVE, BACKUP]) {
@@ -121,14 +155,10 @@ export function loadHarbor(storage: StorageLike, now: ClockSample) {
   }
   if (broken) throw new SaveFormatError("corrupt");
   for (const slot of saveCandidates(storage)) {
-    const restored = hydrateGame(slot.state);
-    if (!restored) continue;
-    let p = restored.game;
-    if (p.idle.lastBattle && !p.idle.lastBattle.claimed)
-      p = gameReducer(p, { type: "claim-battle" });
-    if (p.idle.offline) p = gameReducer(p, { type: "claim-offline" });
+    const harbor = migratePort(slot.state, now.wall);
+    if (!harbor) continue;
     return {
-      harbor: newHarbor(p, true),
+      harbor,
       recovered: slot.recovered,
       wallHigh: now.wall,
     };
